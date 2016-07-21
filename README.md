@@ -1,6 +1,8 @@
-OSMOSreduce
+M2FSreduce
 =========
 
-Reduction software for MDM OSMOS spectra
+Reduction software for Magellan M2FS spectra
 
-This software package reads images taken with the OSMOS instrument on the 2.4m MDM telescope on Kitt Peak. Documentation for using the pipeline is available as an IPython notebook in the docs/ subdirectory.
+Forked from Dan Gifford's OSMOSreduce package used to reduce 2.4m MDM telescope slit-mask spectra.
+
+Adaptions done by Anthony Kremin for M2FS on the 6.5 Magellan-Clay telescope. Documentation for using the pipeline is available as an IPython notebook in the docs/ subdirectory.
