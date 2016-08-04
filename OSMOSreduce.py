@@ -1,10 +1,11 @@
 '''
 IMPORTANT NOTES:
-In the .oms file, the first and last RA/DEC represent a reference slit at the bottom of the mask and the center of the mask respectively.
+In the .m2fs file, the first and last RA/DEC represent a reference slit at the bottom of the mask and the center of the mask respectively.
 
 Please list the calibration lamp(s) used during your observations here
 '''
-cal_lamp = ['Xenon','Argon'] #'Xenon','Argon','HgNe','Neon'
+
+cal_lamp = ['Xenon','Argon','HgNe'] #'Xenon','Argon','Neon'
 print 'Using calibration lamps: ', cal_lamp
 
 import numpy as np
@@ -36,6 +37,11 @@ from sncalc import *
 from gal_trace import *
 from slit_find import *
 import pprint
+import shutil
+
+data_dir = '/u/home/kremin/value_storage/m2fsdata_jun2016'
+old_dir = os.curdir
+sdss_check = False
 
 def getch():
     import tty, termios
@@ -87,7 +93,7 @@ if 'Neon' in cal_lamp:
 fm = np.array(fm)[np.argsort(wm)]
 wm = np.array(wm)[np.argsort(wm)]
 
-
+os.chdir(data_dir)
 ###################
 #Define Cluster ID#
 ###################
@@ -104,44 +110,52 @@ print 'Reducing cluster: ',clus_id
 ###############################################################
 
 #ask if you want to only reduce sdss galaxies with spectra
-try:
-    sdss_check = str(sys.argv[2])
-    if sdss_check == 'sdss':
-        sdss_check = True
-    else:
-        raise Exception(sdss_check+' is not an accepted input. \'sdss\' is the only accepted input here.')
-except IndexError:
-    sdss_check = False
+#try:
+#    sdss_check = str(sys.argv[2])
+#    if sdss_check == 'sdss':
+#        sdss_check = True
+#    else:
+#        raise Exception(sdss_check+' is not an accepted input. \'sdss\' is the only accepted input here.')
+#except IndexError:
+#    sdss_check = False
 
 ############################
 #Import Cluster .fits files#
 ############################
-for file in os.listdir('./'+clus_id+'/'): #search and import all mosaics
-    if fnmatch.fnmatch(file, 'mosaic_*'):
-        image_file = file
+#for fil in os.listdir('./'+clus_id+'/'): #search and import all mosaics
+#    if fnmatch.fnmatch(fil, 'mosaic_*'):
+#        image_file = fil
 
 #create reduced files if they don't exist
-def reduce_files(filetype):
-    for file in os.listdir('./'+clus_id+'/'+filetype+'/'):
-        if fnmatch.fnmatch(file, '*.????.fits'):
-            if not os.path.isfile(clus_id+'/'+filetype+'/'+file[:-5]+'b.fits'):
-                print 'Creating '+clus_id+'/'+filetype+'/'+file[:-5]+'b.fits'
-                p = subprocess.Popen('python proc4k.py '+clus_id+'/'+filetype+'/'+file,shell=True)
-                p.wait()
-            else:
-                print 'Reduced '+filetype+' files exist'
-
-filetypes = ['science','arcs','flats']
-for filetype in filetypes:
-    reduce_files(filetype)
+#def reduce_files(filetype):
+#    for fil in os.listdir('./'+clus_id+'/'+filetype+'/'):
+#        if fnmatch.fnmatch(fil, '*.????.fits'):
+#            if not os.path.isfile(clus_id+'/'+filetype+'/'+fil[:-5]+'b.fits'):
+#                print 'Creating '+clus_id+'/'+filetype+'/'+fil[:-5]+'b.fits'
+#                p = subprocess.Popen('python proc4k.py '+clus_id+'/'+filetype+'/'+fil,shell=True)
+#                p.wait()
+#            else:
+#                print 'Reduced '+filetype+' files exist'
+#
+#filetypes = ['science','arcs','flats']
+#for filetype in filetypes:
+#    reduce_files(filetype)
 
 #import, clean, and add science fits files
+
+
+
+
 sciencefiles = np.array([])
 hdulists_science = np.array([])
-for file in os.listdir('./'+clus_id+'/science/'): #search and import all science filenames
-    if fnmatch.fnmatch(file, '*b.fits'):
-        sciencefiles = np.append(sciencefiles,file)
-        scifits = pyfits.open(clus_id+'/science/'+file)
+for fil in os.listdir('./'+clus_id+'/science/'): #search and import all science filenames
+    #if '.fits' in fil and 'b.fits' not in fil:
+    #    shutil.copyfile('./'+clus_id+'/science/'+fil,\
+    #                    './'+clus_id+'/science/'+fil.split('.fits')[0]+'b.fits')
+    #pdb.set_trace()
+    if fnmatch.fnmatch(fil, '*b.fits'):
+        sciencefiles = np.append(sciencefiles,fil)
+        scifits = pyfits.open(clus_id+'/science/'+fil)
         hdulists_science = np.append(hdulists_science,scifits)
 science_file = sciencefiles[0]
 hdulist_science = pyfits.open(clus_id+'/science/'+science_file)
@@ -151,10 +165,10 @@ naxis2 = hdulist_science[0].header['NAXIS2']
 #import flat data
 flatfiles = np.array([])
 hdulists_flat = np.array([])
-for file in os.listdir('./'+clus_id+'/flats/'): #search and import all science filenames
-    if fnmatch.fnmatch(file, '*b.fits'):
-        flatfiles = np.append(flatfiles,file)
-        flatfits = pyfits.open(clus_id+'/flats/'+file)
+for fil in os.listdir('./'+clus_id+'/flats/'): #search and import all science filenames
+    if fnmatch.fnmatch(fil, '*b.fits'):
+        flatfiles = np.append(flatfiles,fil)
+        flatfits = pyfits.open(clus_id+'/flats/'+fil)
         hdulists_flat = np.append(hdulists_flat,flatfits)
 if len(hdulists_flat) < 1:
     raise Exception('proc4k.py did not detect any flat files')
@@ -162,17 +176,17 @@ if len(hdulists_flat) < 1:
 #import arc data
 arcfiles = np.array([])
 hdulists_arc = np.array([])
-for file in os.listdir('./'+clus_id+'/arcs/'): #search and import all science filenames
-    if fnmatch.fnmatch(file, '*b.fits'):
-        arcfiles = np.append(arcfiles,file)
-        arcfits = pyfits.open(clus_id+'/arcs/'+file)
+for fil in os.listdir('./'+clus_id+'/arcs/'): #search and import all science filenames
+    if fnmatch.fnmatch(fil, '*b.fits'):
+        arcfiles = np.append(arcfiles,fil)
+        arcfits = pyfits.open(clus_id+'/arcs/'+fil)
         hdulists_arc = np.append(hdulists_arc,arcfits)
 if len(hdulists_arc) < 1:
     raise Exception('proc4k.py did not detect any arc files')
 ###############################################################
 
 #########################################################
-#Need to parse .oms file for ra,dec and slit information#
+#Need to parse .m2fs file for ra,dec and slit information#
 #########################################################
 RA = np.array([])
 DEC = np.array([])
@@ -181,9 +195,9 @@ SLIT_WIDTH = np.array([])
 SLIT_LENGTH = np.array([])
 SLIT_X = np.array([])
 SLIT_Y = np.array([])
-for file in os.listdir('./'+clus_id+'/'):
-    if fnmatch.fnmatch(file, '*.oms'):
-        omsfile = file
+for fil in os.listdir('./'+clus_id+'/'):
+    if fnmatch.fnmatch(fil, '*.m2fs'):
+        omsfile = fil
 inputfile = open(clus_id+'/'+omsfile)
 alltext = inputfile.readlines()
 for line in alltext:
@@ -215,38 +229,38 @@ Gal_dat = pd.DataFrame({'RA':RA[1:SLIT_WIDTH.size],'DEC':DEC[1:SLIT_WIDTH.size],
 ############################
 #Query SDSS for galaxy data#
 ############################
-if os.path.isfile(clus_id+'/'+clus_id+'_sdssinfo.csv'):
-    redshift_dat = pd.read_csv(clus_id+'/'+clus_id+'_sdssinfo.csv')
-else:
-    #returns a Pandas dataframe with columns
-    #objID','SpecObjID','ra','dec','umag','gmag','rmag','imag','zmag','redshift','photo_z','extra'
-    redshift_dat = query_galaxies(Gal_dat.RA,Gal_dat.DEC)
-    redshift_dat.to_csv(clus_id+'/'+clus_id+'_sdssinfo.csv',index=False)
-
-
-#merge into Gal_dat
-Gal_dat = Gal_dat.join(redshift_dat)
-
-gal_z = Gal_dat['spec_z']
-gal_gmag = Gal_dat['gmag']
-gal_rmag = Gal_dat['rmag']
-gal_imag = Gal_dat['imag']
+#if os.path.isfile(clus_id+'/'+clus_id+'_sdssinfo.csv'):
+#    redshift_dat = pd.read_csv(clus_id+'/'+clus_id+'_sdssinfo.csv')
+#else:
+#    #returns a Pandas dataframe with columns
+#    #objID','SpecObjID','ra','dec','umag','gmag','rmag','imag','zmag','redshift','photo_z','extra'
+#    redshift_dat = query_galaxies(Gal_dat.RA,Gal_dat.DEC)
+#    redshift_dat.to_csv(clus_id+'/'+clus_id+'_sdssinfo.csv',index=False)
+#
+#
+##merge into Gal_dat
+#Gal_dat = Gal_dat.join(redshift_dat)
+#
+#gal_z = Gal_dat['spec_z']
+#gal_gmag = Gal_dat['gmag']
+#gal_rmag = Gal_dat['rmag']
+#gal_imag = Gal_dat['imag']
 
 ####################
 #Open images in ds9#
 ####################
-p = subprocess.Popen('ds9 '+clus_id+'/'+image_file+' -geometry 1200x900 -scale sqrt -scale mode zscale -fits '+clus_id+'/arcs/'+arcfiles[0],shell=True)
 #p = subprocess.Popen('ds9 '+clus_id+'/'+image_file+' -geometry 1200x900 -scale sqrt -scale mode zscale -fits '+clus_id+'/arcs/'+arcfiles[0],shell=True)
-time.sleep(3)
-print "Have the images loaded? (y/n)"
-while True: #check to see if images have loaded correctly
-    char = getch()
-    if char.lower() in ("y", "n"):
-        if char.lower() == "y":
-            print 'Image has been loaded'
-            break
-        else:
-            sys.exit('Check to make sure file '+image_file+' exists in '+clus_id+'/')
+##p = subprocess.Popen('ds9 '+clus_id+'/'+image_file+' -geometry 1200x900 -scale sqrt -scale mode zscale -fits '+clus_id+'/arcs/'+arcfiles[0],shell=True)
+#time.sleep(3)
+#print "Have the images loaded? (y/n)"
+#while True: #check to see if images have loaded correctly
+#    char = getch()
+#    if char.lower() in ("y", "n"):
+#        if char.lower() == "y":
+#            print 'Image has been loaded'
+#            break
+#        else:
+#            sys.exit('Check to make sure file '+image_file+' exists in '+clus_id+'/')
 
 d = ds9() #start pyds9 and set parameters
 d.set('frame 1')
@@ -264,30 +278,32 @@ d.set('regions sky fk5')
 ####################################################################################
 reassign = 'n'
 keys = np.arange(0,Gal_dat.SLIT_WIDTH.size,1).astype('string')
-if os.path.isfile(clus_id+'/'+clus_id+'_slittypes.pkl'):
-    reassign = raw_input('Detected slit types file in path. Do you wish to use this (y) or remove and re-assign slit types (n)? ')
-if reassign == 'n':
-    slit_type = {}
-    print 'Is this a galaxy (g), a reference star (r), or empty sky (s)?'
-    for i in range(len(Gal_dat)):
-        d.set('pan to '+Gal_dat.RA[i]+' '+Gal_dat.DEC[i]+' wcs fk5')
-        if Gal_dat.SLIT_WIDTH[i] == '1.0':
-            d.set('regions command {box('+Gal_dat.RA[i]+' '+Gal_dat.DEC[i]+' 3 24) #color=green}')
-        else:
-            d.set('regions command {box('+Gal_dat.RA[i]+' '+Gal_dat.DEC[i]+' 12 12) #color=green}')
-        while True:
-            char = getch()
-            if char.lower() in ("g", "r", "s"):
-                break
-
-        slit_type[keys[i]] = char.lower()
-    pickle.dump(slit_type,open(clus_id+'/'+clus_id+'_slittypes.pkl','wb'))
-else:
-    slit_type = pickle.load(open(clus_id+'/'+clus_id+'_slittypes.pkl','rb'))
+slit_type = {}
+for key in keys:
+    slit_type[key] = "g"
+#if os.path.isfile(clus_id+'/'+clus_id+'_slittypes.pkl'):
+#    reassign = raw_input('Detected slit types file in path. Do you wish to use this (y) or remove and re-assign slit types (n)? ')
+#if reassign == 'n':
+#    slit_type = {}
+#    print 'Is this a galaxy (g), a reference star (r), or empty sky (s)?'
+#    for i in range(len(Gal_dat)):
+#        d.set('pan to '+Gal_dat.RA[i]+' '+Gal_dat.DEC[i]+' wcs fk5')
+#        if Gal_dat.SLIT_WIDTH[i] == '1.0':
+#            d.set('regions command {box('+Gal_dat.RA[i]+' '+Gal_dat.DEC[i]+' 3 24) #color=green}')
+#        else:
+#            d.set('regions command {box('+Gal_dat.RA[i]+' '+Gal_dat.DEC[i]+' 12 12) #color=green}')
+#        while True:
+#            char = getch()
+#            if char.lower() in ("g", "r", "s"):
+#                break
+#        slit_type[keys[i]] = char.lower()
+#    pickle.dump(slit_type,open(clus_id+'/'+clus_id+'_slittypes.pkl','wb'))
+#else:
+#    slit_type = pickle.load(open(clus_id+'/'+clus_id+'_slittypes.pkl','rb'))
 
 stypes = pd.DataFrame(slit_type.values(),index=np.array(slit_type.keys()).astype('int'),columns=['slit_type'])
 Gal_dat = Gal_dat.join(stypes)
-##################################################################
+###################################################################
 
 
 d.set('frame 2')
@@ -305,7 +321,7 @@ if redo == 'n':
         os.remove(clus_id+'/science/'+clus_id+'_science.cr.fits')
     except: pass
     scifits_c = copy.copy(hdulists_science[0]) #copy I will use to hold the smoothed and added results
-    scifits_c.data *= 0.0
+    scifits_c.data = scifits_c.data.astype(np.float) * 0.0
     print 'SCIENCE REDUCTION'
     for scifits in hdulists_science:
         filt = filter_image(scifits.data)
@@ -321,7 +337,7 @@ if redo == 'n':
         os.remove(clus_id+'/flats/'+clus_id+'_flat.cr.fits')
     except: pass
     flatfits_c = copy.copy(hdulists_flat[0]) #copy I will use to hold the smoothed and added results
-    flat_data = np.zeros((hdulists_flat.size,naxis1,naxis2))
+    flat_data = np.zeros((hdulists_flat.size,naxis2,naxis1))
     i = 0
     for flatfits in hdulists_flat:
         filt = filter_image(flatfits.data)
@@ -337,7 +353,7 @@ if redo == 'n':
         os.remove(clus_id+'/arcs/'+clus_id+'_arc.cr.fits')
     except: pass
     arcfits_c = copy.copy(hdulists_arc[0]) #copy I will use to hold the smoothed and added results
-    arcfits_c.data *= 0.0
+    arcfits_c.data = arcfits_c.data.astype(np.float)*0.0
     for arcfits in hdulists_arc:
         filt = arcfits.data#filter_image(arcfits.data)
         arcfits_c.data += filt + np.abs(np.nanmin(filt))
@@ -824,3 +840,5 @@ f.close()
 
 #Output dataframe
 Gal_dat.to_csv(clus_id+'/results.csv')
+
+os.chdir(old_dir)
