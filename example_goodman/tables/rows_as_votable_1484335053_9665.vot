@@ -1,0 +1,585 @@
+<?xml version="1.0"?>
+<VOTABLE version="1.1"
+ xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xsi:schemaLocation="http://www.ivoa.net/xml/VOTable/v1.1 http://www.ivoa.net/xml/VOTable/v1.1"
+ xmlns="http://www.ivoa.net/xml/VOTable/v1.1">
+  <DESCRIPTION>
+    Catalog subset of NOAO Data Portal Query holdings generated during
+    session 0e863be3f36fba0249271cb71d08bc6b at 2017-01-13 12:17:33 -0700
+  </DESCRIPTION>
+  <DEFINITIONS>
+    <COOSYS ID="J2000" system="eq_FK5" equinox="J2000"/>
+  </DEFINITIONS>
+  <RESOURCE ID="np_catalog_subset" name="NOAO Data Portal Query Catalog Subset">
+    <TABLE ID="np_catalog_subset_table1" name="NOAO Data Portal Query Catalog Subset/Table 1">
+      <DESCRIPTION>The catalog</DESCRIPTION>
+      <FIELD datatype="char"
+         
+        
+        arraysize="*"
+        name="reference" 
+        ucd=""/>
+      <FIELD datatype="char"
+         
+        
+        arraysize="*"
+        name="dtpropid" 
+        ucd=""/>
+      <FIELD datatype="char"
+         
+        
+        arraysize="*"
+        name="surveyid" 
+        ucd=""/>
+      <FIELD datatype="char"
+         
+        
+        arraysize="*"
+        name="release_date" 
+        ucd=""/>
+      <FIELD datatype="char"
+         
+        
+        arraysize="*"
+        name="start_date" 
+        ucd=""/>
+      <FIELD datatype="char"
+         
+        
+        arraysize="*"
+        name="date_obs" 
+        ucd=""/>
+      <FIELD datatype="char"
+         
+        
+        arraysize="*"
+        name="dtpi" 
+        ucd=""/>
+      <FIELD datatype="double"
+         
+        
+        
+        name="ra" 
+        ucd=""/>
+      <FIELD datatype="double"
+         
+        
+        
+        name="dec" 
+        ucd=""/>
+      <FIELD datatype="char"
+         
+        
+        arraysize="*"
+        name="telescope" 
+        ucd=""/>
+      <FIELD datatype="char"
+         
+        
+        arraysize="*"
+        name="instrument" 
+        ucd=""/>
+      <FIELD datatype="char"
+         
+        
+        arraysize="*"
+        name="filter" 
+        ucd=""/>
+      <FIELD datatype="double"
+         
+        
+        
+        name="exposure" 
+        ucd=""/>
+      <FIELD datatype="char"
+         
+        
+        arraysize="*"
+        name="obstype" 
+        ucd=""/>
+      <FIELD datatype="char"
+         
+        
+        arraysize="*"
+        name="obsmode" 
+        ucd=""/>
+      <FIELD datatype="char"
+         
+        
+        arraysize="*"
+        name="proctype" 
+        ucd=""/>
+      <FIELD datatype="char"
+         
+        
+        arraysize="*"
+        name="prodtype" 
+        ucd=""/>
+      <FIELD datatype="double"
+         
+        
+        
+        name="seeing" 
+        ucd=""/>
+      <FIELD datatype="double"
+         
+        
+        
+        name="depth" 
+        ucd=""/>
+      <FIELD datatype="char"
+         
+        
+        arraysize="*"
+        name="dtacqnam" 
+        ucd=""/>
+      <FIELD datatype="char"
+         
+        
+        arraysize="*"
+        name="archive_file" 
+        ucd=""/>
+      <FIELD datatype="int"
+         
+        
+        
+        name="filesize" 
+        ucd=""/>
+      <FIELD datatype="char"
+         
+        
+        arraysize="*"
+        name="md5sum" 
+        ucd=""/>
+      <DATA>
+        <TABLEDATA>
+<TR>
+          <TD>http://nsaserver.sdm.noao.edu:7003/?fileRef=psg_140707_104310_cri.fits.fz</TD>
+          <TD>2014A-0481</TD>
+      <TD></TD>
+          <TD>2016-01-07</TD>
+          <TD>2014-07-06</TD>
+          <TD>2014-07-07 10:42:17.31</TD>
+          <TD>Karen Lewis</TD>
+          <TD>49.062450</TD>
+          <TD>-64.626579</TD>
+          <TD>soar</TD>
+          <TD>goodman</TD>
+          <TD>&lt;NO FILTER&gt;</TD>
+          <TD>30.0</TD>
+          <TD>COMP</TD>
+      <TD></TD>
+          <TD>Raw</TD>
+      <TD></TD>
+      <TD></TD>
+      <TD></TD>
+          <TD>/user/observer/today/0195.n20.fits</TD>
+          <TD>psg_140707_104310_cri.fits.fz</TD>
+          <TD>2108160</TD>
+          <TD>9c15a76ab59a2751d75ae6bf5b80cd11</TD>
+</TR>
+<TR>
+          <TD>http://nsaserver.sdm.noao.edu:7003/?fileRef=psg_140707_104200_fri.fits.fz</TD>
+          <TD>2014A-0481</TD>
+      <TD></TD>
+          <TD>2014-07-05</TD>
+          <TD>2014-07-06</TD>
+          <TD>2014-07-07 10:41:33.38</TD>
+          <TD>Karen Lewis</TD>
+          <TD>49.062450</TD>
+          <TD>-64.626579</TD>
+          <TD>soar</TD>
+          <TD>goodman</TD>
+          <TD>&lt;NO FILTER&gt;</TD>
+          <TD>5.0</TD>
+          <TD>FLAT</TD>
+      <TD></TD>
+          <TD>Raw</TD>
+      <TD></TD>
+      <TD></TD>
+      <TD></TD>
+          <TD>/user/observer/today/0194.n20.fits</TD>
+          <TD>psg_140707_104200_fri.fits.fz</TD>
+          <TD>2381760</TD>
+          <TD>0873325e75ba7faaf81e538614379834</TD>
+</TR>
+<TR>
+          <TD>http://nsaserver.sdm.noao.edu:7003/?fileRef=psg_140707_104140_fri.fits.fz</TD>
+          <TD>2014A-0481</TD>
+      <TD></TD>
+          <TD>2014-07-05</TD>
+          <TD>2014-07-06</TD>
+          <TD>2014-07-07 10:41:15.75</TD>
+          <TD>Karen Lewis</TD>
+          <TD>49.062450</TD>
+          <TD>-64.626579</TD>
+          <TD>soar</TD>
+          <TD>goodman</TD>
+          <TD>&lt;NO FILTER&gt;</TD>
+          <TD>5.0</TD>
+          <TD>FLAT</TD>
+      <TD></TD>
+          <TD>Raw</TD>
+      <TD></TD>
+      <TD></TD>
+      <TD></TD>
+          <TD>/user/observer/today/0193.n20.fits</TD>
+          <TD>psg_140707_104140_fri.fits.fz</TD>
+          <TD>2378880</TD>
+          <TD>26ebf0787ec59d53f4ab6cd780c16b4d</TD>
+</TR>
+<TR>
+          <TD>http://nsaserver.sdm.noao.edu:7003/?fileRef=psg_140707_104120_fri.fits.fz</TD>
+          <TD>2014A-0481</TD>
+      <TD></TD>
+          <TD>2014-07-05</TD>
+          <TD>2014-07-06</TD>
+          <TD>2014-07-07 10:40:58.16</TD>
+          <TD>Karen Lewis</TD>
+          <TD>49.062450</TD>
+          <TD>-64.626579</TD>
+          <TD>soar</TD>
+          <TD>goodman</TD>
+          <TD>&lt;NO FILTER&gt;</TD>
+          <TD>5.0</TD>
+          <TD>FLAT</TD>
+      <TD></TD>
+          <TD>Raw</TD>
+      <TD></TD>
+      <TD></TD>
+      <TD></TD>
+          <TD>/user/observer/today/0192.n20.fits</TD>
+          <TD>psg_140707_104120_fri.fits.fz</TD>
+          <TD>2370240</TD>
+          <TD>10f315c5e714d08806819367fa63fe6f</TD>
+</TR>
+<TR>
+          <TD>http://nsaserver.sdm.noao.edu:7003/?fileRef=psg_140707_104000_cri.fits.fz</TD>
+          <TD>2014A-0481</TD>
+      <TD></TD>
+          <TD>2016-01-07</TD>
+          <TD>2014-07-06</TD>
+          <TD>2014-07-07 10:39:42.57</TD>
+          <TD>Karen Lewis</TD>
+          <TD>49.062450</TD>
+          <TD>-64.626579</TD>
+          <TD>soar</TD>
+          <TD>goodman</TD>
+          <TD>&lt;NO FILTER&gt;</TD>
+          <TD>1.0</TD>
+          <TD>COMP</TD>
+      <TD></TD>
+          <TD>Raw</TD>
+      <TD></TD>
+      <TD></TD>
+      <TD></TD>
+          <TD>/user/observer/today/0191.n20.fits</TD>
+          <TD>psg_140707_104000_cri.fits.fz</TD>
+          <TD>1460160</TD>
+          <TD>8d637036ff92b75e5595c6780bccd97c</TD>
+</TR>
+<TR>
+          <TD>http://nsaserver.sdm.noao.edu:7003/?fileRef=psg_140707_103430_ori.fits.fz</TD>
+          <TD>2014A-0481</TD>
+      <TD></TD>
+          <TD>2016-01-07</TD>
+          <TD>2014-07-06</TD>
+          <TD>2014-07-07 10:09:10.52</TD>
+          <TD>Karen Lewis</TD>
+          <TD>49.062479</TD>
+          <TD>-64.626807</TD>
+          <TD>soar</TD>
+          <TD>goodman</TD>
+          <TD>&lt;NO FILTER&gt;</TD>
+          <TD>1500.0</TD>
+          <TD>OBJECT</TD>
+      <TD></TD>
+          <TD>Raw</TD>
+      <TD></TD>
+      <TD></TD>
+      <TD></TD>
+          <TD>/user/observer/today/0190.n20.fits</TD>
+          <TD>psg_140707_103430_ori.fits.fz</TD>
+          <TD>1630080</TD>
+          <TD>f94ca0ee3941a6861876b46325dad407</TD>
+</TR>
+<TR>
+          <TD>http://nsaserver.sdm.noao.edu:7003/?fileRef=psg_140707_100010_fri.fits.fz</TD>
+          <TD>2014A-0481</TD>
+      <TD></TD>
+          <TD>2014-07-05</TD>
+          <TD>2014-07-06</TD>
+          <TD>2014-07-07 09:59:48.2</TD>
+          <TD>Karen Lewis</TD>
+          <TD>399.637425</TD>
+          <TD>-31.284596</TD>
+          <TD>soar</TD>
+          <TD>goodman</TD>
+          <TD>&lt;NO FILTER&gt;</TD>
+          <TD>5.0</TD>
+          <TD>FLAT</TD>
+      <TD></TD>
+          <TD>Raw</TD>
+      <TD></TD>
+      <TD></TD>
+      <TD></TD>
+          <TD>/user/observer/today/0186.n20.fits</TD>
+          <TD>psg_140707_100010_fri.fits.fz</TD>
+          <TD>1189440</TD>
+          <TD>1bfb07ca00da6ee5ccebf41105daf591</TD>
+</TR>
+<TR>
+          <TD>http://nsaserver.sdm.noao.edu:7003/?fileRef=psg_140707_100000_fri.fits.fz</TD>
+          <TD>2014A-0481</TD>
+      <TD></TD>
+          <TD>2014-07-05</TD>
+          <TD>2014-07-06</TD>
+          <TD>2014-07-07 09:59:30.63</TD>
+          <TD>Karen Lewis</TD>
+          <TD>399.637425</TD>
+          <TD>-31.284596</TD>
+          <TD>soar</TD>
+          <TD>goodman</TD>
+          <TD>&lt;NO FILTER&gt;</TD>
+          <TD>5.0</TD>
+          <TD>FLAT</TD>
+      <TD></TD>
+          <TD>Raw</TD>
+      <TD></TD>
+      <TD></TD>
+      <TD></TD>
+          <TD>/user/observer/today/0185.n20.fits</TD>
+          <TD>psg_140707_100000_fri.fits.fz</TD>
+          <TD>1189440</TD>
+          <TD>beecd2a18405ed2ef265da401be40aa2</TD>
+</TR>
+<TR>
+          <TD>http://nsaserver.sdm.noao.edu:7003/?fileRef=psg_140707_095940_fri.fits.fz</TD>
+          <TD>2014A-0481</TD>
+      <TD></TD>
+          <TD>2014-07-05</TD>
+          <TD>2014-07-06</TD>
+          <TD>2014-07-07 09:59:12.97</TD>
+          <TD>Karen Lewis</TD>
+          <TD>399.637425</TD>
+          <TD>-31.284596</TD>
+          <TD>soar</TD>
+          <TD>goodman</TD>
+          <TD>&lt;NO FILTER&gt;</TD>
+          <TD>5.0</TD>
+          <TD>FLAT</TD>
+      <TD></TD>
+          <TD>Raw</TD>
+      <TD></TD>
+      <TD></TD>
+      <TD></TD>
+          <TD>/user/observer/today/0184.n20.fits</TD>
+          <TD>psg_140707_095940_fri.fits.fz</TD>
+          <TD>1186560</TD>
+          <TD>5c9523c9acbc8d454621b659217b92c7</TD>
+</TR>
+<TR>
+          <TD>http://nsaserver.sdm.noao.edu:7003/?fileRef=psg_140707_095830_cri.fits.fz</TD>
+          <TD>2014A-0481</TD>
+      <TD></TD>
+          <TD>2016-01-07</TD>
+          <TD>2014-07-06</TD>
+          <TD>2014-07-07 09:57:37.13</TD>
+          <TD>Karen Lewis</TD>
+          <TD>399.637425</TD>
+          <TD>-31.284596</TD>
+          <TD>soar</TD>
+          <TD>goodman</TD>
+          <TD>&lt;NO FILTER&gt;</TD>
+          <TD>30.0</TD>
+          <TD>COMP</TD>
+      <TD></TD>
+          <TD>Raw</TD>
+      <TD></TD>
+      <TD></TD>
+      <TD></TD>
+          <TD>/user/observer/today/0183.n20.fits</TD>
+          <TD>psg_140707_095830_cri.fits.fz</TD>
+          <TD>2111040</TD>
+          <TD>8a4834c8095430ed28547ac5a692194e</TD>
+</TR>
+<TR>
+          <TD>http://nsaserver.sdm.noao.edu:7003/?fileRef=psg_140707_095700_ori.fits.fz</TD>
+          <TD>2014A-0481</TD>
+      <TD></TD>
+          <TD>2016-01-07</TD>
+          <TD>2014-07-06</TD>
+          <TD>2014-07-07 09:41:41.61</TD>
+          <TD>Karen Lewis</TD>
+          <TD>399.637546</TD>
+          <TD>-31.284624</TD>
+          <TD>soar</TD>
+          <TD>goodman</TD>
+          <TD>&lt;NO FILTER&gt;</TD>
+          <TD>900.0</TD>
+          <TD>OBJECT</TD>
+      <TD></TD>
+          <TD>Raw</TD>
+      <TD></TD>
+      <TD></TD>
+      <TD></TD>
+          <TD>/user/observer/today/0182.n20.fits</TD>
+          <TD>psg_140707_095700_ori.fits.fz</TD>
+          <TD>1512000</TD>
+          <TD>a128d0a640b8b5ae4aed6e09268d08f0</TD>
+</TR>
+<TR>
+          <TD>http://nsaserver.sdm.noao.edu:7003/?fileRef=psg_140707_094310_fri.fits.fz</TD>
+          <TD>2014A-0481</TD>
+      <TD></TD>
+          <TD>2014-07-05</TD>
+          <TD>2014-07-06</TD>
+          <TD>2014-07-07 09:31:50.32</TD>
+          <TD>Karen Lewis</TD>
+          <TD>390.351946</TD>
+          <TD>2.263133</TD>
+          <TD>soar</TD>
+          <TD>goodman</TD>
+          <TD>&lt;NO FILTER&gt;</TD>
+          <TD>5.0</TD>
+          <TD>FLAT</TD>
+      <TD></TD>
+          <TD>Raw</TD>
+      <TD></TD>
+      <TD></TD>
+      <TD></TD>
+          <TD>/user/observer/today/0178.n20.fits</TD>
+          <TD>psg_140707_094310_fri.fits.fz</TD>
+          <TD>2378880</TD>
+          <TD>ca3516a9abe26693803f0d51dfcc83d4</TD>
+</TR>
+<TR>
+          <TD>http://nsaserver.sdm.noao.edu:7003/?fileRef=psg_140707_093220_fri.fits.fz</TD>
+          <TD>2014A-0481</TD>
+      <TD></TD>
+          <TD>2014-07-05</TD>
+          <TD>2014-07-06</TD>
+          <TD>2014-07-07 09:31:50.32</TD>
+          <TD>Karen Lewis</TD>
+          <TD>390.351946</TD>
+          <TD>2.263133</TD>
+          <TD>soar</TD>
+          <TD>goodman</TD>
+          <TD>&lt;NO FILTER&gt;</TD>
+          <TD>5.0</TD>
+          <TD>FLAT</TD>
+      <TD></TD>
+          <TD>Raw</TD>
+      <TD></TD>
+      <TD></TD>
+      <TD></TD>
+          <TD>/user/observer/today/0178.n20.fits</TD>
+          <TD>psg_140707_093220_fri.fits.fz</TD>
+          <TD>2378880</TD>
+          <TD>42f7c5bf610b579432aa8766699e9324</TD>
+</TR>
+<TR>
+          <TD>http://nsaserver.sdm.noao.edu:7003/?fileRef=psg_140707_093200_fri.fits.fz</TD>
+          <TD>2014A-0481</TD>
+      <TD></TD>
+          <TD>2014-07-05</TD>
+          <TD>2014-07-06</TD>
+          <TD>2014-07-07 09:31:32.76</TD>
+          <TD>Karen Lewis</TD>
+          <TD>390.351946</TD>
+          <TD>2.263133</TD>
+          <TD>soar</TD>
+          <TD>goodman</TD>
+          <TD>&lt;NO FILTER&gt;</TD>
+          <TD>5.0</TD>
+          <TD>FLAT</TD>
+      <TD></TD>
+          <TD>Raw</TD>
+      <TD></TD>
+      <TD></TD>
+      <TD></TD>
+          <TD>/user/observer/today/0177.n20.fits</TD>
+          <TD>psg_140707_093200_fri.fits.fz</TD>
+          <TD>2376000</TD>
+          <TD>6d3a721de8de101b0ee537205f43a39b</TD>
+</TR>
+<TR>
+          <TD>http://nsaserver.sdm.noao.edu:7003/?fileRef=psg_140707_093140_fri.fits.fz</TD>
+          <TD>2014A-0481</TD>
+      <TD></TD>
+          <TD>2014-07-05</TD>
+          <TD>2014-07-06</TD>
+          <TD>2014-07-07 09:31:15.1</TD>
+          <TD>Karen Lewis</TD>
+          <TD>390.351946</TD>
+          <TD>2.263133</TD>
+          <TD>soar</TD>
+          <TD>goodman</TD>
+          <TD>&lt;NO FILTER&gt;</TD>
+          <TD>5.0</TD>
+          <TD>FLAT</TD>
+      <TD></TD>
+          <TD>Raw</TD>
+      <TD></TD>
+      <TD></TD>
+      <TD></TD>
+          <TD>/user/observer/today/0176.n20.fits</TD>
+          <TD>psg_140707_093140_fri.fits.fz</TD>
+          <TD>2367360</TD>
+          <TD>3ae7894ee4fc741bad2c6565ea511ed1</TD>
+</TR>
+<TR>
+          <TD>http://nsaserver.sdm.noao.edu:7003/?fileRef=psg_140707_093030_cri.fits.fz</TD>
+          <TD>2014A-0481</TD>
+      <TD></TD>
+          <TD>2016-01-07</TD>
+          <TD>2014-07-06</TD>
+          <TD>2014-07-07 09:29:42.16</TD>
+          <TD>Karen Lewis</TD>
+          <TD>390.351946</TD>
+          <TD>2.263133</TD>
+          <TD>soar</TD>
+          <TD>goodman</TD>
+          <TD>&lt;NO FILTER&gt;</TD>
+          <TD>30.0</TD>
+          <TD>COMP</TD>
+      <TD></TD>
+          <TD>Raw</TD>
+      <TD></TD>
+      <TD></TD>
+      <TD></TD>
+          <TD>/user/observer/today/0175.n20.fits</TD>
+          <TD>psg_140707_093030_cri.fits.fz</TD>
+          <TD>2113920</TD>
+          <TD>03c9c4e436653c5dda8e6188ef95bf07</TD>
+</TR>
+<TR>
+          <TD>http://nsaserver.sdm.noao.edu:7003/?fileRef=psg_140707_092400_ori.fits.fz</TD>
+          <TD>2014A-0481</TD>
+      <TD></TD>
+          <TD>2016-01-07</TD>
+          <TD>2014-07-06</TD>
+          <TD>2014-07-07 09:08:36.14</TD>
+          <TD>Karen Lewis</TD>
+          <TD>390.352171</TD>
+          <TD>2.263153</TD>
+          <TD>soar</TD>
+          <TD>goodman</TD>
+          <TD>&lt;NO FILTER&gt;</TD>
+          <TD>900.0</TD>
+          <TD>OBJECT</TD>
+      <TD></TD>
+          <TD>Raw</TD>
+      <TD></TD>
+      <TD></TD>
+      <TD></TD>
+          <TD>/user/observer/today/0174.n20.fits</TD>
+          <TD>psg_140707_092400_ori.fits.fz</TD>
+          <TD>1563840</TD>
+          <TD>0d4af9a0c77395e071752871e88808ff</TD>
+</TR>
+        </TABLEDATA>
+      </DATA>
+    </TABLE>
+  </RESOURCE>
+</VOTABLE>

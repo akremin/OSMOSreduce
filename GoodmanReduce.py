@@ -57,8 +57,10 @@ def filter_image(img):
     return img_cr
 
 pixscale = 0.273 #pixel scale at for OSMOS
-xbin = 1
-ybin = 1
+#xbin = 1
+#ybin = 1
+xbin = 2
+ybin = 2
 yshift = 13.0
 
 wm = []
