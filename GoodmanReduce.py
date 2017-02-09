@@ -1,6 +1,7 @@
 '''
 IMPORTANT NOTES:
-In the .oms file, the first and last RA/DEC represent a reference slit at the bottom of the mask and the center of the mask respectively.
+In the .oms file, the first and last RA/DEC represent a reference slit at the 
+bottom of the mask and the center of the mask respectively.
 
 Please list the calibration lamp(s) used during your observations here
 '''
@@ -29,7 +30,7 @@ import pickle
 import pdb
 from scipy import fftpack
 from get_photoz import *
-from zpy import *
+from zestipy import *
 #from redshift_estimate import *
 from sncalc import *
 #from redshift_checker import *
@@ -56,12 +57,28 @@ def filter_image(img):
     img_cr[bad] = img_sm[bad]
     return img_cr
 
-pixscale = 0.273 #pixel scale at for OSMOS
+pixscale = 0.15 #arcsec/pixel  #pixel scale at for Goodman
 #xbin = 1
 #ybin = 1
 xbin = 2
 ybin = 2
-yshift = 13.0
+xshift = 0.0/xbin    # with division this is in binned pixels
+yshift = 740.0/ybin  # with division this is in binned pixels
+binnedx = 2071   # this is in binned pixels
+binnedy = 1257    # this is in binned pixels
+datadir = '/u/home/kremin/value_storage/goodman_jan17/'
+
+# From goodman file header:
+#PARAM16 =                    0 / Serial Origin,Pixels                           
+#PARAM17 =                 2071 / Serial Length,Binned Pixels                    
+#PARAM18 =                    2 / Serial Binning,Pixels                          
+#PARAM19 =                    0 / Serial Post Scan,Pixels                        
+#PARAM20 =                  740 / Parallel Origin,Pixels                         
+#PARAM21 =                 1257 / Parallel Length,Binned Pixels                  
+#PARAM22 =                    2 / Parallel Binning,Pixels                        
+#PARAM23 =                    0 / Parallel Post Scan,Pixels         
+#RDNOISE =             3.690000 / CCD readnoise [e-]                             
+#GAIN    =             0.560000 / CCD gain [e-/ADU]    
 
 wm = []
 fm = []
@@ -99,7 +116,7 @@ try:
 except:
     print("Cluster Name Error: You must enter a cluster name to perform reduction")
     print(' ')
-    idnew = str(eval(input("Cluster ID: ")))
+    idnew = str((raw_input("Cluster ID: ")))
     clus_id = idnew
 
 print(('Reducing cluster: ',clus_id))
@@ -118,32 +135,32 @@ except IndexError:
 ############################
 #Import Cluster .fits files#
 ############################
-for file in os.listdir('./'+clus_id+'/'): #search and import all mosaics
-    if fnmatch.fnmatch(file, 'mosaic_*'):
-        image_file = file
+for curfile in os.listdir(datadir+clus_id+'/maskfiles/'): #search and import all mosaics
+    if fnmatch.fnmatch(curfile, 'mosaic_*'):
+        image_file = curfile
 
 
 
 #import, clean, and add science fits files
 sciencefiles = np.array([])
 hdulists_science = np.array([])
-for file in os.listdir('./'+clus_id+'/science/'): #search and import all science filenames
-    if fnmatch.fnmatch(file, '*b.fits'):
-        sciencefiles = np.append(sciencefiles,file)
-        scifits = pyfits.open(clus_id+'/science/'+file)
+for curfile in os.listdir(datadir+clus_id+'/data_products/science/'): #search and import all science filenames
+    if fnmatch.fnmatch(curfile, '*b.fits'):
+        sciencefiles = np.append(sciencefiles,curfile)
+        scifits = pyfits.open(datadir+clus_id+'/data_products/science/'+curfile)
         hdulists_science = np.append(hdulists_science,scifits)
 science_file = sciencefiles[0]
-hdulist_science = pyfits.open(clus_id+'/science/'+science_file)
-naxis1 = hdulist_science[0].header['NAXIS1']
-naxis2 = hdulist_science[0].header['NAXIS2']
+hdulist_science = pyfits.open(datadir+clus_id+'/data_products/science/'+science_file)
+naxis1 = hdulist_science[0].header['NAXIS2']
+naxis2 = hdulist_science[0].header['NAXIS1']
 
 #import flat data
 flatfiles = np.array([])
 hdulists_flat = np.array([])
-for file in os.listdir('./'+clus_id+'/flats/'): #search and import all science filenames
-    if fnmatch.fnmatch(file, '*b.fits'):
-        flatfiles = np.append(flatfiles,file)
-        flatfits = pyfits.open(clus_id+'/flats/'+file)
+for curfile in os.listdir(datadir+clus_id+'/data_products/flat/'): #search and import all science filenames
+    if fnmatch.fnmatch(curfile, '*b.fits'):
+        flatfiles = np.append(flatfiles,curfile)
+        flatfits = pyfits.open(datadir+clus_id+'/data_products/flat/'+curfile)
         hdulists_flat = np.append(hdulists_flat,flatfits)
 if len(hdulists_flat) < 1:
     raise Exception('proc4k.py did not detect any flat files')
@@ -151,66 +168,95 @@ if len(hdulists_flat) < 1:
 #import arc data
 arcfiles = np.array([])
 hdulists_arc = np.array([])
-for file in os.listdir('./'+clus_id+'/arcs/'): #search and import all science filenames
-    if fnmatch.fnmatch(file, '*b.fits'):
-        arcfiles = np.append(arcfiles,file)
-        arcfits = pyfits.open(clus_id+'/arcs/'+file)
+for curfile in os.listdir(datadir+clus_id+'/data_products/comp/'): #search and import all science curfilenames
+    if fnmatch.fnmatch(curfile, '*b.fits'):
+        arcfiles = np.append(arcfiles,curfile)
+        arcfits = pyfits.open(datadir+clus_id+'/data_products/comp/'+curfile)
         hdulists_arc = np.append(hdulists_arc,arcfits)
 if len(hdulists_arc) < 1:
     raise Exception('proc4k.py did not detect any arc files')
 ###############################################################
 
 #########################################################
-#Need to parse .oms file for ra,dec and slit information#
+#Need to parse .txt file for slit information#
 #########################################################
-RA = np.array([])
-DEC = np.array([])
-SLIT_NUM = np.array([])
-SLIT_WIDTH = np.array([])
-SLIT_LENGTH = np.array([])
-SLIT_X = np.array([])
-SLIT_Y = np.array([])
-for file in os.listdir('./'+clus_id+'/'):
-    if fnmatch.fnmatch(file, '*.oms'):
-        omsfile = file
-inputfile = open(clus_id+'/'+omsfile)
-alltext = inputfile.readlines()
-for line in alltext:
-    RAmatch = re.search('TARG(.*)\.ALPHA\s*(..)(..)(.*)',line)
-    DECmatch = re.search('DELTA\s*(...)(..)(.*)',line)
-    WIDmatch = re.search('WID\s\s*(.*)',line)
-    LENmatch = re.search('LEN\s\s*(.*)',line)
-    Xmatch = re.search('XMM\s\s*(.*)',line)
-    Ymatch = re.search('YMM\s\s*(.*)',line)
-    if RAmatch:
-        SLIT_NUM = np.append(SLIT_NUM,RAmatch.group(1))
-        RA = np.append(RA,RAmatch.group(2)+':'+RAmatch.group(3)+':'+RAmatch.group(4))
-    if DECmatch:
-        DEC = np.append(DEC,DECmatch.group(1)+':'+DECmatch.group(2)+':'+DECmatch.group(3))
-    if WIDmatch:
-        SLIT_WIDTH = np.append(SLIT_WIDTH,WIDmatch.group(1))
-    if LENmatch:
-        SLIT_LENGTH = np.append(SLIT_LENGTH,LENmatch.group(1))
-    if Xmatch:
-        SLIT_X = np.append(SLIT_X,0.5*naxis1+np.float(Xmatch.group(1))*(11.528)/(pixscale))
-    if Ymatch:
-        SLIT_Y = np.append(SLIT_Y,0.5*naxis2+np.float(Ymatch.group(1))*(11.528)/(pixscale)+yshift)
+for curfile in os.listdir(datadir+clus_id+'/maskfiles/'):
+    if fnmatch.fnmatch(curfile, '*.oms'):
+        omsfile = curfile
+with open(datadir+clus_id+'/maskfiles/'+clus_id+'_Mask1.txt','r') as fil:
+    SLIT_X = []
+    SLIT_Y = []
+    SLIT_WIDTH = []
+    SLIT_LENGTH = []
+    throw_y = []
+    throw_x = []
+    for line in fil:
+        if line[:2] == 'M7':
+            if len(throw_y)>0:
+                SLIT_WIDTH.append(np.max(throw_y)-np.min(throw_y))
+                SLIT_LENGTH.append(np.max(throw_x)-np.min(throw_x))
+                throw_y = []
+                throw_x = []
+            else:
+                SLIT_WIDTH.append(None)
+                SLIT_LENGTH.append(None)
+        if line[:3] == 'G0 ':
+            vals = line.split(' ')
+            SLIT_X.append(float(vals[1][1:].strip('\n\r')))
+            SLIT_Y.append(float(vals[2][1:].strip('\n\r')))
+        if line[:3]=='G1 ':
+            vals = line.split(' ')
+            throw_x.append(float(vals[2][1:].strip('\n\r')))
+            throw_y.append(float(vals[3][1:].strip('\n\r')))
+
+#########################################################
+#Need to parse .msk file for ra,dec information#
+#########################################################
+
+with open(datadir+clus_id+'/maskfiles/'+clus_id+'_Mask1.msk','r') as fil:
+    SLIT_NUM = []
+    RA = []
+    DEC = []
+    TYPE = []
+    for line in fil:
+        if line[:3] == 'MM_':
+            mm_per_asec = float(line.split('=')[1].strip('\n\r'))
+        if line[:4] == '[Obj':
+            SLIT_NUM.append(line.strip('\n\r[]'))
+        if line[:3]=='DEC':
+            DEC.append(line.split('=')[1].strip('\n\r'))
+        if line[:3]=='RA=':
+            RA.append(line.split('=')[1].strip('\n\r'))
+        if line[:3]=='IS_':
+            tf = line.split('=')[1].strip('\n\r')
+            if tf == 'False':
+                TYPE.append('Target')
+            else:
+                TYPE.append('Alignment')
+
+
+
+# All widths and locs are currently in mm's  -> want pixels
+SLIT_X = 0.5*binnedx + np.array(SLIT_X[1:-1])*(xbin/(pixscale*mm_per_asec))
+SLIT_Y = 0.5*binnedy + np.array(SLIT_Y[1:-1])*(ybin/(pixscale*mm_per_asec))# +yshift
+SLIT_WIDTH = np.array(SLIT_WIDTH[1:])*(ybin/(pixscale*mm_per_asec))
+SLIT_LENGTH = np.array(SLIT_LENGTH[1:])*(xbin/(pixscale*mm_per_asec))
 
 #remove throw away rows and dump into Gal_dat dataframe
-Gal_dat = pd.DataFrame({'RA':RA[1:SLIT_WIDTH.size],'DEC':DEC[1:SLIT_WIDTH.size],'SLIT_WIDTH':SLIT_WIDTH[1:],'SLIT_LENGTH':SLIT_LENGTH[1:],'SLIT_X':SLIT_X[1:],'SLIT_Y':SLIT_Y[1:]})
+Gal_dat = pd.DataFrame({'RA':RA,'DEC':DEC,'SLIT_WIDTH':SLIT_WIDTH,'SLIT_LENGTH':SLIT_LENGTH,'SLIT_X':SLIT_X,'SLIT_Y':SLIT_Y,'TYPE':TYPE})
 
 ###############################################################
 
 ############################
 #Query SDSS for galaxy data#
 ############################
-if os.path.isfile(clus_id+'/'+clus_id+'_sdssinfo.csv'):
-    redshift_dat = pd.read_csv(clus_id+'/'+clus_id+'_sdssinfo.csv')
+if os.path.isfile(datadir+clus_id+'/'+clus_id+'_sdssinfo.csv'):
+    redshift_dat = pd.read_csv(datadir+clus_id+'/'+clus_id+'_sdssinfo.csv')
 else:
     #returns a Pandas dataframe with columns
     #objID','SpecObjID','ra','dec','umag','gmag','rmag','imag','zmag','redshift','photo_z','extra'
     redshift_dat = query_galaxies(Gal_dat.RA,Gal_dat.DEC)
-    redshift_dat.to_csv(clus_id+'/'+clus_id+'_sdssinfo.csv',index=False)
+    redshift_dat.to_csv(datadir+clus_id+'/data_products/'+clus_id+'_sdssinfo.csv',index=False)
 
 
 #merge into Gal_dat
@@ -224,8 +270,8 @@ gal_imag = Gal_dat['imag']
 ####################
 #Open images in ds9#
 ####################
-p = subprocess.Popen('ds9 '+clus_id+'/'+image_file+' -geometry 1200x900 -scale sqrt -scale mode zscale -fits '+clus_id+'/arcs/'+arcfiles[0],shell=True)
-#p = subprocess.Popen('ds9 '+clus_id+'/'+image_file+' -geometry 1200x900 -scale sqrt -scale mode zscale -fits '+clus_id+'/arcs/'+arcfiles[0],shell=True)
+p = subprocess.Popen('ds9 '+datadir+clus_id+'/maskfiles/'+image_file+' -geometry 1200x900 -scale sqrt -scale mode zscale -fits '+datadir+clus_id+'/data_products/comp/'+arcfiles[0],shell=True)
+#p = subprocess.Popen('ds9 '+datadir+clus_id+'/data_products/'+'/'+image_file+' -geometry 1200x900 -scale sqrt -scale mode zscale -fits '+clus_id+'/data_products/comp/'+arcfiles[0],shell=True)
 time.sleep(3)
 print("Have the images loaded? (y/n)")
 while True: #check to see if images have loaded correctly
@@ -235,7 +281,7 @@ while True: #check to see if images have loaded correctly
             print('Image has been loaded')
             break
         else:
-            sys.exit('Check to make sure file '+image_file+' exists in '+clus_id+'/')
+            sys.exit('Check to make sure file '+image_file+' exists in '+datadir+clus_id+'/maskfiles/')
 
 d = ds9() #start pyds9 and set parameters
 d.set('frame 1')
@@ -253,8 +299,8 @@ d.set('regions sky fk5')
 ####################################################################################
 reassign = 'n'
 keys = np.arange(0,Gal_dat.SLIT_WIDTH.size,1).astype('string')
-if os.path.isfile(clus_id+'/'+clus_id+'_slittypes.pkl'):
-    reassign = eval(input('Detected slit types file in path. Do you wish to use this (y) or remove and re-assign slit types (n)? '))
+if os.path.isfile(datadir+clus_id+'/'+clus_id+'_slittypes.pkl'):
+    reassign = (raw_input('Detected slit types file in path. Do you wish to use this (y) or remove and re-assign slit types (n)? '))
 if reassign == 'n':
     slit_type = {}
     print('Is this a galaxy (g), a reference star (r), or empty sky (s)?')
@@ -270,9 +316,9 @@ if reassign == 'n':
                 break
 
         slit_type[keys[i]] = char.lower()
-    pickle.dump(slit_type,open(clus_id+'/'+clus_id+'_slittypes.pkl','wb'))
+    pickle.dump(slit_type,open(datadir+clus_id+'/'+clus_id+'_slittypes.pkl','wb'))
 else:
-    slit_type = pickle.load(open(clus_id+'/'+clus_id+'_slittypes.pkl','rb'))
+    slit_type = pickle.load(open(datadir+clus_id+'/'+clus_id+'_slittypes.pkl','rb'))
 
 stypes = pd.DataFrame(list(slit_type.values()),index=np.array(list(slit_type.keys())).astype('int'),columns=['slit_type'])
 Gal_dat = Gal_dat.join(stypes)
@@ -287,11 +333,11 @@ d.set('zoom 0.40')
 #Reduction steps to prep science image#
 #######################################
 redo = 'n'
-if os.path.isfile(clus_id+'/science/'+clus_id+'_science.cr.fits'):
-    redo = eval(input('Detected cosmic ray filtered file exists. Do you wish to use this (y) or remove and re-calculate (n)? '))
+if os.path.isfile(datadir+clus_id+'/data_products/science/'+clus_id+'_science.cr.fits'):
+    redo = (raw_input('Detected cosmic ray filtered file exists. Do you wish to use this (y) or remove and re-calculate (n)? '))
 if redo == 'n':
     try:
-        os.remove(clus_id+'/science/'+clus_id+'_science.cr.fits')
+        os.remove(datadir+clus_id+'/data_products/science/'+clus_id+'_science.cr.fits')
     except: pass
     scifits_c = copy.copy(hdulists_science[0]) #copy I will use to hold the smoothed and added results
     scifits_c.data *= 0.0
@@ -299,15 +345,15 @@ if redo == 'n':
     for scifits in hdulists_science:
         filt = filter_image(scifits.data)
         scifits_c.data += filt + np.abs(np.nanmin(filt))
-    scifits_c.writeto(clus_id+'/science/'+clus_id+'_science.cr.fits')
+    scifits_c.writeto(datadir+clus_id+'/data_products/science/'+clus_id+'_science.cr.fits')
 else: 
-    scifits_c = pyfits.open(clus_id+'/science/'+clus_id+'_science.cr.fits')[0]
+    scifits_c = pyfits.open(datadir+clus_id+'/data_products/science/'+clus_id+'_science.cr.fits')[0]
     print('loading pre-prepared cosmic ray filtered files...')
 
 print('FLAT REDUCTION')
 if redo == 'n':
     try:
-        os.remove(clus_id+'/flats/'+clus_id+'_flat.cr.fits')
+        os.remove(datadir+clus_id+'/data_products/flat/'+clus_id+'_flat.cr.fits')
     except: pass
     flatfits_c = copy.copy(hdulists_flat[0]) #copy I will use to hold the smoothed and added results
     flat_data = np.zeros((hdulists_flat.size,naxis1,naxis2))
@@ -317,29 +363,29 @@ if redo == 'n':
         flat_data[i] = (filt+np.abs(np.nanmin(filt)))/np.max(filt+np.abs(np.nanmin(filt)))
         i += 1
     flatfits_c.data = np.median(flat_data,axis=0)
-    flatfits_c.writeto(clus_id+'/flats/'+clus_id+'_flat.cr.fits')
-else: flatfits_c = pyfits.open(clus_id+'/flats/'+clus_id+'_flat.cr.fits')[0]
+    flatfits_c.writeto(datadir+clus_id+'/data_products/flat/'+clus_id+'_flat.cr.fits')
+else: flatfits_c = pyfits.open(datadir+clus_id+'/data_products/flat/'+clus_id+'_flat.cr.fits')[0]
 
 print('ARC REDUCTION')
 if redo == 'n':
     try:
-        os.remove(clus_id+'/arcs/'+clus_id+'_arc.cr.fits')
+        os.remove(datadir+clus_id+'/data_products/comp/'+clus_id+'_arc.cr.fits')
     except: pass
     arcfits_c = copy.copy(hdulists_arc[0]) #copy I will use to hold the smoothed and added results
     arcfits_c.data *= 0.0
     for arcfits in hdulists_arc:
         filt = arcfits.data#filter_image(arcfits.data)
         arcfits_c.data += filt + np.abs(np.nanmin(filt))
-    arcfits_c.writeto(clus_id+'/arcs/'+clus_id+'_arc.cr.fits')
-else: arcfits_c = pyfits.open(clus_id+'/arcs/'+clus_id+'_arc.cr.fits')[0]
+    arcfits_c.writeto(datadir+clus_id+'/data_products/comp/'+clus_id+'_arc.cr.fits')
+else: arcfits_c = pyfits.open(datadir+clus_id+'/data_products/comp/'+clus_id+'_arc.cr.fits')[0]
 
 
 ##################################################################
 #Loop through regions and shift regions for maximum effectiveness#
 ##################################################################
 reassign = 'n'
-if os.path.isfile(clus_id+'/'+clus_id+'_slit_pos_qual.tab'):
-    reassign = eval(input('Detected slit position and quality file in path. Do you wish to use this (y) or remove and re-adjust (n)? '))
+if os.path.isfile(datadir+clus_id+'/'+clus_id+'_slit_pos_qual.tab'):
+    reassign = (raw_input('Detected slit position and quality file in path. Do you wish to use this (y) or remove and re-adjust (n)? '))
 if reassign == 'n':
     good_spectra = np.array(['n']*len(Gal_dat))
     FINAL_SLIT_X = np.zeros(len(Gal_dat))
@@ -417,12 +463,12 @@ if reassign == 'n':
         print((FINAL_SLIT_X[i],FINAL_SLIT_Y[i],SLIT_WIDTH[i]))
         d.set('regions delete all')
     print(FINAL_SLIT_X)
-    np.savetxt(clus_id+'/'+clus_id+'_slit_pos_qual.tab',np.array(list(zip(FINAL_SLIT_X,FINAL_SLIT_Y,SLIT_WIDTH,good_spectra)),dtype=[('float',float),('float2',float),('int',int),('str','|S1')]),delimiter='\t',fmt='%10.2f %10.2f %3d %s')
-    pickle.dump(spectra,open(clus_id+'/'+clus_id+'_reduced_spectra.pkl','wb'))
+    np.savetxt(datadir+clus_id+'/'+clus_id+'_slit_pos_qual.tab',np.array(list(zip(FINAL_SLIT_X,FINAL_SLIT_Y,SLIT_WIDTH,good_spectra)),dtype=[('float',float),('float2',float),('int',int),('str','|S1')]),delimiter='\t',fmt='%10.2f %10.2f %3d %s')
+    pickle.dump(spectra,open(datadir+clus_id+'/'+clus_id+'_reduced_spectra.pkl','wb'))
 else:
-    FINAL_SLIT_X,FINAL_SLIT_Y,SLIT_WIDTH = np.loadtxt(clus_id+'/'+clus_id+'_slit_pos_qual.tab',dtype='float',usecols=(0,1,2),unpack=True)
-    good_spectra = np.loadtxt(clus_id+'/'+clus_id+'_slit_pos_qual.tab',dtype='string',usecols=(3,),unpack=True)
-    spectra = pickle.load(open(clus_id+'/'+clus_id+'_reduced_spectra.pkl','rb'))
+    FINAL_SLIT_X,FINAL_SLIT_Y,SLIT_WIDTH = np.loadtxt(datadir+clus_id+'/'+clus_id+'_slit_pos_qual.tab',dtype='float',usecols=(0,1,2),unpack=True)
+    good_spectra = np.loadtxt(datadir+clus_id+'/'+clus_id+'_slit_pos_qual.tab',dtype='string',usecols=(3,),unpack=True)
+    spectra = pickle.load(open(datadir+clus_id+'/'+clus_id+'_reduced_spectra.pkl','rb'))
 
 Gal_dat['FINAL_SLIT_X'],Gal_dat['FINAL_SLIT_Y'],Gal_dat['SLIT_WIDTH'],Gal_dat['good_spectra'] = FINAL_SLIT_X,FINAL_SLIT_Y,SLIT_WIDTH,good_spectra
 
@@ -436,11 +482,11 @@ Gal_dat['FINAL_SLIT_X_FLIP'] = 4064 - Gal_dat.FINAL_SLIT_X
 ########################
 reassign = 'n'
 #wave = np.zeros((len(Gal_dat),4064))
-if os.path.isfile(clus_id+'/'+clus_id+'_stretchshift.tab'):
-    reassign = eval(input('Detected file with stretch and shift parameters for each spectra. Do you wish to use this (y) or remove and re-adjust (n)? '))
+if os.path.isfile(datadir+clus_id+'/'+clus_id+'_stretchshift.tab'):
+    reassign = (raw_input('Detected file with stretch and shift parameters for each spectra. Do you wish to use this (y) or remove and re-adjust (n)? '))
 if reassign == 'n':
     #create write file
-    f = open(clus_id+'/'+clus_id+'_stretchshift.tab','w')
+    f = open(datadir+clus_id+'/'+clus_id+'_stretchshift.tab','w')
     f.write('#X_SLIT_FLIP     Y_SLIT     SHIFT     STRETCH     QUAD     CUBE     FOURTH    FIFTH    WIDTH \n')
     
     #initialize polynomial arrays
@@ -545,10 +591,10 @@ if reassign == 'n':
                 plt.axvline(browser.wm[j],color='r')
             plt.xlim(3800,6000)
             try:
-                plt.savefig(clus_id+'/figs/'+str(ii)+'.wave.png')
+                plt.savefig(datadir+clus_id+'/figs/'+str(ii)+'.wave.png')
             except:
-                os.mkdir(clus_id+'/figs')
-                plt.savefig(clus_id+'/figs/'+str(ii)+'.wave.png')
+                os.mkdir(datadir+clus_id+'/figs')
+                plt.savefig(datadir+clus_id+'/figs/'+str(ii)+'.wave.png')
             plt.show()
             f.write(str(Gal_dat.FINAL_SLIT_X_FLIP[ii])+'\t')
             f.write(str(Gal_dat.FINAL_SLIT_Y[ii])+'\t')
@@ -679,10 +725,10 @@ if reassign == 'n':
                     plt.axvline(browser.wm[j],color='r')
                 plt.xlim(3800,6000)
                 try:
-                    plt.savefig(clus_id+'/figs/'+str(i)+'.wave.png')
+                    plt.savefig(datadir+clus_id+'/figs/'+str(i)+'.wave.png')
                 except:
-                    os.mkdir(clus_id+'/figs')
-                    plt.savefig(clus_id+'/figs/'+str(i)+'.wave.png')
+                    os.mkdir(datadir+clus_id+'/figs')
+                    plt.savefig(datadir+clus_id+'/figs/'+str(i)+'.wave.png')
                 plt.close()
 
         f.write(str(Gal_dat.FINAL_SLIT_X_FLIP[i])+'\t')
@@ -696,10 +742,10 @@ if reassign == 'n':
         f.write(str(Gal_dat.SLIT_WIDTH[i])+'\t')
         f.write('\n')
     f.close()
-    pickle.dump(spectra,open(clus_id+'/'+clus_id+'_reduced_spectra_wavecal.pkl','wb'))
+    pickle.dump(spectra,open(datadir+clus_id+'/'+clus_id+'_reduced_spectra_wavecal.pkl','wb'))
 else:
-    xslit,yslit,shift,stretch,quad,cube,fourth,fifth,wd = np.loadtxt(clus_id+'/'+clus_id+'_stretchshift.tab',dtype='float',usecols=(0,1,2,3,4,5,6,7,8),unpack=True)
-    spectra = pickle.load(open(clus_id+'/'+clus_id+'_reduced_spectra_wavecal.pkl','rb'))
+    xslit,yslit,shift,stretch,quad,cube,fourth,fifth,wd = np.loadtxt(datadir+clus_id+'/'+clus_id+'_stretchshift.tab',dtype='float',usecols=(0,1,2,3,4,5,6,7,8),unpack=True)
+    spectra = pickle.load(open(datadir+clus_id+'/'+clus_id+'_reduced_spectra_wavecal.pkl','rb'))
 
 #summed science slits + filtering to see spectra
 #Flux_science_old = np.array([np.sum(scifits_c2.data[Gal_dat.FINAL_SLIT_Y[i]-Gal_dat.SLIT_WIDTH[i]/2.0:Gal_dat.FINAL_SLIT_Y[i]+Gal_dat.SLIT_WIDTH[i]/2.0,:],axis=0)[::-1] for i in range(len(Gal_dat))])
@@ -787,10 +833,10 @@ plt.plot(Gal_dat['spec_z'],Gal_dat['est_z'],'ro')
 #plt.plot(sdss_red,redshift_est2[sdss_elem.astype('int')],'bo')
 #plt.plot(sdss_red,redshift_est3[sdss_elem.astype('int')],'o',c='purple')
 plt.plot(sdss_red,sdss_red,'k')
-plt.savefig(clus_id+'/redshift_compare.png')
+plt.savefig(datadir+clus_id+'/redshift_compare.png')
 plt.show()
 
-f = open(clus_id+'/estimated_redshifts.tab','w')
+f = open(datadir+clus_id+'/estimated_redshifts.tab','w')
 f.write('#RA    DEC    Z_est    Z_sdss  correlation   H S/N    K S/N     G S/N  gal_gmag    gal_rmag    gal_imag\n')
 for k in range(redshift_est.size):
     f.write(Gal_dat.RA[k]+'\t')
@@ -812,4 +858,4 @@ for k in range(redshift_est.size):
 f.close()
 
 #Output dataframe
-Gal_dat.to_csv(clus_id+'/results.csv')
+Gal_dat.to_csv(datadir+clus_id+'/results.csv')
