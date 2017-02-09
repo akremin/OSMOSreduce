@@ -26,9 +26,9 @@ versDate = "2017-01-22"
 ############################
 #### Define various routines
 ############################
-path_to_raw_data = '/Storage/SoarDataJan17/Kremin10_1'
+path_to_raw_data = '/u/home/kremin/value_storage/goodman_jan17/Kremin10/data'
 #'/u/home/kremin/value_storage/Github/M2FSreduce/example_goodman/'
-basepath_to_save_data = '/Storage/SoarDataJan17/Kremin10_1/data_products'
+basepath_to_save_data = '/u/home/kremin/value_storage/goodman_jan17/Kremin10/data_products'
 overwrite = True
 #biasl = 597; biash = 626
 #filsl = 578; filsh = 637
@@ -75,7 +75,7 @@ class GoodmanFile:
             
 def getCleanFileList(datapath):
     lis = os.listdir(datapath)
-    fileinfotable = Table(names=('filename','type','expnum','target','masknum'),dtype=('S64','S7','S4','S12','S3'))
+    fileinfotable = Table(names=('filename','type','expnum','target','masknum'),dtype=('S128','S7','S4','S12','S3'))
     filename_translator = {'f': 'flat','b':'bias','s':'science','c':'comp','a':'comp'}
     for fil in lis:
         if fil.split('.')[-1]!='fits':
@@ -126,10 +126,11 @@ elif len(os.listdir(path_to_raw_data))==0:
     print("That raw data directory is empty\n\n")
     exit
             
-if os.path.exists(basepath_to_save_data) and overwrite:
-    os.removedirs(basepath_to_save_data)
-elif os.path.exists(basepath_to_save_data) and not overwrite:
-    os.rename(basepath_to_save_data,basepath_to_save_data+'_'+str(int(time.time()))+'.old')
+if os.path.exists(basepath_to_save_data):
+    if overwrite:
+        os.system('rm -rf '+basepath_to_save_data)
+    else:
+        os.rename(basepath_to_save_data,basepath_to_save_data+'_'+str(int(time.time()))+'.old')
     
 
 print("Making data products directory\n")
@@ -141,7 +142,7 @@ for direct in ['flat','science','comp']:
 
         
 fileinfotable = getCleanFileList(path_to_raw_data)        
-
+pdb.set_trace()
 
 biasfiletable = fileinfotable[fileinfotable['type']=='bias']
 nonbiasfileinfotable = fileinfotable[fileinfotable['type']!='bias']
