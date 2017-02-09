@@ -12,88 +12,196 @@
 
 import os
 import numpy as np
+#import fitsio as pyfits
 from astropy.io import fits as pyfits
-
+import time
 from matplotlib import pyplot
 import pdb
+from astropy.table import Table
 # Version and Date
 
-versNum = "1.0"
-versDate = "2017-01-13"
+versNum = "1.1"
+versDate = "2017-01-22"
 
 ############################
 #### Define various routines
 ############################
-directory_path = '/u/home/kremin/value_storage/Github/M2FSreduce/example_goodman/'
-overwrite = False
+path_to_raw_data = '/Storage/SoarDataJan17/Kremin10_1'
+#'/u/home/kremin/value_storage/Github/M2FSreduce/example_goodman/'
+basepath_to_save_data = '/Storage/SoarDataJan17/Kremin10_1/data_products'
+overwrite = True
 #biasl = 597; biash = 626
 #filsl = 578; filsh = 637
 #nccds = 4
 #spectags = ['r','b']
 
 
+######################################
+#### Helper functions and classes ####
+######################################
+def get_median_bias(biasfilenames):
+    if type(biasfilenames)==str:
+        print('the median of 1 is itself')
+        hdu = pyfits.open(biasfilenames)[0]
+        return hdu.data[0],hdu.header
+    elif len(biasfilenames)==1:
+        print('the median of 1 is itself')
+        hdu = pyfits.open(biasfilenames[0])[0]
+        return hdu.data[0],hdu.header
+    hdu = pyfits.open(biasfilenames[0])[0]
+    curdata, exampleheader = hdu.data[0],hdu.header
+    data = np.zeros((len(biasfilenames),curdata.shape[0],curdata.shape[1]))
+    data[0,:,:] = curdata
+    for i,name in enumerate(biasfilenames[1:]):
+        curdata = pyfits.getdata(name)[0]
+        data[i,:,:] = curdata
+    return np.median(data,axis=0),exampleheader
+    
+    
+class GoodmanFile:
+    def __init__(self,filename='0000.filebase.fits'):
+        pieces = filename.split('.')
+        npieces = len(pieces)
+        self.type = pieces[-1]
+        self.imnum =  pieces[0]
+        if npieces > 3:
+            print("This doesn't follow the standard format. returning null for some info")
+            self.mask = None
+            self.target = None
+            self.type = ''
+        else:
+            self.type, targetmask = pieces[1].split('_')
+            self.target, self.mask = targetmask.split('-')
+            
+def getCleanFileList(datapath):
+    lis = os.listdir(datapath)
+    fileinfotable = Table(names=('filename','type','expnum','target','masknum'),dtype=('S64','S7','S4','S12','S3'))
+    filename_translator = {'f': 'flat','b':'bias','s':'science','c':'comp','a':'comp'}
+    for fil in lis:
+        if fil.split('.')[-1]!='fits':
+            continue
+        passed = False
+        rootname = fil[:-5]
+        try:
+            expnum, name = rootname.split('.')
+        except ValueError:
+            print(fil+" is a fits file that doesn't match format of expnum.filename.fits")
+            continue
+        try:
+            possibletype, targetmask = name.split('_')
+        except ValueError:
+            possibletype = name
+            targetmask = 'None-None'
+        try:            
+            target, mask = targetmask.split('-')
+        except ValueError:
+            target = 'None'
+            mask = 'None'
+
+        #pdb.set_trace()
+        for filetype in ['science','bias','biases','flat','flats','comp','comparcs','arcs','comparc','arc','comps']:
+            if possibletype.lower().find(filetype) > -1:
+                standardizedtype = filename_translator[filetype[0]]
+                passed = True
+                break
+        if not passed:
+            print(fil+" is a fits file but didn't match any of the types comp,flat,bias,science\n")
+        else:
+            fileinfotable.add_row((os.path.join(datapath,fil),standardizedtype,expnum,target,mask))
+    fileinfotable.convert_bytestring_to_unicode()
+    return fileinfotable
+
+    
+    
+
+
+
 ############################
 #### Script starts here ####
-############################
-biaspath = os.path.join(directory_path,'bias')
-biasfiles = os.listdir(biaspath)
-if not overwrite and ('masterbias.fits' in biasfiles):
-    os.path.rename(os.path.join(biaspath,'masterbias.fits'),os.path.join(biaspath,'masterbias.'+str(time.time())+'.fits'))
-
-os.chdir(biaspath)
-
-for bfile in biasfiles:
-    if bfile[-4:]!='.fits':
-        continue
-    testfile = pyfits.open(bfile)
-    testnaxis1 = testfile[0].header['NAXIS1']
-    testnaxis2 = testfile[0].header['NAXIS2']
-    bias = np.zeros((testnaxis2,testnaxis1))
-    break
-        
-# Find bias for this ccd
-nbiases = 0
-for bfile in biasfiles:
-    if bfile[:10] == 'masterbias' or (bfile[-4:]!='.fits'):
-         continue
-    else:
-        nbiases += 1
-    biasfile = pyfits.open(bfile)
-    bias += np.array(biasfile[0].data)
-
-master_bias = bias/float(len(bias_range))
-
-
-        # Do the bias calculation
-        for filnum in tosubtract_range:
-            tsubfilename = '%s%04dc%d' % (spectrograph,filnum,ccd)
-            if os.path.isfile(tsubfilename+'.fits'):
-                fitsfile = pyfits.open(tsubfilename+'.fits')
-
-                naxis1 = fitsfile[0].header['NAXIS1']
-                naxis2 = fitsfile[0].header['NAXIS2']
-                assert naxis1 == testnaxis1, "Make sure that the lengths of arrays are consistent"
-                assert naxis2 == testnaxis2, "Make sure that the lengths of arrays are consistent"
-                overscan_ranges = fitsfile[0].header['BIASSEC'].strip('[').strip(']').split(',')
-                overscanx,overscany = [rng.split(':') for rng in overscan_ranges]
-                ccdxbin,ccdybin = fitsfile[0].header['BINNING'].split('x')
-                detector = fitsfile[0].header['INSTRUME']
-                telescope = fitsfile[0].header['TELESCOP']
-                current_data = np.array(fitsfile[0].data)
+############################    
+if not os.path.exists(path_to_raw_data):
+    print("That raw data directory doesn't exist\n\n")
+    exit
+elif len(os.listdir(path_to_raw_data))==0:
+    print("That raw data directory is empty\n\n")
+    exit
+            
+if os.path.exists(basepath_to_save_data) and overwrite:
+    os.removedirs(basepath_to_save_data)
+elif os.path.exists(basepath_to_save_data) and not overwrite:
+    os.rename(basepath_to_save_data,basepath_to_save_data+'_'+str(int(time.time()))+'.old')
     
-                try:
-                    bias_subd = current_data - master_bias
-                    fitsfile[0].data = bias_subd[:int(overscanx[0]),:int(overscany[0])]
-                except:
-                    pdb.set_trace()
-                
-                #fitsfile[0].data = bias_subd[:overscanx[0],:overscany[0]]
-                fitsfile[0].header['STATE'] = 'BIAS SUBD'
-                if os.path.isfile(tsubfilename+'_b.fits'):
-                    if overwrite:
-                        print "Overwriting file: "+tsubfilename+'_b.fits'
-                        os.remove(tsubfilename+'_b.fits')
-                        fitsfile.writeto(tsubfilename+'_b.fits')
-                else:
-                    print "Making new file: "+tsubfilename+'_b.fits'
-                    fitsfile.writeto(tsubfilename+'_b.fits')
+
+print("Making data products directory\n")
+os.makedirs(basepath_to_save_data)
+    
+for direct in ['flat','science','comp']:
+    print("Making "+direct+' directory\n')
+    os.makedirs(os.path.join(basepath_to_save_data,direct))
+
+        
+fileinfotable = getCleanFileList(path_to_raw_data)        
+
+
+biasfiletable = fileinfotable[fileinfotable['type']=='bias']
+nonbiasfileinfotable = fileinfotable[fileinfotable['type']!='bias']
+#if not overwrite and ('masterbias.fits' in biasfiles):
+#    os.path.rename(os.path.join(biaspath,'masterbias.fits'),os.path.join(biaspath,'masterbias.'+str(time.time())+'.fits.old'))
+
+
+#pdb.set_trace()
+masterbias,biasheader = get_median_bias(biasfiletable['filename'])
+biaslist = ''
+for name in biasfiletable['expnum']:
+    biaslist += name + ','
+biasheader.add_history("Median 'master' bias for bias files: "+biaslist[:-1])
+pyfits.writeto(os.path.join(basepath_to_save_data,'masterbias.fits'),masterbias,header=biasheader)
+
+blank_stringcolumn = np.ones(len(nonbiasfileinfotable)).astype(str)
+c1 = Table.Column(data=blank_stringcolumn,name='BiasSubdLoc',dtype='S100')
+c2 = Table.Column(data=blank_stringcolumn,name='date',dtype='S10')
+c3 = Table.Column(data=blank_stringcolumn,name='time',dtype='S28')
+c4 = Table.Column(data=blank_stringcolumn,name='exptime',dtype='S4')
+c5 = Table.Column(data=blank_stringcolumn,name='binning',dtype='S3')
+c6 = Table.Column(data=blank_stringcolumn,name='filter',dtype='S10')
+c7 = Table.Column(data=blank_stringcolumn,name='grating',dtype='S10')
+c8 = Table.Column(data=blank_stringcolumn,name='target_RA',dtype='S12')
+c9 = Table.Column(data=blank_stringcolumn,name='target_Dec',dtype='S13')
+c10 = Table.Column(data=blank_stringcolumn,name='fullname',dtype='S20')
+c11 = Table.Column(data=blank_stringcolumn,name='maskname',dtype='S20')
+nonbiasfileinfotable.add_columns([c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11])
+
+
+nonbiasfileinfotable.convert_bytestring_to_unicode()
+# Do the bias subtraction
+for row in nonbiasfileinfotable:
+    hdulist = pyfits.open(row['filename'],mode='readonly')
+    currentdata = hdulist[0].data[0]
+    currentheader = hdulist[0].header
+    if row['type'] != currentheader['OBSTYPE'].lower():
+        if row['type']=='science' and currentheader['OBSTYPE']=='OBJECT':
+            pass
+        else:
+            print("File: "+row['filename']+"\nWas thought to be: "+row['type']+"\nBut the header claims it is: "+currentheader['OBSTYPE'].lower())
+    assert masterbias.shape == currentdata.shape, "Make sure that the shapes of arrays are consistent"
+    try:
+        bias_subd = currentdata - masterbias
+    except:
+        pdb.set_trace()
+    justname = os.path.basename(row['filename'])
+    justname = justname.replace('.fits','_b.fits')
+    currentheader.add_history("Bias Subtracted on "+time.ctime()+"    by procGoodman.py v"+versNum)
+    print("Making new file: "+justname+'\n')
+    pyfits.writeto(os.path.join(basepath_to_save_data,row['type'],justname),bias_subd,header=currentheader)
+    row['date'],row['time'] = currentheader['DATE'],currentheader['TIME']
+    row['exptime'] = currentheader['EXPTIME']
+    row['binning'] = str(currentheader['PARAM18'])+'x'+str(currentheader['PARAM22'])
+    row['filter'],row['grating'] = currentheader['FILTER2'],currentheader['GRATING']
+    row['target_RA'],row['target_Dec'] = currentheader['OBSRA'],currentheader['OBSDEC']
+    row['fullname'] = currentheader['OBJECT']
+    row['maskname'] = currentheader['SLIT']
+    row['BiasSubdLoc'] = os.path.join(basepath_to_save_data,row['type'],justname)
+    hdulist.close()
+
+nonbiasfileinfotable.write(os.path.join(basepath_to_save_data,'fileinfo.csv'),format='ascii.csv')
+nonbiasfileinfotable.write(os.path.join(basepath_to_save_data,'fileinfo.fits'),format='fits')
