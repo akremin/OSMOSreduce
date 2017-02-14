@@ -13,11 +13,12 @@ import warnings
 import pdb
 
 warnings.filterwarnings("ignore")
-
+binned_detector_length = 2071   # 4064
+binned_detector_width = 1257
 
 def _quadfit(x,a,b):
     '''define quadratic galaxy fitting function'''
-    return a*(x-2032)**2 + b
+    return a*(x-(binned_detector_length/2))**2 + b
 
 def _gaus(x,a,x0,c):
     if a <= 0: a = np.inf
@@ -78,7 +79,7 @@ def identify_slits(pixels,flux,slit_y,good_detect=True):
     start = np.array(start)[np.array(start) < len(pixels) - 40]
     end = np.array(end)[np.array(end)> start[0]+35]
     if len(start) > len(end):
-        if slit_y < 2032:
+        if slit_y < (binned_detector_width/2):
             startf = start[:1]
         else:
             startf = start[1:]
@@ -155,7 +156,7 @@ def slit_find(flux,science_flux,arc_flux,lower_lim,upper_lim):
                 mask = np.ma.getmask(self.first[self.lower_lim:self.upper_lim])
                 xmask = np.ma.array(self.xpix[self.lower_lim:self.upper_lim],mask=mask)
                 popt2,pcov = curve_fit(_quadfit,xmask.compressed(),self.first[self.lower_lim:self.upper_lim].compressed(),p0=[1e-4,50])
-                self.first = np.ma.masked_where(np.abs(self.first - (popt2[0]*(self.xpix-2032)**2 + popt2[1])) >= 10,self.first)
+                self.first = np.ma.masked_where(np.abs(self.first - (popt2[0]*(self.xpix-(binned_detector_length/2))**2 + popt2[1])) >= 10,self.first)
             self.popt_avg = [np.average([popt2[0]]),popt2[1]]
             self.plot_fit()
             return self.popt_avg
@@ -172,7 +173,7 @@ def slit_find(flux,science_flux,arc_flux,lower_lim,upper_lim):
 
         def plot_fit(self):
             self.upper.set_ydata(_quadfit(self.xpix,*self.popt_avg))
-            self.lower.set_ydata(self.popt_avg[0]*(self.xpix-2032)**2 + self.popt_avg[1]+40)
+            self.lower.set_ydata(self.popt_avg[0]*(self.xpix-(binned_detector_length/2))**2 + self.popt_avg[1]+40)
             plt.draw()
     
     
@@ -184,7 +185,7 @@ def slit_find(flux,science_flux,arc_flux,lower_lim,upper_lim):
     #    mask = np.ma.getmask(first[:100])
     #    xmask = np.ma.array(xpix[:100],mask=mask)
     #    popt2,pcov = curve_fit(_quadfit,xmask.compressed(),first[:100].compressed(),p0=[1e-4,50])
-    #    first = np.ma.masked_where(np.abs(first - (popt2[0]*(xpix-2032)**2 + popt2[1])) >= 10,first)
+    #    first = np.ma.masked_where(np.abs(first - (popt2[0]*(xpix-(binned_detector_length/2))**2 + popt2[1])) >= 10,first)
     #popt_avg = [np.average([popt2[0]]),popt2[1]]
     Sel.fitting(lower_lim,upper_lim)
     xdat = RectangleSelector(ax, Sel.onselect, drawtype='box')
@@ -200,8 +201,8 @@ def slit_find(flux,science_flux,arc_flux,lower_lim,upper_lim):
     d2_spectra_a = np.zeros((arc_flux.shape[1],40))
     for i in range(science_flux.shape[1]):
         yvals = np.arange(0,science_flux.shape[0],1)
-        d2_spectra_s[i] = science_flux[:,i][np.where((yvals>=popt_avg[0]*(i-2032)**2 + popt_avg[1])&(yvals<=popt_avg[0]*(i-2032)**2 + popt_avg[1]+45))][:40]
-        d2_spectra_a[i] = arc_flux[:,i][np.where((yvals>=popt_avg[0]*(i-2032)**2 + popt_avg[1])&(yvals<=popt_avg[0]*(i-2032)**2 + popt_avg[1]+45))][:40]
+        d2_spectra_s[i] = science_flux[:,i][np.where((yvals>=popt_avg[0]*(i-(binned_detector_width/2))**2 + popt_avg[1])&(yvals<=popt_avg[0]*(i-(binned_detector_width/2))**2 + popt_avg[1]+45))][:40]
+        d2_spectra_a[i] = arc_flux[:,i][np.where((yvals>=popt_avg[0]*(i-(binned_detector_width/2))**2 + popt_avg[1])&(yvals<=popt_avg[0]*(i-(binned_detector_width/2))**2 + popt_avg[1]+45))][:40]
 
     ##
     #Identify and cut out galaxy light

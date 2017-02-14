@@ -237,10 +237,10 @@ with open(datadir+clus_id+'/maskfiles/'+clus_id+'_Mask1.msk','r') as fil:
 
 
 # All widths and locs are currently in mm's  -> want pixels
-SLIT_X = 0.5*binnedx + np.array(SLIT_X[1:-1])*(xbin/(pixscale*mm_per_asec))
-SLIT_Y = 0.5*binnedy + np.array(SLIT_Y[1:-1])*(ybin/(pixscale*mm_per_asec))# +yshift
-SLIT_WIDTH = np.array(SLIT_WIDTH[1:])*(ybin/(pixscale*mm_per_asec))
-SLIT_LENGTH = np.array(SLIT_LENGTH[1:])*(xbin/(pixscale*mm_per_asec))
+SLIT_X = np.array(SLIT_X[1:-1])*(1/(xbin*pixscale*mm_per_asec))
+SLIT_Y = 0.5*binnedy + np.array(SLIT_Y[1:-1])*(1/(ybin*pixscale*mm_per_asec))# +yshift
+SLIT_WIDTH = np.array(SLIT_WIDTH[1:])*(1/(ybin*pixscale*mm_per_asec))
+SLIT_LENGTH = np.array(SLIT_LENGTH[1:])*(1/(xbin*pixscale*mm_per_asec))
 
 #remove throw away rows and dump into Gal_dat dataframe
 Gal_dat = pd.DataFrame({'RA':RA,'DEC':DEC,'SLIT_WIDTH':SLIT_WIDTH,'SLIT_LENGTH':SLIT_LENGTH,'SLIT_X':SLIT_X,'SLIT_Y':SLIT_Y,'TYPE':TYPE})
@@ -397,9 +397,11 @@ if reassign == 'n':
     print('If needed, move region box to desired location. To increase the size, drag on corners')
     for i in range(SLIT_WIDTH.size):
         print(('SLIT ',i))
+        #d.set('pan to 1150.0 '+str(Gal_dat.SLIT_Y[i])+' physical')
         d.set('pan to 1150.0 '+str(Gal_dat.SLIT_Y[i])+' physical')
         print(('Galaxy at ',Gal_dat.RA[i],Gal_dat.DEC[i]))
-        d.set('regions command {box(2000 '+str(Gal_dat.SLIT_Y[i])+' 4500 85) #color=green highlite=1}')
+        #d.set('regions command {box(2000 '+str(Gal_dat.SLIT_Y[i])+' 4500 85) #color=green highlite=1}')
+        d.set('regions command {box('+str(int(binnedy/2))+' '+str(Gal_dat.SLIT_Y[i])+' '+str(binnedx)+' '+str(int(85/xbin))+') #color=green highlite=1}')
         #raw_input('Once done: hit ENTER')
         if Gal_dat.slit_type[i] == 'g':
             if sdss_check:
@@ -473,7 +475,8 @@ else:
 Gal_dat['FINAL_SLIT_X'],Gal_dat['FINAL_SLIT_Y'],Gal_dat['SLIT_WIDTH'],Gal_dat['good_spectra'] = FINAL_SLIT_X,FINAL_SLIT_Y,SLIT_WIDTH,good_spectra
 
 #Need to flip FINAL_SLIT_X coords to account for reverse wavelength spectra
-Gal_dat['FINAL_SLIT_X_FLIP'] = 4064 - Gal_dat.FINAL_SLIT_X
+Gal_dat['FINAL_SLIT_X_FLIP'] = binnedx - Gal_dat.FINAL_SLIT_X
+#Gal_dat['FINAL_SLIT_X_FLIP'] = 4064 - Gal_dat.FINAL_SLIT_X
 ####################################################################
 
 
@@ -491,13 +494,13 @@ if reassign == 'n':
     
     #initialize polynomial arrays
     fifth,fourth,cube,quad,stretch,shift =  np.zeros((6,len(Gal_dat)))
-    shift_est = 4.71e-6*(Gal_dat['FINAL_SLIT_X'] - 2500.0)**2 + 4.30e-6*(Gal_dat['FINAL_SLIT_Y'] - 2000)**2 + 4469.72
-    stretch_est = -9.75e-9*(Gal_dat['FINAL_SLIT_X'] - 1800.0)**2 - 2.84e-9*(Gal_dat['FINAL_SLIT_Y'] - 2000)**2 + 0.7139
-    quad_est = 8.43e-9*(Gal_dat['FINAL_SLIT_X'] - 1800.0) + 1.55e-10*(Gal_dat['FINAL_SLIT_Y'] - 2000) + 1.3403e-5
-    cube_est = 7.76e-13*(Gal_dat['FINAL_SLIT_X'] - 1800.0) + 4.23e-15*(Gal_dat['FINAL_SLIT_Y'] - 2000) - 5.96e-9
+    shift_est = 4.71e-6*(Gal_dat['FINAL_SLIT_X'] - (binnedx/2)-200)**2 + 4.30e-6*(Gal_dat['FINAL_SLIT_Y'] - (binnedy/2))**2 + 4469.72
+    stretch_est = -9.75e-9*(Gal_dat['FINAL_SLIT_X'] - (binnedx/2)+100)**2 - 2.84e-9*(Gal_dat['FINAL_SLIT_Y'] - (binnedy/2))**2 + 0.7139
+    quad_est = 8.43e-9*(Gal_dat['FINAL_SLIT_X'] - (binnedx/2)+100) + 1.55e-10*(Gal_dat['FINAL_SLIT_Y'] - (binnedy/2)) + 1.3403e-5
+    cube_est = 7.76e-13*(Gal_dat['FINAL_SLIT_X'] - (binnedx/2)+100) + 4.23e-15*(Gal_dat['FINAL_SLIT_Y'] - (binnedy/2)) - 5.96e-9
     fifth_est,fourth_est = np.zeros((2,len(Gal_dat)))
     calib_data = arcfits_c.data
-    p_x = np.arange(0,4064,1)
+    p_x = np.arange(0,binnedx,1)
     ii = 0
     
     #do reduction for initial galaxy
@@ -505,7 +508,7 @@ if reassign == 'n':
         if good_spectra[ii]=='y':
             f_x = np.sum(spectra[keys[ii]]['arc_spec'],axis=0)
             d.set('pan to 1150.0 '+str(Gal_dat.FINAL_SLIT_Y[ii])+' physical')
-            d.set('regions command {box(2000 '+str(Gal_dat.FINAL_SLIT_Y[ii])+' 4500 '+str(Gal_dat.SLIT_WIDTH[ii])+') #color=green highlite=1}')
+            d.set('regions command {box('+str(int(binnedy/2))+' '+str(Gal_dat.FINAL_SLIT_Y[ii])+' '+str(binnedx)+' '+str(Gal_dat.SLIT_WIDTH[ii])+') #color=green highlite=1}')
             
             #initial stretch and shift
             stretch_est[ii],shift_est[ii],quad_est[ii] = interactive_plot(p_x,f_x,stretch_est[ii],shift_est[ii],quad_est[ii],cube_est[ii],fourth_est[ii],fifth_est[ii],Gal_dat.FINAL_SLIT_X_FLIP[ii],wm,fm)
@@ -631,7 +634,7 @@ if reassign == 'n':
                 else: skipgal = True
             else: skipgal = False
             if not skipgal:
-                p_x = np.arange(0,4064,1)
+                p_x = np.arange(0,binnedx,1)
                 f_x = np.sum(spectra[keys[i]]['arc_spec'],axis=0)
                 d.set('pan to 1150.0 '+str(Gal_dat.FINAL_SLIT_Y[i])+' physical')
                 d.set('regions command {box(2000 '+str(Gal_dat.FINAL_SLIT_Y[i])+' 4500 '+str(Gal_dat.SLIT_WIDTH[i])+') #color=green highlite=1}')
@@ -758,7 +761,7 @@ for i in range(len(Gal_dat)):
         if i != 0:
             Flux_science.append(np.zeros(len(Flux_science[i-1])))
         else:
-            Flux_science.append(np.zeros(4064))
+            Flux_science.append(np.zeros(binnedx))
 Flux_science = np.array(Flux_science)
 
 #Add parameters to Dataframe
