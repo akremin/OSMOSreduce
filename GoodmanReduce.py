@@ -13,8 +13,7 @@ from astropy.io import fits as pyfits
 import matplotlib
 matplotlib.use('Qt4Agg')
 import matplotlib.pyplot as plt
-from matplotlib import gridspec
-from matplotlib.widgets import RadioButtons, Button, CheckButtons
+from matplotlib.widgets import Button
 import scipy.signal as signal
 from ds9 import *
 import sys
@@ -31,12 +30,9 @@ import pdb
 from scipy import fftpack
 from get_photoz import *
 from zestipy import *
-#from redshift_estimate import *
 from sncalc import *
-#from redshift_checker import *
 from gal_trace import *
 from slit_find import *
-import pprint
 
 def getch():
     import tty, termios
@@ -66,6 +62,8 @@ xshift = 0.0/xbin    # with division this is in binned pixels
 yshift = 740.0/ybin  # with division this is in binned pixels
 binnedx = 2071   # this is in binned pixels
 binnedy = 1257    # this is in binned pixels
+binxpix_mid = int(binnedx/2)
+binypix_mid = int(binnedy/2)
 datadir = '/u/home/kremin/value_storage/goodman_jan17/'
 
 # From goodman file header:
@@ -184,26 +182,26 @@ for curfile in os.listdir(datadir+clus_id+'/maskfiles/'):
     if fnmatch.fnmatch(curfile, '*.oms'):
         omsfile = curfile
 with open(datadir+clus_id+'/maskfiles/'+clus_id+'_Mask1.txt','r') as fil:
-    SLIT_X = []
-    SLIT_Y = []
-    SLIT_WIDTH = []
-    SLIT_LENGTH = []
+    slit_X = []
+    slit_Y = []
+    slit_WIDTH = []
+    slit_LENGTH = []
     throw_y = []
     throw_x = []
     for line in fil:
         if line[:2] == 'M7':
             if len(throw_y)>0:
-                SLIT_WIDTH.append(np.max(throw_y)-np.min(throw_y))
-                SLIT_LENGTH.append(np.max(throw_x)-np.min(throw_x))
+                slit_WIDTH.append(np.max(throw_y)-np.min(throw_y))
+                slit_LENGTH.append(np.max(throw_x)-np.min(throw_x))
                 throw_y = []
                 throw_x = []
             else:
-                SLIT_WIDTH.append(None)
-                SLIT_LENGTH.append(None)
+                slit_WIDTH.append(None)
+                slit_LENGTH.append(None)
         if line[:3] == 'G0 ':
             vals = line.split(' ')
-            SLIT_X.append(float(vals[1][1:].strip('\n\r')))
-            SLIT_Y.append(float(vals[2][1:].strip('\n\r')))
+            slit_X.append(float(vals[1][1:].strip('\n\r')))
+            slit_Y.append(float(vals[2][1:].strip('\n\r')))
         if line[:3]=='G1 ':
             vals = line.split(' ')
             throw_x.append(float(vals[2][1:].strip('\n\r')))
@@ -237,10 +235,16 @@ with open(datadir+clus_id+'/maskfiles/'+clus_id+'_Mask1.msk','r') as fil:
 
 
 # All widths and locs are currently in mm's  -> want pixels
-SLIT_X = np.array(SLIT_X[1:-1])*(1/(xbin*pixscale*mm_per_asec))
-SLIT_Y = 0.5*binnedy + np.array(SLIT_Y[1:-1])*(1/(ybin*pixscale*mm_per_asec))# +yshift
-SLIT_WIDTH = np.array(SLIT_WIDTH[1:])*(1/(ybin*pixscale*mm_per_asec))
-SLIT_LENGTH = np.array(SLIT_LENGTH[1:])*(1/(xbin*pixscale*mm_per_asec))
+SLIT_X = binxpix_mid + np.array(slit_Y[1:-1])*(1/(ybin*pixscale*mm_per_asec))
+SLIT_Y = binnedy + np.array(slit_X[1:-1])*(1/(xbin*pixscale*mm_per_asec))
+##SLIT_X = binxpix_mid + np.array(slit_X[1:-1])*(1/(xbin*pixscale*mm_per_asec))
+##SLIT_Y = binypix_mid + np.array(slit_Y[1:-1])*(1/(ybin*pixscale*mm_per_asec))# +yshift
+SLIT_WIDTH = np.array(slit_WIDTH[1:])*(1/(ybin*pixscale*mm_per_asec))
+SLIT_LENGTH = np.array(slit_LENGTH[1:])*(1/(xbin*pixscale*mm_per_asec))
+##SLIT_WIDTH = np.array(slit_WIDTH[1:])*(1/(xbin*pixscale*mm_per_asec))
+##SLIT_LENGTH = np.array(slit_LENGTH[1:])*(1/(ybin*pixscale*mm_per_asec))
+#SLIT_WIDTH = np.array(slit_LENGTH[1:])*(1/(ybin*pixscale*mm_per_asec))
+#SLIT_LENGTH = np.array(slit_WIDTH[1:])*(1/(xbin*pixscale*mm_per_asec))
 
 #remove throw away rows and dump into Gal_dat dataframe
 Gal_dat = pd.DataFrame({'RA':RA,'DEC':DEC,'SLIT_WIDTH':SLIT_WIDTH,'SLIT_LENGTH':SLIT_LENGTH,'SLIT_X':SLIT_X,'SLIT_Y':SLIT_Y,'TYPE':TYPE})
@@ -401,7 +405,7 @@ if reassign == 'n':
         d.set('pan to 1150.0 '+str(Gal_dat.SLIT_Y[i])+' physical')
         print(('Galaxy at ',Gal_dat.RA[i],Gal_dat.DEC[i]))
         #d.set('regions command {box(2000 '+str(Gal_dat.SLIT_Y[i])+' 4500 85) #color=green highlite=1}')
-        d.set('regions command {box('+str(int(binnedy/2))+' '+str(Gal_dat.SLIT_Y[i])+' '+str(binnedx)+' '+str(int(85/xbin))+') #color=green highlite=1}')
+        d.set('regions command {box('+str(binypix_mid)+' '+str(Gal_dat.SLIT_Y[i])+' '+str(binnedx)+' '+str(int(85/xbin))+') #color=green highlite=1}')
         #raw_input('Once done: hit ENTER')
         if Gal_dat.slit_type[i] == 'g':
             if sdss_check:

@@ -3,12 +3,18 @@ import matplotlib.pyplot as plt
 from astropy.io import fits as pyfits
 from scipy.optimize import curve_fit
 
+binnedx = 2071   # this is in binned pixels
+binnedy = 1257    # this is in binned pixels
+binxpix_mid = int(binnedx/2)
+binypix_mid = int(binnedy/2)
+
+
 def _gaus(x,a,x0):
     return a*np.exp(-(x-x0)**2/(2*5.0**2))
 
 def _quadfit(x,a,b,c):
     '''define quadratic galaxy fitting function'''
-    return a*(x-2032)**2 + b*(x-2032) + c
+    return a*(x-binxpix_mid)**2 + b*(x-binxpix_mid) + c
 
 def gal_trace(cutout):
     means = []
@@ -40,7 +46,7 @@ def gal_trace(cutout):
     means.insert(0,means[0])
     meansx.insert(0,0.0)
     means.append(means[-1])
-    meansx.append(4064.0)
+    meansx.append(binnedx)
 
     means = np.array(means)
     meansx = np.array(meansx)
@@ -104,11 +110,11 @@ if __name__ == '__main__':
     means.insert(0,means[0])
     meansx.insert(0,0.0)
     means.append(means[-1])
-    meansx.append(4064.0)
+    meansx.append(binnedx)
     
     #define quadratic galaxy fitting function
     def quadfit(x,a,b,c):
-        return a*(x-2032)**2 + b*(x-2032) + c
+        return a*(x-binxpix_mid)**2 + b*(x-binxpix_mid) + c
     popt,pcov = curve_fit(quadfit,np.array(meansx)[np.isfinite(means)],np.array(means)[np.isfinite(means)],p0=[-1e-6,1e-6,35])
     
     #gal_spec = gal_trace(cutout)

@@ -15,7 +15,6 @@ import numpy as np
 #import fitsio as pyfits
 from astropy.io import fits as pyfits
 import time
-from matplotlib import pyplot
 import pdb
 from astropy.table import Table
 # Version and Date

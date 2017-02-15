@@ -6,7 +6,7 @@ from scipy.stats import norm
 import scipy.signal as signal
 from matplotlib import gridspec
 import matplotlib.pyplot as plt
-from matplotlib.widgets import RadioButtons, Button, CheckButtons
+from matplotlib.widgets import RadioButtons, Button
 import sys
 from types import *
 

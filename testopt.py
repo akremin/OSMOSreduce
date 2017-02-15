@@ -3,17 +3,16 @@ import matplotlib
 matplotlib.use('Qt4Agg')
 import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
-from matplotlib.widgets import Slider, Button, RadioButtons, CheckButtons
-from matplotlib.lines import Line2D
-from scipy.stats import spearmanr,pearsonr,kendalltau
-from scipy.optimize import minimize
+from matplotlib.widgets import Slider, Button
 from scipy.optimize import curve_fit
-from scipy.interpolate import interp1d,UnivariateSpline
-from scipy.signal import argrelextrema
 import pdb
-import pandas as pd
-import time
 from scipy import signal
+
+
+binnedx = 2071    # 4064    # this is in binned pixels
+binnedy = 1257    # this is in binned pixels
+binxpix_mid = int(binnedx/2)
+binypix_mid = int(binnedy/2)
 
 def air_to_vacuum(airwl,nouvconv=True):
     """
@@ -192,7 +191,7 @@ def interactive_plot_plus(px,fx,wm,fm,stretch_0,shift_0,quad_0):
     #main plot
     fig,ax = plt.subplots()
     plt.subplots_adjust(left=0.25,bottom=0.30)
-    l, = plt.plot(quad_0*(px-2032.0)**2+stretch_0*px+shift_0,fx/10.0,'b')
+    l, = plt.plot(quad_0*(px-binxpix_mid)**2+stretch_0*px+shift_0,fx/10.0,'b')
     plt.plot(wm,fm/2.0,'ro')
     for i in range(wm.size): plt.axvline(wm[i],color='r')
     plt.xlim(4000,6000)
@@ -216,27 +215,27 @@ def interactive_plot_plus(px,fx,wm,fm,stretch_0,shift_0,quad_0):
     s = plt.figure()
     ax2 = s.add_subplot(211)
     ax3 = s.add_subplot(212)
-    l2, = ax2.plot(quad_0*(px-2032.0)**2+stretch_0*px+shift_0,fx/10.0,'b')
+    l2, = ax2.plot(quad_0*(px-binxpix_mid)**2+stretch_0*px+shift_0,fx/10.0,'b')
     ax2.plot(wm,fm/2.0,'ro')
     for i in range(wm.size): ax2.axvline(wm[i],color='r')
     ax2.set_xlim(4490,4600)
     ax2.set_ylim(0,1000)
-    l3, = ax3.plot(quad_0*(px-2032.0)**2+stretch_0*px+shift_0,fx/10.0,'b')
+    l3, = ax3.plot(quad_0*(px-binxpix_mid)**2+stretch_0*px+shift_0,fx/10.0,'b')
     ax3.plot(wm,fm/2.0,'ro')
     for i in range(wm.size): ax3.axvline(wm[i],color='r')
     ax3.set_xlim(4900,5100)
     ax3.set_ylim(0,1500)
 
     def update(val):
-        l.set_xdata(quad_0*(px-2032.0)**2+(slide_stretch.val+fn_slide_stretch.val)*px+(slide_shift.val+fn_slide_shift.val))
-        l2.set_xdata(quad_0*(px-2032.0)**2+(slide_stretch.val+fn_slide_stretch.val)*px+(slide_shift.val+fn_slide_shift.val))
-        l3.set_xdata(quad_0*(px-2032.0)**2+(slide_stretch.val+fn_slide_stretch.val)*px+(slide_shift.val+fn_slide_shift.val))
+        l.set_xdata(quad_0*(px-binxpix_mid)**2+(slide_stretch.val+fn_slide_stretch.val)*px+(slide_shift.val+fn_slide_shift.val))
+        l2.set_xdata(quad_0*(px-binxpix_mid)**2+(slide_stretch.val+fn_slide_stretch.val)*px+(slide_shift.val+fn_slide_shift.val))
+        l3.set_xdata(quad_0*(px-binxpix_mid)**2+(slide_stretch.val+fn_slide_stretch.val)*px+(slide_shift.val+fn_slide_shift.val))
         fig.canvas.draw_idle()
         s.canvas.draw_idle()
     def fineupdate(val):
-        l.set_xdata(quad_0*(px-2032.0)**2+(slide_stretch.val+fn_slide_stretch.val)*px+(slide_shift.val+fn_slide_shift.val))
-        l2.set_xdata(quad_0*(px-2032.0)**2+(slide_stretch.val+fn_slide_stretch.val)*px+(slide_shift.val+fn_slide_shift.val))
-        l3.set_xdata(quad_0*(px-2032.0)**2+(slide_stretch.val+fn_slide_stretch.val)*px+(slide_shift.val+fn_slide_shift.val))
+        l.set_xdata(quad_0*(px-binxpix_mid)**2+(slide_stretch.val+fn_slide_stretch.val)*px+(slide_shift.val+fn_slide_shift.val))
+        l2.set_xdata(quad_0*(px-binxpix_mid)**2+(slide_stretch.val+fn_slide_stretch.val)*px+(slide_shift.val+fn_slide_shift.val))
+        l3.set_xdata(quad_0*(px-binxpix_mid)**2+(slide_stretch.val+fn_slide_stretch.val)*px+(slide_shift.val+fn_slide_shift.val))
         #slide_stretch.val = slide_stretch.val + fn_slide_stretch.val
         #slide_shift.val = slide_shift.val + fn_slide_shift.val
         fig.canvas.draw_idle()
@@ -253,7 +252,7 @@ def interactive_plot_plus(px,fx,wm,fm,stretch_0,shift_0,quad_0):
     shift_est = slide_shift.val+fn_slide_shift.val
     stretch_est = slide_stretch.val+fn_slide_stretch.val
     print 'quad_0:',quad_0,'stretch_0:',stretch_est,'shift_0:',shift_est
-    return (quad_0*(px-2032.0)**2+px*stretch_est+shift_est,fx,stretch_est,shift_est)
+    return (quad_0*(px-binxpix_mid)**2+px*stretch_est+shift_est,fx,stretch_est,shift_est)
 
 class LineBrowser:
     def __init__(self,fig,ax,est_f,wm,fm,px,xslit,vlines,fline,xspectra,yspectra,peaks,peaks_w,peaks_p,peaks_h,line_matches,cal_states):
@@ -464,7 +463,7 @@ if __name__ == '__main__':
     data = arcfits[0].data
     xpos = 500.0
     xpos2 = 1500.0
-    p_x = np.arange(0,4064,1)
+    p_x = np.arange(0,binnedx,1)
     f_x = np.sum(data[1670:1705,:],axis=0)
     stretch_est,shift_est,quad_est = interactive_plot(p_x,f_x,0.70,0.0,0.0,0.0,0.0,0.0,2000)
     line_matches = {'lines':[],'peaks':[]}
@@ -473,7 +472,7 @@ if __name__ == '__main__':
     for j in range(wm.size):
         ax.axvline(wm[j],color='r')
     line, = ax.plot(wm,fm/2.0,'ro',picker=5)# 5 points tolerance
-    fline, = plt.plot(quad_est*(p_x-2000)**2 + stretch_est*(p_x-2000) + shift_est,(f_x[::-1]-f_x.min())/10.0,'b',picker=5)
+    fline, = plt.plot(quad_est*(p_x-binxpix_mid-16)**2 + stretch_est*(p_x-binxpix_mid-16) + shift_est,(f_x[::-1]-f_x.min())/10.0,'b',picker=5)
     closeax = plt.axes([0.83, 0.3, 0.15, 0.1])
     button = Button(closeax, 'Add Line', hovercolor='0.975')
     #rax = plt.axes([0.85, 0.5, 0.1, 0.2])

@@ -1,9 +1,6 @@
 '''Build like you want to distribute on GitHub'''
-from scipy import signal
 import numpy as np
-import matplotlib.pyplot as plt
 from astropy.stats import *
-from scipy.interpolate import interp1d
 
 def sncalc(redshift,wave,gal_flux):
     line_halfwidth = 10 #angstroms

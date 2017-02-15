@@ -1,7 +1,6 @@
 import sqlcl
 import pandas as pd
 import numpy as np
-#from astropy.coordinates import ICRS
 from astropy.coordinates import SkyCoord
 import pdb
 
