@@ -9,8 +9,8 @@ import pdb
 from scipy import signal
 
 
-binnedx = 2071    # 4064    # this is in binned pixels
-binnedy = 1257    # this is in binned pixels
+binnedx = 2070    # 4064    # this is in binned pixels
+binnedy = 1256    # this is in binned pixels
 binxpix_mid = int(binnedx/2)
 binypix_mid = int(binnedy/2)
 

@@ -3,8 +3,8 @@ import matplotlib.pyplot as plt
 from astropy.io import fits as pyfits
 from scipy.optimize import curve_fit
 
-binnedx = 2071   # this is in binned pixels
-binnedy = 1257    # this is in binned pixels
+binnedx = 2070   # this is in binned pixels
+binnedy = 1256    # this is in binned pixels
 binxpix_mid = int(binnedx/2)
 binypix_mid = int(binnedy/2)
 

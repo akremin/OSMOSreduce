@@ -11,9 +11,9 @@ from matplotlib.widgets import  RectangleSelector
 import warnings
 import pdb
 
-warnings.filterwarnings("ignore")
-binnedx = 2071    # 4064    # this is in binned pixels
-binnedy = 1257    # this is in binned pixels
+#warnings.filterwarnings("ignore")
+binnedx = 2070    # 4064    # this is in binned pixels
+binnedy = 1256    # this is in binned pixels
 binxpix_mid = int(binnedx/2)
 binypix_mid = int(binnedy/2)
 
@@ -55,7 +55,7 @@ def chip_background(pixels,flux):
     '''
     return np.median(np.sort(flux)[:10])
 
-def identify_slits(pixels,flux,slit_y,good_detect=True):
+def identify_slits(pixels,flux,slit_y,slitsize = 40,good_detect=True):
     """
     """
     diff = flux[5:] - flux[:-5]
@@ -78,8 +78,10 @@ def identify_slits(pixels,flux,slit_y,good_detect=True):
                     end.append(pixels[j]+2)
                 else: pass
             else: end.append(pixels[j]+2)
-    start = np.array(start)[np.array(start) < len(pixels) - 40]
-    end = np.array(end)[np.array(end)> start[0]+35]
+
+    #pdb.set_trace()
+    start = np.array(start)[np.array(start) < len(pixels) - slitsize]
+    end = np.array(end)[np.array(end)> start[0] + slitsize - 5]
     if len(start) > len(end):
         if slit_y < binypix_mid:
             startf = start[:1]
@@ -91,7 +93,7 @@ def identify_slits(pixels,flux,slit_y,good_detect=True):
     elif len(end) > len(start):
         startf = start
         if end[0] < startf[0]:
-            endf = np.array(end)[end>startf[0]+35]
+            endf = np.array(end)[end>startf[0] + slitsize - 5]
         else:
             endf = end[:1]
     else:
@@ -101,45 +103,51 @@ def identify_slits(pixels,flux,slit_y,good_detect=True):
         assert len(startf) == 1 and len(endf) == 1, 'Bad slit bounds'
     except:
         if len(startf) > len(endf) and len(endf) == 1:
-            diff = np.abs(40 - (endf[0] - np.array(startf)))
+            diff = np.abs(slitsize - 5 - (endf[0] - np.array(startf)))
             return np.array(startf)[diff == np.min(diff)],endf
         elif len(endf) > len(startf) and len(startf) == 1:
-            diff = np.abs(40 - (np.array(endf) - startf[0]))
+            diff = np.abs(slitsize - 5 - (np.array(endf) - startf[0]))
             return startf,np.array(endf)[diff == np.min(diff)]
         else:
             return [0],[0]
     if startf[0] > endf[0]:
-        endf = [startf[0] + 40]
+        endf = [startf[0] + slitsize - 5]
 
     return startf,endf
 
 
-def slit_find(flux,science_flux,arc_flux,lower_lim,upper_lim):
-
+def slit_find(flux,science_flux,arc_flux,lower_lim,upper_lim,slitsize = 40):
     ##
     #Idenfity slit position as function of x
     ##
+    slicesize = 20
+    startingcol = 500
+    endingcol = flux.shape[1]-np.mod(flux.shape[1],slicesize)-slicesize
+    nslices = int((endingcol - startingcol)/slicesize)-1
     first = []
     last = []
     pixels = np.arange(flux.shape[1])
     flux = np.log(flux)
     fig,ax = plt.subplots(1)
     ax.imshow(flux - chip_background(pixels,flux),aspect=25)
-    for i in range(200):
-        flux2 = np.sum(flux[:,50+i*20:70+i*20],axis=1)
+    yloc = (upper_lim+lower_lim)*0.5
+    for i in range(nslices):
+        flux2 = np.sum(flux[:,(startingcol+i*slicesize):(startingcol+slicesize+i*slicesize)],axis=1)
         pixels2 = np.arange(len(flux2))
-        start,end = identify_slits(pixels2,flux2-chip_background(pixels2,flux2),300)
+        start,end = identify_slits(pixels2,flux2-chip_background(pixels2,flux2),yloc,slitsize)
         first.extend(start)
         last.extend(end)
         #plt.plot(pixels,flux - chip_background(pixels,flux))
         #plt.plot(start,np.zeros(len(start)),'ro',ms=4)
         #plt.plot(end,np.zeros(len(end)),'bo',ms=4)
         #plt.show()
-    xpix = np.arange(50,50+200*20,20)
+    xpix = np.arange(startingcol,endingcol-slicesize,slicesize)
+    #pdb.set_trace()
     last = np.array(last)
-    last = np.ma.masked_where((last<35)|(last>=flux.shape[0]),last)
+    last = np.ma.masked_where((last<(slitsize-5))|(last>=flux.shape[0]),last)
     first = np.array(first)
-    first = np.ma.masked_where((first<=0)|(first>=flux.shape[0]-40),first)
+    first = np.ma.masked_where((first<=0)|(first>=flux.shape[0]-slitsize),first)
+    #pdb.set_trace()
     ax.plot(xpix,first,'b')
     ax.plot(xpix,last,'r')
     
@@ -155,7 +163,10 @@ def slit_find(flux,science_flux,arc_flux,lower_lim,upper_lim):
             self.lower_lim=lower_lim
             self.upper_lim = upper_lim
             for i in range(3):
+                #pdb.set_trace()
                 mask = np.ma.getmask(self.first[self.lower_lim:self.upper_lim])
+                if np.sum(~mask) ==0:
+                    continue
                 xmask = np.ma.array(self.xpix[self.lower_lim:self.upper_lim],mask=mask)
                 popt2,pcov = curve_fit(_quadfit,xmask.compressed(),self.first[self.lower_lim:self.upper_lim].compressed(),p0=[1e-4,50])
                 self.first = np.ma.masked_where(np.abs(self.first - (popt2[0]*(self.xpix-binxpix_mid)**2 + popt2[1])) >= 10,self.first)
@@ -175,7 +186,7 @@ def slit_find(flux,science_flux,arc_flux,lower_lim,upper_lim):
 
         def plot_fit(self):
             self.upper.set_ydata(_quadfit(self.xpix,*self.popt_avg))
-            self.lower.set_ydata(self.popt_avg[0]*(self.xpix-binxpix_mid)**2 + self.popt_avg[1]+40)
+            self.lower.set_ydata(self.popt_avg[0]*(self.xpix-binxpix_mid)**2 + self.popt_avg[1]+slitsize)
             plt.draw()
     
     
@@ -199,25 +210,27 @@ def slit_find(flux,science_flux,arc_flux,lower_lim,upper_lim):
     ##
     #cut out slit
     ##
-    d2_spectra_s = np.zeros((science_flux.shape[1],40))
-    d2_spectra_a = np.zeros((arc_flux.shape[1],40))
+    d2_spectra_s = np.zeros((science_flux.shape[1],slitsize))
+    d2_spectra_a = np.zeros((arc_flux.shape[1],slitsize))
     for i in range(science_flux.shape[1]):
         yvals = np.arange(0,science_flux.shape[0],1)
-        d2_spectra_s[i] = science_flux[:,i][np.where((yvals>=popt_avg[0]*(i-binypix_mid)**2 + popt_avg[1])&(yvals<=popt_avg[0]*(i-binypix_mid)**2 + popt_avg[1]+45))][:40]
-        d2_spectra_a[i] = arc_flux[:,i][np.where((yvals>=popt_avg[0]*(i-binypix_mid)**2 + popt_avg[1])&(yvals<=popt_avg[0]*(i-binypix_mid)**2 + popt_avg[1]+45))][:40]
+        d2_spectra_s[i] = science_flux[:,i][np.where((yvals>=popt_avg[0]*(i-binypix_mid)**2 + popt_avg[1])&(yvals<=popt_avg[0]*(i-binypix_mid)**2 + popt_avg[1]+slitsize+5))][:slitsize]
+        d2_spectra_a[i] = arc_flux[:,i][np.where((yvals>=popt_avg[0]*(i-binypix_mid)**2 + popt_avg[1])&(yvals<=popt_avg[0]*(i-binypix_mid)**2 + popt_avg[1]+slitsize+5))][:slitsize]
 
     ##
     #Identify and cut out galaxy light
     ##
-    gal_guess = np.arange(0,40,1)[np.median(d2_spectra_s.T/np.max(d2_spectra_s),axis=1)==np.max(np.median(d2_spectra_s.T/np.max(d2_spectra_s),axis=1))][0]
-    popt_g,pcov_g = curve_fit(_gaus,np.arange(0,40,1),np.median(d2_spectra_s.T/np.max(d2_spectra_s),axis=1),p0=[1,gal_guess,0])
+    pdb.set_trace()
+    gal_guess = np.arange(0,slitsize,1)[np.median(d2_spectra_s.T/np.max(d2_spectra_s),axis=1)== \
+                                        np.max(np.median(d2_spectra_s.T/np.max(d2_spectra_s),axis=1))][0]
+    popt_g,pcov_g = curve_fit(_gaus,np.arange(0,slitsize,1),np.median(d2_spectra_s.T/np.max(d2_spectra_s),axis=1),p0=[1,gal_guess,0])
     gal_pos = popt_g[1]
     gal_wid = 4.0
     if gal_wid > 5: gal_wid=5
     
     upper_gal = gal_pos + gal_wid*2.0
     lower_gal = gal_pos - gal_wid*2.0
-    if upper_gal >= 40: upper_gal = 39
+    if upper_gal >= slitsize: upper_gal = (slitsize-1)
     if lower_gal <= 0: lower_gal = 0
     raw_gal = d2_spectra_s.T[lower_gal:upper_gal,:]
     sky = np.append(d2_spectra_s.T[:lower_gal,:],d2_spectra_s.T[upper_gal:,:],axis=0)
@@ -227,11 +240,11 @@ def slit_find(flux,science_flux,arc_flux,lower_lim,upper_lim):
     plt.imshow(np.log(d2_spectra_s.T),aspect=35,origin='lower')
     plt.axhline(lower_gal,color='k',ls='--')
     plt.axhline(upper_gal,color='k',ls='--')
-    plt.xlim(0,4064)
+    plt.xlim(0,binnedx)
     plt.show()
 
-    plt.plot(np.arange(0,40,1),_gaus(np.arange(0,40,1),*popt_g))
-    plt.plot(np.arange(0,40,1),np.median(d2_spectra_s.T/np.max(d2_spectra_s),axis=1))
+    plt.plot(np.arange(0,slitsize,1),_gaus(np.arange(0,slitsize,1),*popt_g))
+    plt.plot(np.arange(0,slitsize,1),np.median(d2_spectra_s.T/np.max(d2_spectra_s),axis=1))
     plt.show()
     
     print 'gal dim:',raw_gal.shape

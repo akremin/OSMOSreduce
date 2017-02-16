@@ -58,10 +58,10 @@ pixscale = 0.15 #arcsec/pixel  #pixel scale at for Goodman
 #ybin = 1
 xbin = 2
 ybin = 2
-xshift = 0.0/xbin    # with division this is in binned pixels
-yshift = 740.0/ybin  # with division this is in binned pixels
-binnedx = 2071   # this is in binned pixels
-binnedy = 1257    # this is in binned pixels
+#xshift = 0.0/xbin    # with division this is in binned pixels
+#yshift = 740.0/ybin  # with division this is in binned pixels
+binnedx = 2070#2071   # this is in binned pixels
+binnedy = 1256#1257    # this is in binned pixels
 binxpix_mid = int(binnedx/2)
 binypix_mid = int(binnedy/2)
 datadir = '/u/home/kremin/value_storage/goodman_jan17/'
@@ -220,7 +220,7 @@ with open(datadir+clus_id+'/maskfiles/'+clus_id+'_Mask1.msk','r') as fil:
         if line[:3] == 'MM_':
             mm_per_asec = float(line.split('=')[1].strip('\n\r'))
         if line[:4] == '[Obj':
-            SLIT_NUM.append(line.strip('\n\r[]'))
+            SLIT_NUM.append(int(line[7:].strip('\n\r[]')))
         if line[:3]=='DEC':
             DEC.append(line.split('=')[1].strip('\n\r'))
         if line[:3]=='RA=':
@@ -233,19 +233,25 @@ with open(datadir+clus_id+'/maskfiles/'+clus_id+'_Mask1.msk','r') as fil:
                 TYPE.append('Alignment')
 
 
+SLIT_NUM = np.asarray(SLIT_NUM)
+correct_order_idx = np.argsort(SLIT_NUM)
+SLIT_NUM = SLIT_NUM[correct_order_idx]
+RA = np.asarray(RA)[correct_order_idx]
+DEC = np.asarray(DEC)[correct_order_idx]
+TYPE = np.asarray(TYPE)[correct_order_idx]
 
 # All widths and locs are currently in mm's  -> want pixels
-SLIT_X = binxpix_mid + np.array(slit_Y[1:-1])*(1/(ybin*pixscale*mm_per_asec))
-SLIT_Y = binnedy + np.array(slit_X[1:-1])*(1/(xbin*pixscale*mm_per_asec))
+SLIT_X = binxpix_mid + np.array(slit_Y[1:-1])*(1/(xbin*pixscale*mm_per_asec))
+SLIT_Y = binnedy + np.array(slit_X[1:-1])*(1/(ybin*pixscale*mm_per_asec))
 ##SLIT_X = binxpix_mid + np.array(slit_X[1:-1])*(1/(xbin*pixscale*mm_per_asec))
 ##SLIT_Y = binypix_mid + np.array(slit_Y[1:-1])*(1/(ybin*pixscale*mm_per_asec))# +yshift
-SLIT_WIDTH = np.array(slit_WIDTH[1:])*(1/(ybin*pixscale*mm_per_asec))
-SLIT_LENGTH = np.array(slit_LENGTH[1:])*(1/(xbin*pixscale*mm_per_asec))
-##SLIT_WIDTH = np.array(slit_WIDTH[1:])*(1/(xbin*pixscale*mm_per_asec))
-##SLIT_LENGTH = np.array(slit_LENGTH[1:])*(1/(ybin*pixscale*mm_per_asec))
+#SLIT_WIDTH = np.array(slit_WIDTH[1:])*(1/(ybin*pixscale*mm_per_asec))
+#SLIT_LENGTH = np.array(slit_LENGTH[1:])*(1/(xbin*pixscale*mm_per_asec))
+SLIT_WIDTH = np.array(slit_WIDTH[1:])*(1/(xbin*pixscale*mm_per_asec))
+SLIT_LENGTH = np.array(slit_LENGTH[1:])*(1/(ybin*pixscale*mm_per_asec))
 #SLIT_WIDTH = np.array(slit_LENGTH[1:])*(1/(ybin*pixscale*mm_per_asec))
 #SLIT_LENGTH = np.array(slit_WIDTH[1:])*(1/(xbin*pixscale*mm_per_asec))
-
+#pdb.set_trace()
 #remove throw away rows and dump into Gal_dat dataframe
 Gal_dat = pd.DataFrame({'RA':RA,'DEC':DEC,'SLIT_WIDTH':SLIT_WIDTH,'SLIT_LENGTH':SLIT_LENGTH,'SLIT_X':SLIT_X,'SLIT_Y':SLIT_Y,'TYPE':TYPE})
 
@@ -318,7 +324,12 @@ if reassign == 'n':
             char = getch()
             if char.lower() in ("g", "r", "s"):
                 break
-
+        if char.lower() == 'g' and Gal_dat['TYPE'][i] == 'Target':
+            print('Mask file confirms that was a targeted galaxy\n')
+        elif char.lower() == 'r' and Gal_dat['TYPE'][i] == 'Alignment':
+            print('Mask file confirms that was an alignment object\n')
+        else:
+            print('Mask file disagrees\n')
         slit_type[keys[i]] = char.lower()
     pickle.dump(slit_type,open(datadir+clus_id+'/'+clus_id+'_slittypes.pkl','wb'))
 else:
@@ -394,18 +405,19 @@ if reassign == 'n':
     good_spectra = np.array(['n']*len(Gal_dat))
     FINAL_SLIT_X = np.zeros(len(Gal_dat))
     FINAL_SLIT_Y = np.zeros(len(Gal_dat))
-    SLIT_WIDTH = np.zeros(len(Gal_dat))
-    lower_lim = 0.0
-    upper_lim = 100.0
+    BOX_WIDTH = np.zeros(len(Gal_dat))
     spectra = {}
     print('If needed, move region box to desired location. To increase the size, drag on corners')
-    for i in range(SLIT_WIDTH.size):
+    for i in range(BOX_WIDTH.size):
+        lower_lim = 0.0
+        upper_lim = 100.0
         print(('SLIT ',i))
         #d.set('pan to 1150.0 '+str(Gal_dat.SLIT_Y[i])+' physical')
         d.set('pan to 1150.0 '+str(Gal_dat.SLIT_Y[i])+' physical')
         print(('Galaxy at ',Gal_dat.RA[i],Gal_dat.DEC[i]))
         #d.set('regions command {box(2000 '+str(Gal_dat.SLIT_Y[i])+' 4500 85) #color=green highlite=1}')
-        d.set('regions command {box('+str(binypix_mid)+' '+str(Gal_dat.SLIT_Y[i])+' '+str(binnedx)+' '+str(int(85/xbin))+') #color=green highlite=1}')
+        # box(x,y,width,height)
+        d.set('regions command {box('+str(binxpix_mid)+' '+str(Gal_dat.SLIT_Y[i])+' '+str(binnedx)+' '+str(Gal_dat.SLIT_LENGTH[i])+') #color=green highlite=1}')
         #raw_input('Once done: hit ENTER')
         if Gal_dat.slit_type[i] == 'g':
             if sdss_check:
@@ -427,14 +439,19 @@ if reassign == 'n':
                         if n_string[:3] == 'box':
                             newpos = re.search('box\(.*,(.*),.*,(.*),.*\)',n_string)
                             FINAL_SLIT_X[i] = Gal_dat.SLIT_X[i]
-                            FINAL_SLIT_Y[i] = newpos.group(1)
-                            SLIT_WIDTH[i] = newpos.group(2)
+                            FINAL_SLIT_Y[i] = int(float(newpos.group(1)))
+                            BOX_WIDTH[i] = int(float(newpos.group(2)))
 
                             ##
                             #Sky subtract code
                             ##
                             try:
-                                science_spec,arc_spec,gal_spec,gal_cuts,lower_lim,upper_lim = slit_find(flatfits_c.data[FINAL_SLIT_Y[i]-SLIT_WIDTH[i]/2.0:FINAL_SLIT_Y[i]+SLIT_WIDTH[i]/2.0,:],scifits_c.data[FINAL_SLIT_Y[i]-SLIT_WIDTH[i]/2.0:FINAL_SLIT_Y[i]+SLIT_WIDTH[i]/2.0,:],arcfits_c.data[FINAL_SLIT_Y[i]-SLIT_WIDTH[i]/2.0:FINAL_SLIT_Y[i]+SLIT_WIDTH[i]/2.0,:],lower_lim,upper_lim)
+                                lowerbound = int(FINAL_SLIT_Y[i]-(BOX_WIDTH[i]/2.0))
+                                upperbound = int(FINAL_SLIT_Y[i]+(BOX_WIDTH[i]/2.0))
+                                cutflatdat = flatfits_c.data[lowerbound:upperbound,:]
+                                cutscidat = flatfits_c.data[lowerbound:upperbound,:]
+                                cutarcdat = flatfits_c.data[lowerbound:upperbound,:]
+                                science_spec,arc_spec,gal_spec,gal_cuts,lower_lim,upper_lim = slit_find(cutflatdat,cutscidat,cutarcdat,lower_lim,upper_lim,Gal_dat.SLIT_LENGTH[i])
                                 spectra[keys[i]] = {'science_spec':science_spec,'arc_spec':arc_spec,'gal_spec':gal_spec,'gal_cuts':gal_cuts}
 
                                 print('Is this spectra good (y) or bad (n)?')
@@ -448,6 +465,7 @@ if reassign == 'n':
 
                                 break
                             except:
+                                raise
                                 print('Fit did not fall within the chosen box. Please re-define the area of interest.')
                                 good = False
                     loops += 1
@@ -455,18 +473,18 @@ if reassign == 'n':
                     good_spectra[i] = 'n'
                     FINAL_SLIT_X[i] = Gal_dat.SLIT_X[i]
                     FINAL_SLIT_Y[i] = Gal_dat.SLIT_Y[i]
-                    SLIT_WIDTH[i] = 40
+                    BOX_WIDTH[i] = upper_lim-lower_lim#Gal_dat.SLIT_LENGTH[i]
             else:
                 good_spectra[i] = 'n'
                 FINAL_SLIT_X[i] = Gal_dat.SLIT_X[i]
                 FINAL_SLIT_Y[i] = Gal_dat.SLIT_Y[i]
-                SLIT_WIDTH[i] = 40
+                BOX_WIDTH[i] = upper_lim-lower_lim#Gal_dat.SLIT_LENGTH[i]
         else:
             good_spectra[i] = 'n'
             FINAL_SLIT_X[i] = Gal_dat.SLIT_X[i]
             FINAL_SLIT_Y[i] = Gal_dat.SLIT_Y[i]
-            SLIT_WIDTH[i] = 40
-        print((FINAL_SLIT_X[i],FINAL_SLIT_Y[i],SLIT_WIDTH[i]))
+            BOX_WIDTH[i] = upper_lim-lower_lim#Gal_dat.SLIT_LENGTH[i]
+        print((FINAL_SLIT_X[i],FINAL_SLIT_Y[i],BOX_WIDTH[i]))
         d.set('regions delete all')
     print(FINAL_SLIT_X)
     np.savetxt(datadir+clus_id+'/'+clus_id+'_slit_pos_qual.tab',np.array(list(zip(FINAL_SLIT_X,FINAL_SLIT_Y,SLIT_WIDTH,good_spectra)),dtype=[('float',float),('float2',float),('int',int),('str','|S1')]),delimiter='\t',fmt='%10.2f %10.2f %3d %s')
