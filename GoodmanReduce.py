@@ -15,7 +15,6 @@ matplotlib.use('Qt4Agg')
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Button
 import scipy.signal as signal
-from ds9 import *
 import sys
 import re
 import subprocess
@@ -24,15 +23,16 @@ import copy
 import os
 import fnmatch
 import time
-from testopt import *
 import pickle
 import pdb
 from scipy import fftpack
-from get_photoz import *
+from get_photoz import query_galaxies
+from slit_find import slit_find
+from ds9 import *
+from testopt import *
 from zestipy import *
 from sncalc import *
 from gal_trace import *
-from slit_find import *
 
 def getch():
     import tty, termios
@@ -58,12 +58,14 @@ pixscale = 0.15 #arcsec/pixel  #pixel scale at for Goodman
 #ybin = 1
 xbin = 2
 ybin = 2
-#xshift = 0.0/xbin    # with division this is in binned pixels
-#yshift = 740.0/ybin  # with division this is in binned pixels
+xshift = 0#0.0/xbin    # with division this is in binned pixels
+yshift = 10#740.0/ybin  # with division this is in binned pixels
 binnedx = 2070#2071   # this is in binned pixels
 binnedy = 1256#1257    # this is in binned pixels
 binxpix_mid = int(binnedx/2)
 binypix_mid = int(binnedy/2)
+n_emptypixs = 5 # should be odd
+
 datadir = '/u/home/kremin/value_storage/goodman_jan17/'
 
 # From goodman file header:
@@ -241,8 +243,10 @@ DEC = np.asarray(DEC)[correct_order_idx]
 TYPE = np.asarray(TYPE)[correct_order_idx]
 
 # All widths and locs are currently in mm's  -> want pixels
-SLIT_X = binxpix_mid + np.array(slit_Y[1:-1])*(1/(xbin*pixscale*mm_per_asec))
-SLIT_Y = binnedy + np.array(slit_X[1:-1])*(1/(ybin*pixscale*mm_per_asec))
+# X,Y in mm for mask is Y,-X for pixels on ccd  
+#ie axes are flipped and one is inverted
+SLIT_X = binxpix_mid - np.array(slit_Y[1:-1])*(1/(xbin*pixscale*mm_per_asec))
+SLIT_Y = binnedy + np.array(slit_X[1:-1])*(1/(ybin*pixscale*mm_per_asec)) - yshift
 ##SLIT_X = binxpix_mid + np.array(slit_X[1:-1])*(1/(xbin*pixscale*mm_per_asec))
 ##SLIT_Y = binypix_mid + np.array(slit_Y[1:-1])*(1/(ybin*pixscale*mm_per_asec))# +yshift
 #SLIT_WIDTH = np.array(slit_WIDTH[1:])*(1/(ybin*pixscale*mm_per_asec))
@@ -253,7 +257,7 @@ SLIT_LENGTH = np.array(slit_LENGTH[1:])*(1/(ybin*pixscale*mm_per_asec))
 #SLIT_LENGTH = np.array(slit_WIDTH[1:])*(1/(xbin*pixscale*mm_per_asec))
 #pdb.set_trace()
 #remove throw away rows and dump into Gal_dat dataframe
-Gal_dat = pd.DataFrame({'RA':RA,'DEC':DEC,'SLIT_WIDTH':SLIT_WIDTH,'SLIT_LENGTH':SLIT_LENGTH,'SLIT_X':SLIT_X,'SLIT_Y':SLIT_Y,'TYPE':TYPE})
+Gal_dat = pd.DataFrame({'RA':RA,'DEC':DEC,'SLIT_WIDTH':SLIT_WIDTH,'SLIT_LENGTH':SLIT_LENGTH,'SLIT_X':SLIT_X,'SLIT_Y':SLIT_Y,'TYPE':TYPE,'NAME':SLIT_NUM})
 
 ###############################################################
 
@@ -307,11 +311,12 @@ d.set('regions sky fk5')
 ####################################################################################
 #Loop through mosaic image and decide if objects are galaxies, stars, sky, or other#
 ####################################################################################
-reassign = 'n'
+#skip_assign = 'n'
 keys = np.arange(0,Gal_dat.SLIT_WIDTH.size,1).astype('string')
-if os.path.isfile(datadir+clus_id+'/'+clus_id+'_slittypes.pkl'):
-    reassign = (raw_input('Detected slit types file in path. Do you wish to use this (y) or remove and re-assign slit types (n)? '))
-if reassign == 'n':
+#if os.path.isfile(datadir+clus_id+'/'+clus_id+'_slittypes.pkl'):
+#    reassign = (raw_input('Detected slit types file in path. Do you wish to use this (y) or remove and re-assign slit types (n)? '))
+skip_assign = 'y'
+if skip_assign == 'n':
     slit_type = {}
     print('Is this a galaxy (g), a reference star (r), or empty sky (s)?')
     for i in range(len(Gal_dat)):
@@ -344,13 +349,16 @@ d.set('frame 2')
 d.set('zscale contrast 0.25')
 d.set('zoom 0.40')
 
+
+
 #######################################
 #Reduction steps to prep science image#
 #######################################
-redo = 'n'
-if os.path.isfile(datadir+clus_id+'/data_products/science/'+clus_id+'_science.cr.fits'):
-    redo = (raw_input('Detected cosmic ray filtered file exists. Do you wish to use this (y) or remove and re-calculate (n)? '))
-if redo == 'n':
+#skip_cr_remov = 'n'
+#if os.path.isfile(datadir+clus_id+'/data_products/science/'+clus_id+'_science.cr.fits'):
+#    skip_cr_remov = (raw_input('Detected cosmic ray filtered file exists. Do you wish to use this (y) or remove and re-calculate (n)? '))
+skip_cr_remov = 'y'
+if skip_cr_remov == 'n':
     try:
         os.remove(datadir+clus_id+'/data_products/science/'+clus_id+'_science.cr.fits')
     except: pass
@@ -366,7 +374,7 @@ else:
     print('loading pre-prepared cosmic ray filtered files...')
 
 print('FLAT REDUCTION')
-if redo == 'n':
+if skip_cr_remov == 'n':
     try:
         os.remove(datadir+clus_id+'/data_products/flat/'+clus_id+'_flat.cr.fits')
     except: pass
@@ -382,7 +390,7 @@ if redo == 'n':
 else: flatfits_c = pyfits.open(datadir+clus_id+'/data_products/flat/'+clus_id+'_flat.cr.fits')[0]
 
 print('ARC REDUCTION')
-if redo == 'n':
+if skip_cr_remov == 'n':
     try:
         os.remove(datadir+clus_id+'/data_products/comp/'+clus_id+'_arc.cr.fits')
     except: pass
@@ -393,6 +401,8 @@ if redo == 'n':
         arcfits_c.data += filt + np.abs(np.nanmin(filt))
     arcfits_c.writeto(datadir+clus_id+'/data_products/comp/'+clus_id+'_arc.cr.fits')
 else: arcfits_c = pyfits.open(datadir+clus_id+'/data_products/comp/'+clus_id+'_arc.cr.fits')[0]
+
+
 
 
 ##################################################################
@@ -410,14 +420,14 @@ if reassign == 'n':
     print('If needed, move region box to desired location. To increase the size, drag on corners')
     for i in range(BOX_WIDTH.size):
         lower_lim = 0.0
-        upper_lim = 100.0
-        print(('SLIT ',i))
+        upper_lim = 2000.0
+        print(('SLIT ',i,'   OBJECT ',Gal_dat.NAME[i],'    which is a ',Gal_dat.TYPE[i]))
         #d.set('pan to 1150.0 '+str(Gal_dat.SLIT_Y[i])+' physical')
         d.set('pan to 1150.0 '+str(Gal_dat.SLIT_Y[i])+' physical')
         print(('Galaxy at ',Gal_dat.RA[i],Gal_dat.DEC[i]))
         #d.set('regions command {box(2000 '+str(Gal_dat.SLIT_Y[i])+' 4500 85) #color=green highlite=1}')
         # box(x,y,width,height)
-        d.set('regions command {box('+str(binxpix_mid)+' '+str(Gal_dat.SLIT_Y[i])+' '+str(binnedx)+' '+str(Gal_dat.SLIT_LENGTH[i])+') #color=green highlite=1}')
+        d.set('regions command {box('+str(Gal_dat.SLIT_X[i])+' '+str(Gal_dat.SLIT_Y[i])+' '+str(binnedx)+' '+str(Gal_dat.SLIT_LENGTH[i]+3*n_emptypixs)+') #color=green highlite=1}')
         #raw_input('Once done: hit ENTER')
         if Gal_dat.slit_type[i] == 'g':
             if sdss_check:
@@ -451,9 +461,9 @@ if reassign == 'n':
                                 cutflatdat = flatfits_c.data[lowerbound:upperbound,:]
                                 cutscidat = flatfits_c.data[lowerbound:upperbound,:]
                                 cutarcdat = flatfits_c.data[lowerbound:upperbound,:]
-                                science_spec,arc_spec,gal_spec,gal_cuts,lower_lim,upper_lim = slit_find(cutflatdat,cutscidat,cutarcdat,lower_lim,upper_lim,Gal_dat.SLIT_LENGTH[i])
+                                science_spec,arc_spec,gal_spec,gal_cuts,lower_lim,upper_lim = slit_find(cutflatdat,cutscidat,cutarcdat,lower_lim,upper_lim,int(Gal_dat.SLIT_LENGTH[i]),n_emptypixs,int(Gal_dat.SLIT_Y[i]))
                                 spectra[keys[i]] = {'science_spec':science_spec,'arc_spec':arc_spec,'gal_spec':gal_spec,'gal_cuts':gal_cuts}
-
+                                BOX_WIDTH[i] = upper_lim-lower_lim
                                 print('Is this spectra good (y) or bad (n)?')
                                 while True:
                                     char = getch()
@@ -473,17 +483,17 @@ if reassign == 'n':
                     good_spectra[i] = 'n'
                     FINAL_SLIT_X[i] = Gal_dat.SLIT_X[i]
                     FINAL_SLIT_Y[i] = Gal_dat.SLIT_Y[i]
-                    BOX_WIDTH[i] = upper_lim-lower_lim#Gal_dat.SLIT_LENGTH[i]
+                    BOX_WIDTH[i] = Gal_dat.SLIT_LENGTH[i]
             else:
                 good_spectra[i] = 'n'
                 FINAL_SLIT_X[i] = Gal_dat.SLIT_X[i]
                 FINAL_SLIT_Y[i] = Gal_dat.SLIT_Y[i]
-                BOX_WIDTH[i] = upper_lim-lower_lim#Gal_dat.SLIT_LENGTH[i]
+                BOX_WIDTH[i] = Gal_dat.SLIT_LENGTH[i]
         else:
             good_spectra[i] = 'n'
             FINAL_SLIT_X[i] = Gal_dat.SLIT_X[i]
             FINAL_SLIT_Y[i] = Gal_dat.SLIT_Y[i]
-            BOX_WIDTH[i] = upper_lim-lower_lim#Gal_dat.SLIT_LENGTH[i]
+            BOX_WIDTH[i] = Gal_dat.SLIT_LENGTH[i]
         print((FINAL_SLIT_X[i],FINAL_SLIT_Y[i],BOX_WIDTH[i]))
         d.set('regions delete all')
     print(FINAL_SLIT_X)
