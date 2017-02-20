@@ -59,7 +59,7 @@ pixscale = 0.15 #arcsec/pixel  #pixel scale at for Goodman
 xbin = 2
 ybin = 2
 xshift = 0#0.0/xbin    # with division this is in binned pixels
-yshift = 10#740.0/ybin  # with division this is in binned pixels
+yshift = 6#10#740.0/ybin  # with division this is in binned pixels
 binnedx = 2070#2071   # this is in binned pixels
 binnedy = 1256#1257    # this is in binned pixels
 binxpix_mid = int(binnedx/2)
@@ -245,6 +245,7 @@ TYPE = np.asarray(TYPE)[correct_order_idx]
 # All widths and locs are currently in mm's  -> want pixels
 # X,Y in mm for mask is Y,-X for pixels on ccd  
 #ie axes are flipped and one is inverted
+mm_per_asec = 0.32
 SLIT_X = binxpix_mid - np.array(slit_Y[1:-1])*(1/(xbin*pixscale*mm_per_asec))
 SLIT_Y = binnedy + np.array(slit_X[1:-1])*(1/(ybin*pixscale*mm_per_asec)) - yshift
 ##SLIT_X = binxpix_mid + np.array(slit_X[1:-1])*(1/(xbin*pixscale*mm_per_asec))
@@ -286,7 +287,7 @@ gal_imag = Gal_dat['imag']
 ####################
 p = subprocess.Popen('ds9 '+datadir+clus_id+'/maskfiles/'+image_file+' -geometry 1200x900 -scale sqrt -scale mode zscale -fits '+datadir+clus_id+'/data_products/comp/'+arcfiles[0],shell=True)
 #p = subprocess.Popen('ds9 '+datadir+clus_id+'/data_products/'+'/'+image_file+' -geometry 1200x900 -scale sqrt -scale mode zscale -fits '+clus_id+'/data_products/comp/'+arcfiles[0],shell=True)
-time.sleep(3)
+time.sleep(2)
 print("Have the images loaded? (y/n)")
 while True: #check to see if images have loaded correctly
     char = getch()
@@ -419,15 +420,15 @@ if reassign == 'n':
     spectra = {}
     print('If needed, move region box to desired location. To increase the size, drag on corners')
     for i in range(BOX_WIDTH.size):
-        lower_lim = 0.0
-        upper_lim = 2000.0
+        lower_lim = 0
+        upper_lim = 2000
         print(('SLIT ',i,'   OBJECT ',Gal_dat.NAME[i],'    which is a ',Gal_dat.TYPE[i]))
         #d.set('pan to 1150.0 '+str(Gal_dat.SLIT_Y[i])+' physical')
         d.set('pan to 1150.0 '+str(Gal_dat.SLIT_Y[i])+' physical')
         print(('Galaxy at ',Gal_dat.RA[i],Gal_dat.DEC[i]))
         #d.set('regions command {box(2000 '+str(Gal_dat.SLIT_Y[i])+' 4500 85) #color=green highlite=1}')
         # box(x,y,width,height)
-        d.set('regions command {box('+str(Gal_dat.SLIT_X[i])+' '+str(Gal_dat.SLIT_Y[i])+' '+str(binnedx)+' '+str(Gal_dat.SLIT_LENGTH[i]+3*n_emptypixs)+') #color=green highlite=1}')
+        d.set('regions command {box('+str(Gal_dat.SLIT_X[i])+' '+str(Gal_dat.SLIT_Y[i])+' '+str(binnedx)+' '+str(Gal_dat.SLIT_LENGTH[i]+4*n_emptypixs)+') #color=green highlite=1}')
         #raw_input('Once done: hit ENTER')
         if Gal_dat.slit_type[i] == 'g':
             if sdss_check:
