@@ -218,6 +218,7 @@ def slit_find(flux,science_flux,arc_flux,lower_lim,upper_lim,slitsize = 40,n_emp
     plt.show()
     popt_avg = Sel.popt_avg
     lower_lim = Sel.lower_lim
+    slit_width = Sel.slitwidth
     
     
     ##
@@ -227,7 +228,7 @@ def slit_find(flux,science_flux,arc_flux,lower_lim,upper_lim,slitsize = 40,n_emp
     d2_spectra_a = np.zeros((arc_flux.shape[1],slitsize))
     for i in range(science_flux.shape[1]):
         yvals = np.arange(0,science_flux.shape[0],1)
-        fullquadfitvals = _fullquadfit(i-binypix_mid,*popt_avg)
+        fullquadfitvals = _fullquadfit(i-binxpix_mid,*popt_avg)
         yvalmask = np.where( (yvals >= fullquadfitvals) & (yvals <= (fullquadfitvals + slitsize + n_emptypixs)) )
         d2_spectra_s[i] = science_flux[:,i][yvalmask][:slitsize]
         d2_spectra_a[i] = arc_flux[:,i][yvalmask][:slitsize]
@@ -251,8 +252,8 @@ def slit_find(flux,science_flux,arc_flux,lower_lim,upper_lim,slitsize = 40,n_emp
     sky = np.append(d2_spectra_s.T[:lower_gal,:],d2_spectra_s.T[upper_gal:,:],axis=0)
     sky_sub = np.zeros(raw_gal.shape) + np.median(sky,axis=0)
     sky_sub_tot = np.zeros(d2_spectra_s.T.shape) + np.median(sky,axis=0)
-    
-    plt.imshow(np.log(d2_spectra_s.T),aspect=35,origin='lower')
+    pdb.set_trace()
+    plt.imshow(np.log(d2_spectra_s.T),origin='lower')#aspect=35,
     plt.axhline(lower_gal,color='k',ls='--')
     plt.axhline(upper_gal,color='k',ls='--')
     plt.xlim(0,binnedx)
@@ -265,13 +266,13 @@ def slit_find(flux,science_flux,arc_flux,lower_lim,upper_lim,slitsize = 40,n_emp
     print 'gal dim:',raw_gal.shape
     print 'sky dim:',sky.shape
 
-    plt.imshow(np.log(d2_spectra_s.T-sky_sub_tot),aspect=35,origin='lower')
+    plt.imshow(np.log(d2_spectra_s.T-sky_sub_tot),origin='lower')#aspect=35,
     plt.show()
 
     plt.plot(np.arange(raw_gal.shape[1]),np.sum(raw_gal-sky_sub,axis=0)[::-1])
     plt.show()
 
-    return d2_spectra_s.T,d2_spectra_a.T,raw_gal-sky_sub,[lower_gal,upper_gal],lower_lim,upper_lim
+    return d2_spectra_s.T,d2_spectra_a.T,raw_gal-sky_sub,[lower_gal,upper_gal],slit_width
 
 if __name__ == '__main__':
     '''

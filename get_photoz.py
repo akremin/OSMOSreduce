@@ -25,6 +25,7 @@ def query_galaxies(ra,dec):
             gal_sdss_PID.append(0)
             gal_sdss_SID.append(0)
             continue
+
         gal_sdss_data.append(map(float,query[2].split(',')))
         gal_sdss_PID.append(query[2].split(',')[0])
         gal_sdss_SID.append(query[2].split(',')[1])

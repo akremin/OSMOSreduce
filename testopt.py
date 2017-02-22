@@ -60,7 +60,6 @@ def polyfour(x,a,b,c,d,e,f):
 def wavecalibrate(px,fx,slit_x,stretch_est=0.0,shift_est=0.0,quad_est=0.0,cube_est=0.0,fourth_est=0.0,fifth_est=0.0):
     #flip and normalize flux
     fx = fx - np.min(fx)
-    fx = fx[::-1]
     fx = fx/signal.medfilt(fx,201)
 
     #prep calibration lines into 1d spectra
@@ -87,10 +86,9 @@ def wavecalibrate(px,fx,slit_x,stretch_est=0.0,shift_est=0.0,quad_est=0.0,cube_e
 
 
 
-def interactive_plot(px,fx,stretch_0,shift_0,quad_0,cube_0,fourth_0,fifth_0,slit_x,wm,fm):
+def interactive_plot(px,fx,stretch_0,shift_0,quad_0,cube_0,fourth_0,fifth_0,slit_x,wm,fm,cal_states):
     #flip and normalize flux
     fx = fx - np.min(fx)
-    fx = fx[::-1]
     '''
     #prep calibration lines into 1d spectra
     wm_Xe,fm_Xe = np.loadtxt('osmos_Xenon.dat',usecols=(0,2),unpack=True)
@@ -102,35 +100,37 @@ def interactive_plot(px,fx,stretch_0,shift_0,quad_0,cube_0,fourth_0,fifth_0,slit
     wm_Ne,fm_Ne = np.loadtxt('osmos_Ne.dat',usecols=(0,2),unpack=True)
     wm_Ne = air_to_vacuum(wm_Ne)
     '''
-    cal_states = {'Xe':True,'Ar':False,'HgNe':False,'Ne':False}
+    #cal_states = {'Xe':True,'Ar':False,'HgNe':False,'Ne':False}
     
     fig,ax = plt.subplots()
-    plt.subplots_adjust(left=0.25,bottom=0.30)
-    l, = ax.plot(fifth_0*(px-slit_x)**5 + fourth_0*(px-slit_x)**4 + cube_0*(px-slit_x)**3 + quad_0*(px-slit_x)**2 + stretch_0*(px-slit_x) + shift_0,fx/10.0,'b')
+    plt.subplots_adjust(left=0.15,bottom=0.30,right=0.95)
+    if len(fx) != len(px):
+        pdb.set_trace()
+    l, = ax.plot(polyfour(np.asarray(px)-slit_x,fifth_0,fourth_0,cube_0,quad_0,stretch_0,shift_0),fx/10.0,'b')
     plt.plot(wm,fm/2.0,'ro')
     for i in range(wm.size): ax.axvline(wm[i],color='r')
-    ax.set_xlim(4000,6000)
-    ax.set_ylim(0,3500)
+    ax.set_xlim(3500,7500)
+    ax.set_ylim(0,1e6)
 
     #stateax = plt.axes([0.1,0.25,0.15,0.1])
     #states = CheckButtons(stateax,cal_states.keys(), cal_states.values())
     
-    axstretch = plt.axes([0.25,0.17,0.65,0.03])
-    axshift = plt.axes([0.25,0.22,0.65,0.03])
+    axstretch = plt.axes([0.15,0.17,0.75,0.03])
+    axshift = plt.axes([0.15,0.22,0.75,0.03])
     fn_quad_0 = 0.0
     fn_stretch_0 = 0.0
     fn_shift_0 = 0.0
-    fn_axquad = plt.axes([0.25,0.03,0.65,0.03])
-    fn_axstretch = plt.axes([0.25,0.07,0.65,0.03])
-    fn_axshift = plt.axes([0.25,0.12,0.65,0.03])
-    close_ax = plt.axes([0.05,0.5,0.13,0.1])
+    fn_axquad = plt.axes([0.15,0.03,0.75,0.03])
+    fn_axstretch = plt.axes([0.15,0.07,0.75,0.03])
+    fn_axshift = plt.axes([0.15,0.12,0.75,0.03])
+    close_ax = plt.axes([0.05,0.5,0.06,0.05])
 
-    slide_stretch = Slider(axstretch, 'Stretch',0.4,1.3,valinit=stretch_0)
-    slide_shift = Slider(axshift,'Shift',-2000.0,6000.0,valinit=shift_0)
-    fn_slide_stretch = Slider(fn_axstretch, 'Fine Stretch',-0.05,0.05,valinit=fn_stretch_0)
-    fn_slide_shift = Slider(fn_axshift,'Fine Shift',-200.0,200.0,valinit=fn_shift_0)
-    fn_slide_quad = Slider(fn_axquad,'Fine Quad',-4e-5,4e-5,valinit=fn_quad_0)
-    close_button = Button(close_ax,'Close Plots', hovercolor='0.80')
+    slide_stretch = Slider(axstretch, 'Stretch',0.8,2.6,valinit=stretch_0,valfmt=u'%1.2f')
+    slide_shift = Slider(axshift,'Shift',-2000.0,10000.0,valinit=shift_0,valfmt=u'%1.2f')
+    fn_slide_stretch = Slider(fn_axstretch, 'Fine Stretch',-0.05,0.05,valinit=fn_stretch_0,valfmt=u'%1.4f')
+    fn_slide_shift = Slider(fn_axshift,'Fine Shift',-200.0,200.0,valinit=fn_shift_0,valfmt=u'%1.2f')
+    fn_slide_quad = Slider(fn_axquad,'Fine Quad',-4e-5,4e-5,valinit=fn_quad_0,valfmt=u'%1.6f')
+    close_button = Button(close_ax,'Close Plot', hovercolor='0.80')
 
     def set_calib_lines(label):
         cal_states[label] = not cal_states[label]
@@ -181,6 +181,7 @@ def interactive_plot(px,fx,stretch_0,shift_0,quad_0,cube_0,fourth_0,fifth_0,slit
     close_button.on_clicked(close_plots)
     #states.on_clicked(set_calib_lines)
     plt.show()
+    #pdb.set_trace()
     shift_est = slide_shift.val+fn_slide_shift.val
     stretch_est = slide_stretch.val+fn_slide_stretch.val
     quad_est = quad_0 + fn_slide_quad.val
@@ -194,8 +195,8 @@ def interactive_plot_plus(px,fx,wm,fm,stretch_0,shift_0,quad_0):
     l, = plt.plot(quad_0*(px-binxpix_mid)**2+stretch_0*px+shift_0,fx/10.0,'b')
     plt.plot(wm,fm/2.0,'ro')
     for i in range(wm.size): plt.axvline(wm[i],color='r')
-    plt.xlim(4000,6000)
-    plt.ylim(0,3500)
+    plt.xlim(3500,7500)
+    plt.ylim(0,1e6)
 
     axstretch = plt.axes([0.25,0.17,0.65,0.03])
     axshift = plt.axes([0.25,0.22,0.65,0.03])
@@ -205,10 +206,10 @@ def interactive_plot_plus(px,fx,wm,fm,stretch_0,shift_0,quad_0):
     fn_axshift = plt.axes([0.25,0.12,0.65,0.03])
     close_ax = plt.axes([0.05,0.5,0.13,0.1])
 
-    slide_stretch = Slider(axstretch, 'Stretch',0.4,1.3,valinit=stretch_0)
-    slide_shift = Slider(axshift,'Shift',-4000.0,4000.0,valinit=shift_0)
-    fn_slide_stretch = Slider(fn_axstretch, 'Fine Stretch',-0.05,0.05,valinit=fn_stretch_0)
-    fn_slide_shift = Slider(fn_axshift,'Fine Shift',-200.0,200.0,valinit=fn_shift_0)
+    slide_stretch = Slider(axstretch, 'Stretch',0.4,1.3,valinit=stretch_0,valfmt=u'%1.2f')
+    slide_shift = Slider(axshift,'Shift',-4000.0,4000.0,valinit=shift_0,valfmt=u'%1.2f')
+    fn_slide_stretch = Slider(fn_axstretch, 'Fine Stretch',-0.05,0.05,valinit=fn_stretch_0,valfmt=u'%1.6f')
+    fn_slide_shift = Slider(fn_axshift,'Fine Shift',-200.0,200.0,valinit=fn_shift_0,valfmt=u'%1.2f')
     close_button = Button(close_ax,'Close Plots', hovercolor='0.80')
 
     #secondary 'zoom' plots
@@ -270,9 +271,9 @@ class LineBrowser:
         fn_axquad = plt.axes([0.25,0.03,0.65,0.03])
         fn_axstretch = plt.axes([0.25,0.07,0.65,0.03])
         fn_axshift = plt.axes([0.25,0.12,0.65,0.03])
-        self.fn_slide_stretch = Slider(fn_axstretch, 'Fine Stretch',-0.05,0.05,valinit=0.0)
-        self.fn_slide_shift = Slider(fn_axshift,'Fine Shift',-200.0,200.0,valinit=0.0)
-        self.fn_slide_quad = Slider(fn_axquad,'Fine Quad',-4e-5,4e-5,valinit=0.0)
+        self.fn_slide_stretch = Slider(fn_axstretch, 'Fine Stretch',-0.05,0.05,valinit=0.0,valfmt=u'%1.4f')
+        self.fn_slide_shift = Slider(fn_axshift,'Fine Shift',-200.0,200.0,valinit=0.0,valfmt=u'%1.3f')
+        self.fn_slide_quad = Slider(fn_axquad,'Fine Quad',-4e-5,4e-5,valinit=0.0,valfmt=u'%1.6f')
         self.fn_slide_stretch.on_changed(self.slider_update)
         self.fn_slide_shift.on_changed(self.slider_update)
         self.fn_slide_quad.on_changed(self.slider_update)
@@ -449,6 +450,7 @@ class LineBrowser:
         self.line_matches['peaks_p'].pop(self.j)
         self.line_matches['peaks_w'].pop(self.j)
         self.line_matches['peaks_h'].pop(self.j)
+        self.line_matches['line_mags'].pop(self.j)
         self.wm = np.delete(self.wm,self.j)
         self.update_current()
         return
@@ -472,7 +474,7 @@ if __name__ == '__main__':
     for j in range(wm.size):
         ax.axvline(wm[j],color='r')
     line, = ax.plot(wm,fm/2.0,'ro',picker=5)# 5 points tolerance
-    fline, = plt.plot(quad_est*(p_x-binxpix_mid-16)**2 + stretch_est*(p_x-binxpix_mid-16) + shift_est,(f_x[::-1]-f_x.min())/10.0,'b',picker=5)
+    fline, = plt.plot(quad_est*(p_x-binxpix_mid-16)**2 + stretch_est*(p_x-binxpix_mid-16) + shift_est,(f_x-f_x.min())/10.0,'b',picker=5)
     closeax = plt.axes([0.83, 0.3, 0.15, 0.1])
     button = Button(closeax, 'Add Line', hovercolor='0.975')
     #rax = plt.axes([0.85, 0.5, 0.1, 0.2])

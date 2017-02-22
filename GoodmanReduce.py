@@ -5,7 +5,7 @@ bottom of the mask and the center of the mask respectively.
 
 Please list the calibration lamp(s) used during your observations here
 '''
-cal_lamp = ['HgNe','Argon']  #['Xenon','Argon'] #'Xenon','Argon','HgNe','Neon'
+cal_lamp = ['HgNe','Argon','Neon']  #['Xenon','Argon'] #'Xenon','Argon','HgNe','Neon'
 print(('Using calibration lamps: ', cal_lamp))
 
 import numpy as np
@@ -30,9 +30,12 @@ from get_photoz import query_galaxies
 from slit_find import slit_find
 from ds9 import *
 from testopt import *
+from testopt import interactive_plot
 from zestipy import *
 from sncalc import *
 from gal_trace import *
+from scipy.signal import argrelextrema
+
 
 def getch():
     import tty, termios
@@ -54,6 +57,7 @@ def filter_image(img):
     return img_cr
 
 pixscale = 0.15 #arcsec/pixel  #pixel scale at for Goodman
+wavelength_dir = 1   # Goodman has wavelengths increasing as pixel val increases, OSMOS is reversed #-1
 #xbin = 1
 #ybin = 1
 xbin = 2
@@ -106,6 +110,9 @@ if 'Neon' in cal_lamp:
 fm = np.array(fm)[np.argsort(wm)]
 wm = np.array(wm)[np.argsort(wm)]
 
+
+cal_states = {'Xe':('Xenon' in cal_lamp),'Ar':('Argon' in cal_lamp),\
+'HgNe':('HgNe' in cal_lamp),'Ne':('Neon' in cal_lamp)}
 
 ###################
 #Define Cluster ID#
@@ -265,22 +272,22 @@ Gal_dat = pd.DataFrame({'RA':RA,'DEC':DEC,'SLIT_WIDTH':SLIT_WIDTH,'SLIT_LENGTH':
 ############################
 #Query SDSS for galaxy data#
 ############################
-if os.path.isfile(datadir+clus_id+'/'+clus_id+'_sdssinfo.csv'):
-    redshift_dat = pd.read_csv(datadir+clus_id+'/'+clus_id+'_sdssinfo.csv')
-else:
-    #returns a Pandas dataframe with columns
-    #objID','SpecObjID','ra','dec','umag','gmag','rmag','imag','zmag','redshift','photo_z','extra'
-    redshift_dat = query_galaxies(Gal_dat.RA,Gal_dat.DEC)
-    redshift_dat.to_csv(datadir+clus_id+'/data_products/'+clus_id+'_sdssinfo.csv',index=False)
-
-
-#merge into Gal_dat
-Gal_dat = Gal_dat.join(redshift_dat)
-
-gal_z = Gal_dat['spec_z']
-gal_gmag = Gal_dat['gmag']
-gal_rmag = Gal_dat['rmag']
-gal_imag = Gal_dat['imag']
+#if os.path.isfile(datadir+clus_id+'/'+clus_id+'_sdssinfo.csv'):
+#    redshift_dat = pd.read_csv(datadir+clus_id+'/'+clus_id+'_sdssinfo.csv')
+#else:
+#    #returns a Pandas dataframe with columns
+#    #objID','SpecObjID','ra','dec','umag','gmag','rmag','imag','zmag','redshift','photo_z','extra'
+#    redshift_dat = query_galaxies(Gal_dat.RA,Gal_dat.DEC)
+#    redshift_dat.to_csv(datadir+clus_id+'/data_products/'+clus_id+'_sdssinfo.csv',index=False)
+#
+#
+##merge into Gal_dat
+#Gal_dat = Gal_dat.join(redshift_dat)
+#
+#gal_z = Gal_dat['spec_z']
+#gal_gmag = Gal_dat['gmag']
+#gal_rmag = Gal_dat['rmag']
+#gal_imag = Gal_dat['imag']
 
 ####################
 #Open images in ds9#
@@ -460,11 +467,10 @@ if reassign == 'n':
                                 lowerbound = int(FINAL_SLIT_Y[i]-(BOX_WIDTH[i]/2.0))
                                 upperbound = int(FINAL_SLIT_Y[i]+(BOX_WIDTH[i]/2.0))
                                 cutflatdat = flatfits_c.data[lowerbound:upperbound,:]
-                                cutscidat = flatfits_c.data[lowerbound:upperbound,:]
-                                cutarcdat = flatfits_c.data[lowerbound:upperbound,:]
-                                science_spec,arc_spec,gal_spec,gal_cuts,lower_lim,upper_lim = slit_find(cutflatdat,cutscidat,cutarcdat,lower_lim,upper_lim,int(Gal_dat.SLIT_LENGTH[i]),n_emptypixs,int(Gal_dat.SLIT_Y[i]))
+                                cutscidat = scifits_c.data[lowerbound:upperbound,:]
+                                cutarcdat = arcfits_c.data[lowerbound:upperbound,:]
+                                science_spec,arc_spec,gal_spec,gal_cuts,BOX_WIDTH[i] = slit_find(cutflatdat,cutscidat,cutarcdat,lower_lim,upper_lim,int(Gal_dat.SLIT_LENGTH[i]),n_emptypixs,int(Gal_dat.SLIT_Y[i]))
                                 spectra[keys[i]] = {'science_spec':science_spec,'arc_spec':arc_spec,'gal_spec':gal_spec,'gal_cuts':gal_cuts}
-                                BOX_WIDTH[i] = upper_lim-lower_lim
                                 print('Is this spectra good (y) or bad (n)?')
                                 while True:
                                     char = getch()
@@ -498,17 +504,17 @@ if reassign == 'n':
         print((FINAL_SLIT_X[i],FINAL_SLIT_Y[i],BOX_WIDTH[i]))
         d.set('regions delete all')
     print(FINAL_SLIT_X)
-    np.savetxt(datadir+clus_id+'/'+clus_id+'_slit_pos_qual.tab',np.array(list(zip(FINAL_SLIT_X,FINAL_SLIT_Y,SLIT_WIDTH,good_spectra)),dtype=[('float',float),('float2',float),('int',int),('str','|S1')]),delimiter='\t',fmt='%10.2f %10.2f %3d %s')
+    np.savetxt(datadir+clus_id+'/'+clus_id+'_slit_pos_qual.tab',np.array(list(zip(FINAL_SLIT_X,FINAL_SLIT_Y,BOX_WIDTH,good_spectra)),dtype=[('float',float),('float2',float),('int',int),('str','|S1')]),delimiter='\t',fmt='%10.2f %10.2f %3d %s')
     pickle.dump(spectra,open(datadir+clus_id+'/'+clus_id+'_reduced_spectra.pkl','wb'))
 else:
-    FINAL_SLIT_X,FINAL_SLIT_Y,SLIT_WIDTH = np.loadtxt(datadir+clus_id+'/'+clus_id+'_slit_pos_qual.tab',dtype='float',usecols=(0,1,2),unpack=True)
+    FINAL_SLIT_X,FINAL_SLIT_Y,BOX_WIDTH = np.loadtxt(datadir+clus_id+'/'+clus_id+'_slit_pos_qual.tab',dtype='float',usecols=(0,1,2),unpack=True)
     good_spectra = np.loadtxt(datadir+clus_id+'/'+clus_id+'_slit_pos_qual.tab',dtype='string',usecols=(3,),unpack=True)
     spectra = pickle.load(open(datadir+clus_id+'/'+clus_id+'_reduced_spectra.pkl','rb'))
 
-Gal_dat['FINAL_SLIT_X'],Gal_dat['FINAL_SLIT_Y'],Gal_dat['SLIT_WIDTH'],Gal_dat['good_spectra'] = FINAL_SLIT_X,FINAL_SLIT_Y,SLIT_WIDTH,good_spectra
+Gal_dat['FINAL_SLIT_X'],Gal_dat['FINAL_SLIT_Y'],Gal_dat['SLIT_WIDTH'],Gal_dat['good_spectra'] = FINAL_SLIT_X,FINAL_SLIT_Y,BOX_WIDTH,good_spectra
 
 #Need to flip FINAL_SLIT_X coords to account for reverse wavelength spectra
-Gal_dat['FINAL_SLIT_X_FLIP'] = binnedx - Gal_dat.FINAL_SLIT_X
+Gal_dat['FINAL_SLIT_X_FLIP'] = Gal_dat.FINAL_SLIT_X#binnedx - Gal_dat.FINAL_SLIT_X
 #Gal_dat['FINAL_SLIT_X_FLIP'] = 4064 - Gal_dat.FINAL_SLIT_X
 ####################################################################
 
@@ -527,8 +533,8 @@ if reassign == 'n':
     
     #initialize polynomial arrays
     fifth,fourth,cube,quad,stretch,shift =  np.zeros((6,len(Gal_dat)))
-    shift_est = 4.71e-6*(Gal_dat['FINAL_SLIT_X'] - (binnedx/2)-200)**2 + 4.30e-6*(Gal_dat['FINAL_SLIT_Y'] - (binnedy/2))**2 + 4469.72
-    stretch_est = -9.75e-9*(Gal_dat['FINAL_SLIT_X'] - (binnedx/2)+100)**2 - 2.84e-9*(Gal_dat['FINAL_SLIT_Y'] - (binnedy/2))**2 + 0.7139
+    shift_est = 4763.0*np.ones(len(Gal_dat))#4.71e-6*(Gal_dat['FINAL_SLIT_X'] - (binnedx/2)-200)**2 + 4.30e-6*(Gal_dat['FINAL_SLIT_Y'] - (binnedy/2))**2 + binnedx
+    stretch_est = 1.96*np.ones(len(Gal_dat))#-9.75e-9*(Gal_dat['FINAL_SLIT_X'] - (binnedx/2)+100)**2 - 2.84e-9*(Gal_dat['FINAL_SLIT_Y'] - (binnedy/2))**2 + 0.7139
     quad_est = 8.43e-9*(Gal_dat['FINAL_SLIT_X'] - (binnedx/2)+100) + 1.55e-10*(Gal_dat['FINAL_SLIT_Y'] - (binnedy/2)) + 1.3403e-5
     cube_est = 7.76e-13*(Gal_dat['FINAL_SLIT_X'] - (binnedx/2)+100) + 4.23e-15*(Gal_dat['FINAL_SLIT_Y'] - (binnedy/2)) - 5.96e-9
     fifth_est,fourth_est = np.zeros((2,len(Gal_dat)))
@@ -539,19 +545,23 @@ if reassign == 'n':
     #do reduction for initial galaxy
     while ii <= stretch.size:
         if good_spectra[ii]=='y':
-            f_x = np.sum(spectra[keys[ii]]['arc_spec'],axis=0)
-            d.set('pan to 1150.0 '+str(Gal_dat.FINAL_SLIT_Y[ii])+' physical')
-            d.set('regions command {box('+str(int(binnedy/2))+' '+str(Gal_dat.FINAL_SLIT_Y[ii])+' '+str(binnedx)+' '+str(Gal_dat.SLIT_WIDTH[ii])+') #color=green highlite=1}')
-            
+            f_x = np.sum(spectra[keys[ii]]['arc_spec'],axis=0)[:binnedx]
+            f_x = f_x[::wavelength_dir]
+            if len(f_x) != len(p_x):
+                pdb.set_trace()
+            d.set('pan to 1150.0 '+str(Gal_dat.FINAL_SLIT_Y[ii])+' physical') 
+            d.set('regions command {box('+str(Gal_dat.SLIT_X[ii])+' '+str(Gal_dat.FINAL_SLIT_Y[ii])+' '+str(binnedx)+' '+str(Gal_dat.SLIT_WIDTH[ii])+') #color=green highlite=1}')
+            #pdb.set_trace()
             #initial stretch and shift
-            stretch_est[ii],shift_est[ii],quad_est[ii] = interactive_plot(p_x,f_x,stretch_est[ii],shift_est[ii],quad_est[ii],cube_est[ii],fourth_est[ii],fifth_est[ii],Gal_dat.FINAL_SLIT_X_FLIP[ii],wm,fm)
-
+            stretch_est[ii],shift_est[ii],quad_est[ii] = interactive_plot(p_x,f_x,stretch_est[ii],shift_est[ii],quad_est[ii],cube_est[ii],fourth_est[ii],fifth_est[ii],Gal_dat.FINAL_SLIT_X_FLIP[ii],wm,fm,cal_states)
+            if len(f_x) != len(p_x):
+                pdb.set_trace()
             #run peak identifier and match lines to peaks
-            line_matches = {'lines':[],'peaks_p':[],'peaks_w':[],'peaks_h':[]}
+            line_matches = {'lines':[],'line_mags':[],'peaks_p':[],'peaks_w':[],'peaks_h':[]}
             est_features = [fifth_est[ii],fourth_est[ii],cube_est[ii],quad_est[ii],stretch_est[ii],shift_est[ii]]
             xspectra = fifth_est[ii]*(p_x-Gal_dat.FINAL_SLIT_X_FLIP[ii])**5 + fourth_est[ii]*(p_x-Gal_dat.FINAL_SLIT_X_FLIP[ii])**4 + cube_est[ii]*(p_x-Gal_dat.FINAL_SLIT_X_FLIP[ii])**3 + quad_est[ii]*(p_x-Gal_dat.FINAL_SLIT_X_FLIP[ii])**2 + stretch_est[ii]*(p_x-Gal_dat.FINAL_SLIT_X_FLIP[ii]) + shift_est[ii]
-            fydat = f_x[::-1] - signal.medfilt(f_x[::-1],171) #used to find noise
-            fyreal = (f_x[::-1]-f_x.min())/10.0
+            fydat = f_x - signal.medfilt(f_x,171) #used to find noise
+            fyreal = (f_x-f_x.min())/10.0
             peaks = argrelextrema(fydat,np.greater) #find peaks
             fxpeak = xspectra[peaks] #peaks in wavelength
             fxrpeak = p_x[peaks] #peaks in pixels
@@ -564,12 +574,14 @@ if reassign == 'n':
             fypeak = fyrpeak[fypeak>noise] #significant peaks height
             for j in range(wm.size):
                 line_matches['lines'].append(wm[j]) #line positions
-                line_matches['peaks_p'].append(fxrpeak[np.argsort(np.abs(wm[j]-fxpeak))][0]) #closest peak (in pixels)
-                line_matches['peaks_w'].append(fxpeak[np.argsort(np.abs(wm[j]-fxpeak))][0]) #closest peak (in wavelength)
-                line_matches['peaks_h'].append(fypeak[np.argsort(np.abs(wm[j]-fxpeak))][0]) #closest peak (height)
+                line_matches['line_mags'].append(fm[j])
+                nearest_line = np.argsort(np.abs(wm[j]-fxpeak))
+                line_matches['peaks_p'].append(fxrpeak[nearest_line][0]) #closest peak (in pixels)
+                line_matches['peaks_w'].append(fxpeak[nearest_line][0]) #closest peak (in wavelength)
+                line_matches['peaks_h'].append(fypeak[nearest_line][0]) #closest peak (height)
             
             #Pick lines for initial parameter fit
-            cal_states = {'Xe':True,'Ar':False,'HgNe':False,'Ne':False}
+            #cal_states = {'Xe':True,'Ar':False,'HgNe':False,'Ne':False}
             fig,ax = plt.subplots(1)
             
             #maximize window
@@ -581,9 +593,10 @@ if reassign == 'n':
             for j in range(wm.size):
                 vlines.append(ax.axvline(wm[j],color='r',alpha=0.5))
             line, = ax.plot(wm,np.zeros(wm.size),'ro')
-            yspectra = (f_x[::-1]-f_x.min())/10.0
+            yspectra = (f_x-f_x.min())/10.0
             fline, = plt.plot(xspectra,yspectra,'b',lw=1.5,picker=5)
-            
+            if len(f_x) != len(p_x):
+                pdb.set_trace()            
             browser = LineBrowser(fig,ax,est_features,wm,fm,p_x-Gal_dat.FINAL_SLIT_X_FLIP[ii],Gal_dat.FINAL_SLIT_X_FLIP[ii],vlines,fline,xspectra,yspectra,peaks,fxpeak,fxrpeak,fypeak,line_matches,cal_states)
             fig.canvas.mpl_connect('button_press_event', browser.onclick)
             fig.canvas.mpl_connect('key_press_event',browser.onpress)
@@ -594,7 +607,7 @@ if reassign == 'n':
             button = Button(closeax, 'Replace (m)', hovercolor='0.975')
             button.on_clicked(browser.replace_b)
             nextax = plt.axes([0.83, 0.45, 0.15, 0.1])
-            nextbutton = Button(nextax, 'Next (n)', hovercolor='0.975')
+            nextbutton = Button(nextax, 'Accept (n)', hovercolor='0.975')
             nextbutton.on_clicked(browser.next_go)
             deleteax = plt.axes([0.83,0.25,0.15,0.1])
             delete_button = Button(deleteax,'Delete (j)',hovercolor='0.975')
@@ -604,7 +617,8 @@ if reassign == 'n':
             #states.on_clicked(browser.set_calib_lines)
             fig.canvas.draw()
             plt.show()
-            
+            if len(f_x) != len(p_x):
+                pdb.set_trace()            
             #fit 5th order polynomial to peak/line selections
             params,pcov = curve_fit(polyfour,(np.sort(browser.line_matches['peaks_p'])-Gal_dat.FINAL_SLIT_X_FLIP[ii]),np.sort(browser.line_matches['lines']),p0=[shift_est[ii],stretch_est[ii],quad_est[ii],cube_est[ii],1e-12,1e-12])
             #cube_est = cube_est + params[3]
@@ -615,17 +629,19 @@ if reassign == 'n':
             wave_model =  params[0]+params[1]*(p_x-Gal_dat.FINAL_SLIT_X_FLIP[ii])+params[2]*(p_x-Gal_dat.FINAL_SLIT_X_FLIP[ii])**2+params[3]*(p_x-Gal_dat.FINAL_SLIT_X_FLIP[ii])**3.0+params[4]*(p_x-Gal_dat.FINAL_SLIT_X_FLIP[ii])**4.0+params[5]*(p_x-Gal_dat.FINAL_SLIT_X_FLIP[ii])**5.0
             spectra[keys[ii]]['wave'] = wave_model
             spectra[keys[ii]]['wave2'] = wave_model[p_x >= np.sort(browser.line_matches['peaks_p'])[0]]
-            spectra[keys[ii]]['gal_spec2'] = ((np.array(spectra[keys[ii]]['gal_spec']).T[::-1])[p_x >= np.sort(browser.line_matches['peaks_p'])[0]]).T
+            spectra[keys[ii]]['gal_spec2'] = ((np.array(spectra[keys[ii]]['gal_spec']).T[:binnedx:wavelength_dir])[p_x >= np.sort(browser.line_matches['peaks_p'])[0]]).T
             
             flu = f_x - np.min(f_x)
-            flu = flu[::-1][p_x >= np.sort(browser.line_matches['peaks_p'])[0]]
+            flu = flu[p_x >= np.sort(browser.line_matches['peaks_p'])[0]]
             Flux = flu/signal.medfilt(flu,201)
             fifth[ii],fourth[ii],cube[ii],quad[ii],stretch[ii],shift[ii] = params[5],params[4],params[3],params[2],params[1],params[0]
+            with open('selected_comparison_lines-'+str(ii)+'-'+str(clus_id)+'.pkl','wb') as pklfile:
+                pickle.dump(browser.line_matches,pklfile)
             plt.plot(spectra[keys[ii]]['wave2'],Flux/np.max(Flux[np.isfinite(Flux)]))
             plt.plot(wm,fm/np.max(fm),'ro')
             for j in range(browser.wm.size):
                 plt.axvline(browser.wm[j],color='r')
-            plt.xlim(3800,6000)
+            plt.xlim(3800,7500)
             try:
                 plt.savefig(datadir+clus_id+'/figs/'+str(ii)+'.wave.png')
             except:
@@ -658,6 +674,13 @@ if reassign == 'n':
         f.write('\n')
         ii+=1
 
+    usereducedlist = 'n'
+    usereducedlist = str((raw_input('Should we use the reduced line list for the remainder of the galaxies? (y) or (n)? '))).lower()
+    if usereducedlist:
+        wm_full = wm
+        fm_full = fm
+        wm = line_matches['lines'] #line positions
+        fm = line_matches['line_mags'] #line heights
     #estimate stretch,shift,quad terms with sliders for 2nd - all galaxies
     for i in range(ii,len(Gal_dat)):
         print(('Calibrating',i,'of',stretch.size))
@@ -668,19 +691,23 @@ if reassign == 'n':
             else: skipgal = False
             if not skipgal:
                 p_x = np.arange(0,binnedx,1)
-                f_x = np.sum(spectra[keys[i]]['arc_spec'],axis=0)
+                f_x = np.sum(spectra[keys[i]]['arc_spec'],axis=0)[:binnedx]
+                f_x = f_x[::wavelength_dir]
                 d.set('pan to 1150.0 '+str(Gal_dat.FINAL_SLIT_Y[i])+' physical')
-                d.set('regions command {box(2000 '+str(Gal_dat.FINAL_SLIT_Y[i])+' 4500 '+str(Gal_dat.SLIT_WIDTH[i])+') #color=green highlite=1}')
+                d.set('regions command {box('+str(Gal_dat.SLIT_X[i])+' '+str(Gal_dat.FINAL_SLIT_Y[i])+' '+str(binnedx)+' '+str(Gal_dat.SLIT_WIDTH[i])+') #color=green highlite=1}')
                 #stretch_est[i],shift_est[i],quad_est[i] = interactive_plot(p_x,f_x,stretch_est[i-1],shift_est[i-1]-(Gal_dat.FINAL_SLIT_X_FLIP[i]*stretch_est[0]-Gal_dat.FINAL_SLIT_X_FLIP[i-1]*stretch_est[i-1]),quad[i-1],cube[i-1],fourth[i-1],fifth[i-1],Gal_dat.FINAL_SLIT_X_FLIP[i])
                 reduced_slits = np.where(stretch != 0.0)
-                stretch_est[i],shift_est[i],quad_est[i] = interactive_plot(p_x,f_x,stretch_est[i],shift_est[i],quad_est[i],cube_est[i],fourth_est[i],fifth_est[i],Gal_dat.FINAL_SLIT_X_FLIP[i],wm,fm)
+                if len(f_x) != len(p_x):
+                    pdb.set_trace()
+                
+                stretch_est[i],shift_est[i],quad_est[i] = interactive_plot(p_x,f_x,stretch_est[i],shift_est[i],quad_est[i],cube_est[i],fourth_est[i],fifth_est[i],Gal_dat.FINAL_SLIT_X_FLIP[i],wm,fm,cal_states)
                 est_features = [fifth_est[i],fourth_est[i],cube_est[i],quad_est[i],stretch_est[i],shift_est[i]]
 
                 #run peak identifier and match lines to peaks
                 line_matches = {'lines':[],'peaks_p':[],'peaks_w':[],'peaks_h':[]}
                 xspectra =  fifth_est[i]*(p_x-Gal_dat.FINAL_SLIT_X_FLIP[i])**5 + fourth_est[i]*(p_x-Gal_dat.FINAL_SLIT_X_FLIP[i])**4 + cube_est[i]*(p_x-Gal_dat.FINAL_SLIT_X_FLIP[i])**3 + quad_est[i]*(p_x-Gal_dat.FINAL_SLIT_X_FLIP[i])**2 + stretch_est[i]*(p_x-Gal_dat.FINAL_SLIT_X_FLIP[i]) + shift_est[i]
-                fydat = f_x[::-1] - signal.medfilt(f_x[::-1],171) #used to find noise
-                fyreal = (f_x[::-1]-f_x.min())/10.0
+                fydat = f_x - signal.medfilt(f_x,171) #used to find noise
+                fyreal = (f_x-f_x.min())/10.0
                 peaks = argrelextrema(fydat,np.greater) #find peaks
                 fxpeak = xspectra[peaks] #peaks in wavelength
                 fxrpeak = p_x[peaks] #peaks in pixels
@@ -710,7 +737,7 @@ if reassign == 'n':
                 for j in range(wm.size):
                     vlines.append(ax.axvline(wm[j],color='r'))
                 line, = ax.plot(wm,fm/2.0,'ro',picker=5)# 5 points tolerance
-                yspectra = (f_x[::-1]-f_x.min())/10.0
+                yspectra = (f_x-f_x.min())/10.0
                 fline, = plt.plot(xspectra,yspectra,'b',lw=1.5,picker=5)
                 estx = quad_est[i]*(line_matches['peaks_p']-Gal_dat.FINAL_SLIT_X_FLIP[i])**2 + stretch_est[i]*(line_matches['peaks_p']-Gal_dat.FINAL_SLIT_X_FLIP[i]) + shift_est[i]
 
@@ -749,10 +776,10 @@ if reassign == 'n':
                 wave_model = params[0]+params[1]*(p_x-Gal_dat.FINAL_SLIT_X_FLIP[i])+params[2]*(p_x-Gal_dat.FINAL_SLIT_X_FLIP[i])**2+params[3]*(p_x-Gal_dat.FINAL_SLIT_X_FLIP[i])**3.0+params[4]*(p_x-Gal_dat.FINAL_SLIT_X_FLIP[i])**4.0+params[5]*(p_x-Gal_dat.FINAL_SLIT_X_FLIP[i])**5.0
                 spectra[keys[i]]['wave'] = wave_model
                 spectra[keys[i]]['wave2'] = wave_model[p_x >= np.sort(browser.line_matches['peaks_p'])[0]]
-                spectra[keys[i]]['gal_spec2'] = ((np.array(spectra[keys[i]]['gal_spec']).T[::-1])[p_x >= np.sort(browser.line_matches['peaks_p'])[0]]).T
+                spectra[keys[i]]['gal_spec2'] = ((np.array(spectra[keys[i]]['gal_spec']).T[::wavelength_dir])[p_x >= np.sort(browser.line_matches['peaks_p'])[0]]).T
 
                 flu = f_x[p_x >= np.sort(browser.line_matches['peaks_p'])[0]] - np.min(f_x[p_x >= np.sort(browser.line_matches['peaks_p'])[0]])
-                flu = flu[::-1]
+                #flu = flu[::-1]
                 Flux = flu/signal.medfilt(flu,201)
                 fifth[i],fourth[i],cube[i],quad[i],stretch[i],shift[i] = params[5],params[4],params[3],params[2],params[1],params[0]
                 plt.plot(spectra[keys[i]]['wave2'],Flux/np.max(Flux))
@@ -887,9 +914,9 @@ for k in range(redshift_est.size):
     f.write(str(HSN[k])+'\t')
     f.write(str(KSN[k])+'\t')
     f.write(str(GSN[k])+'\t')
-    f.write(str(gal_gmag[k])+'\t')
-    f.write(str(gal_rmag[k])+'\t')
-    f.write(str(gal_imag[k])+'\t')
+    #f.write(str(gal_gmag[k])+'\t')
+    #f.write(str(gal_rmag[k])+'\t')
+    #.write(str(gal_imag[k])+'\t')
     f.write('\n')
 f.close()
 
