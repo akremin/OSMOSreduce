@@ -1,3 +1,39 @@
+import numpy as np
+from astropy.io import fits as pyfits
+import matplotlib
+matplotlib.use('Qt4Agg')
+import matplotlib.pyplot as plt
+from matplotlib.widgets import Button
+import scipy.signal as signal
+from scipy import fftpack
+from scipy.optimize import curve_fit
+import sys
+import subprocess
+import pickle
+import pdb
+from ds9 import ds9
+import copy
+import os
+import time
+
+import re
+import pandas as pd
+import fnmatch
+
+from get_photoz import query_galaxies
+from slit_find import slit_find
+from zestipy.data_structures import waveform, redshift_data, smooth_waveform
+from testopt import interactive_plot, air_to_vacuum, LineBrowser, polyfour
+from sncalc import sncalc
+from scipy.signal import argrelextrema
+from zestipy.z_est import z_est
+from zestipy.plotting_tools import summary_plot
+
+#from gal_trace import gal_trace
+#import zestipy.io as zpio
+#import zestipy.workflow_funcs as zwf
+
+
 '''
 IMPORTANT NOTES:
 In the .oms file, the first and last RA/DEC represent a reference slit at the 
@@ -6,55 +42,6 @@ bottom of the mask and the center of the mask respectively.
 Please list the calibration lamp(s) used during your observations here
 '''
 cal_lamp = ['HgNe','Argon','Neon']  #['Xenon','Argon'] #'Xenon','Argon','HgNe','Neon'
-print(('Using calibration lamps: ', cal_lamp))
-
-import numpy as np
-from astropy.io import fits as pyfits
-import matplotlib
-matplotlib.use('Qt4Agg')
-import matplotlib.pyplot as plt
-from matplotlib.widgets import Button
-import scipy.signal as signal
-import sys
-import re
-import subprocess
-import pandas as pd
-import copy
-import os
-import fnmatch
-import time
-import pickle
-import pdb
-from scipy import fftpack
-from get_photoz import query_galaxies
-from slit_find import slit_find
-from ds9 import *
-from testopt import *
-from testopt import interactive_plot
-from zestipy import *
-from sncalc import *
-from gal_trace import *
-from scipy.signal import argrelextrema
-
-
-def getch():
-    import tty, termios
-    fd = sys.stdin.fileno()
-    old_settings = termios.tcgetattr(fd)
-    try:
-        tty.setraw(sys.stdin.fileno())
-        ch = sys.stdin.read(1)
-    finally:
-        termios.tcsetattr(fd,termios.TCSADRAIN,old_settings)
-    return ch
-
-def filter_image(img):
-    img_sm = signal.medfilt(img,5)
-    sigma = 2.0 
-    bad = np.abs(img-img_sm) / sigma > 8.0
-    img_cr = img.copy()
-    img_cr[bad] = img_sm[bad]
-    return img_cr
 
 pixscale = 0.15 #arcsec/pixel  #pixel scale at for Goodman
 wavelength_dir = 1   # Goodman has wavelengths increasing as pixel val increases, OSMOS is reversed #-1
@@ -84,8 +71,37 @@ datadir = '/u/home/kremin/value_storage/goodman_jan17/'
 #RDNOISE =             3.690000 / CCD readnoise [e-]                             
 #GAIN    =             0.560000 / CCD gain [e-/ADU]    
 
+
+
+
+##############################################################
+#########    Begin the Start of the Code    ##################
+##############################################################
+
+def getch():
+    import tty, termios
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+    try:
+        tty.setraw(sys.stdin.fileno())
+        ch = sys.stdin.read(1)
+    finally:
+        termios.tcsetattr(fd,termios.TCSADRAIN,old_settings)
+    return ch
+
+def filter_image(img):
+    img_sm = signal.medfilt(img,5)
+    sigma = 2.0 
+    bad = np.abs(img-img_sm) / sigma > 8.0
+    img_cr = img.copy()
+    img_cr[bad] = img_sm[bad]
+    return img_cr
+
 wm = []
 fm = []
+
+print(('Using calibration lamps: ', cal_lamp))
+
 if 'Xenon' in cal_lamp:
     wm_Xe,fm_Xe = np.loadtxt('osmos_Xenon.dat',usecols=(0,2),unpack=True)
     wm_Xe = air_to_vacuum(wm_Xe)
@@ -114,6 +130,7 @@ wm = np.array(wm)[np.argsort(wm)]
 cal_states = {'Xe':('Xenon' in cal_lamp),'Ar':('Argon' in cal_lamp),\
 'HgNe':('HgNe' in cal_lamp),'Ne':('Neon' in cal_lamp)}
 
+instrument = "GOODMAN"
 ###################
 #Define Cluster ID#
 ###################
@@ -128,7 +145,12 @@ except:
 
 print(('Reducing cluster: ',clus_id))
 ###############################################################
-
+#hack
+with open(datadir+clus_id+'/GOODMAN_selected_comparison_lines-Kremin10.pkl','rb') as linestouse:
+    linedict = pickle.load(linestouse)
+    wm = np.asarray(linedict['lines'])
+    fm = np.asarray(linedict['line_mags'])
+    del linedict
 #ask if you want to only reduce sdss galaxies with spectra
 try:
     sdss_check = str(sys.argv[2])
@@ -138,7 +160,7 @@ try:
         raise Exception(sdss_check+' is not an accepted input. \'sdss\' is the only accepted input here.')
 except IndexError:
     sdss_check = False
-
+sdss_check = False #hack
 ############################
 #Import Cluster .fits files#
 ############################
@@ -186,84 +208,116 @@ if len(hdulists_arc) < 1:
 
 #########################################################
 #Need to parse .txt file for slit information#
-#########################################################
-for curfile in os.listdir(datadir+clus_id+'/maskfiles/'):
-    if fnmatch.fnmatch(curfile, '*.oms'):
-        omsfile = curfile
-with open(datadir+clus_id+'/maskfiles/'+clus_id+'_Mask1.txt','r') as fil:
-    slit_X = []
-    slit_Y = []
-    slit_WIDTH = []
-    slit_LENGTH = []
-    throw_y = []
-    throw_x = []
-    for line in fil:
-        if line[:2] == 'M7':
-            if len(throw_y)>0:
-                slit_WIDTH.append(np.max(throw_y)-np.min(throw_y))
-                slit_LENGTH.append(np.max(throw_x)-np.min(throw_x))
-                throw_y = []
-                throw_x = []
-            else:
-                slit_WIDTH.append(None)
-                slit_LENGTH.append(None)
-        if line[:3] == 'G0 ':
-            vals = line.split(' ')
-            slit_X.append(float(vals[1][1:].strip('\n\r')))
-            slit_Y.append(float(vals[2][1:].strip('\n\r')))
-        if line[:3]=='G1 ':
-            vals = line.split(' ')
-            throw_x.append(float(vals[2][1:].strip('\n\r')))
-            throw_y.append(float(vals[3][1:].strip('\n\r')))
+###########################################append
+RA = []
+DEC = []
+TYPE = []
+slit_NUM = []
+slit_X = []
+slit_Y = []
+slit_WIDTH = []
+slit_LENGTH = []    
+if instrument.upper() == 'OSMOS':      
+    for curfile in os.listdir(datadir+clus_id+'/maskfiles/'):
+        if fnmatch.fnmatch(curfile, '*.oms'):
+            omsfile = curfile
+    inputfile = open(clus_id+'/'+omsfile)
+    alltext = inputfile.readlines()
+    for line in alltext:
+        RAmatch = re.search('TARG(.*)\.ALPHA\s*(..)(..)(.*)',line)
+        DECmatch = re.search('DELTA\s*(...)(..)(.*)',line)
+        WIDmatch = re.search('WID\s\s*(.*)',line)
+        LENmatch = re.search('LEN\s\s*(.*)',line)
+        Xmatch = re.search('XMM\s\s*(.*)',line)
+        Ymatch = re.search('YMM\s\s*(.*)',line)
+        if RAmatch:
+            slit_NUM.append(RAmatch.group(1))
+            RA.append(RAmatch.group(2)+':'+RAmatch.group(3)+':'+RAmatch.group(4))
+        if DECmatch:
+            DEC.append(DECmatch.group(1)+':'+DECmatch.group(2)+':'+DECmatch.group(3))
+        if WIDmatch:
+            slit_WIDTH.append(WIDmatch.group(1))
+        if LENmatch:
+            slit_LENGTH.append(LENmatch.group(1))
+        if Xmatch:
+            slit_X.append(0.5*naxis1+np.float(Xmatch.group(1))*(11.528)/(pixscale))
+        if Ymatch:
+            slit_Y.append(0.5*naxis2+np.float(Ymatch.group(1))*(11.528)/(pixscale)+yshift)
+    TYPE = ['']*len(RA)
+    SLIT_X = np.asarray(slit_X)
+    SLIT_Y = np.asarray(slit_Y)
+    SLIT_WIDTH = np.asarray(slit_WIDTH)
+    SLIT_LENGTH = np.asarray(slit_LENGTH)
+elif instrument.upper() == 'GOODMAN':
+    with open(datadir+clus_id+'/maskfiles/'+clus_id+'_Mask1.txt','r') as fil:
+        throw_y = []
+        throw_x = []
+        for line in fil:
+            if line[:2] == 'M7':
+                if len(throw_y)>0:
+                    slit_WIDTH.append(np.max(throw_y)-np.min(throw_y))
+                    slit_LENGTH.append(np.max(throw_x)-np.min(throw_x))
+                    throw_y = []
+                    throw_x = []
+                else:
+                    slit_WIDTH.append(None)
+                    slit_LENGTH.append(None)
+            if line[:3] == 'G0 ':
+                vals = line.split(' ')
+                slit_X.append(float(vals[1][1:].strip('\n\r')))
+                slit_Y.append(float(vals[2][1:].strip('\n\r')))
+            if line[:3]=='G1 ':
+                vals = line.split(' ')
+                throw_x.append(float(vals[2][1:].strip('\n\r')))
+                throw_y.append(float(vals[3][1:].strip('\n\r')))
+    #########################################################
+    #Need to parse .msk file for ra,dec information#
+    #########################################################
+    with open(datadir+clus_id+'/maskfiles/'+clus_id+'_Mask1.msk','r') as fil:
+        for line in fil:
+            if line[:3] == 'MM_':
+                mm_per_asec = float(line.split('=')[1].strip('\n\r'))
+            if line[:4] == '[Obj':
+                slit_NUM.append(int(line[7:].strip('\n\r[]')))
+            if line[:3]=='DEC':
+                DEC.append(line.split('=')[1].strip('\n\r'))
+            if line[:3]=='RA=':
+                RA.append(line.split('=')[1].strip('\n\r'))
+            if line[:3]=='IS_':
+                tf = line.split('=')[1].strip('\n\r')
+                if tf == 'False':
+                    TYPE.append('Target')
+                else:
+                    TYPE.append('Alignment')
+    mm_per_asec = 0.32 #hack
+    
+SLIT_NUM = np.asarray(slit_NUM)
+RA = np.asarray(RA)
+DEC = np.asarray(DEC)
+TYPE = np.asarray(TYPE)
 
-#########################################################
-#Need to parse .msk file for ra,dec information#
-#########################################################
-
-with open(datadir+clus_id+'/maskfiles/'+clus_id+'_Mask1.msk','r') as fil:
-    SLIT_NUM = []
-    RA = []
-    DEC = []
-    TYPE = []
-    for line in fil:
-        if line[:3] == 'MM_':
-            mm_per_asec = float(line.split('=')[1].strip('\n\r'))
-        if line[:4] == '[Obj':
-            SLIT_NUM.append(int(line[7:].strip('\n\r[]')))
-        if line[:3]=='DEC':
-            DEC.append(line.split('=')[1].strip('\n\r'))
-        if line[:3]=='RA=':
-            RA.append(line.split('=')[1].strip('\n\r'))
-        if line[:3]=='IS_':
-            tf = line.split('=')[1].strip('\n\r')
-            if tf == 'False':
-                TYPE.append('Target')
-            else:
-                TYPE.append('Alignment')
+#hack
+if instrument.upper() == 'GOODMAN':
+    correct_order_idx = np.argsort(SLIT_NUM)
+    SLIT_NUM = SLIT_NUM[correct_order_idx]
+    RA = RA[correct_order_idx]
+    DEC = DEC[correct_order_idx]
+    TYPE = TYPE[correct_order_idx]
+    ## major hack 
+    reorder = np.asarray([0,1,2,3,4,5,6,9,10,7,8,17,12,13,14,15,16,11])  
+    RA = RA[reorder]
+    DEC = DEC[reorder]
+    TYPE = TYPE[reorder]
+  
+    # All widths and locs are currently in mm's  -> want pixels
+    # X,Y in mm for mask is Y,-X for pixels on ccd  
+    #ie axes are flipped and one is inverted
+    SLIT_X = binxpix_mid - np.array(slit_Y[1:-1])*(1/(xbin*pixscale*mm_per_asec))
+    SLIT_Y = binnedy + np.array(slit_X[1:-1])*(1/(ybin*pixscale*mm_per_asec)) - yshift
+    SLIT_WIDTH = np.array(slit_WIDTH[1:])*(1/(xbin*pixscale*mm_per_asec))
+    SLIT_LENGTH = np.array(slit_LENGTH[1:])*(1/(ybin*pixscale*mm_per_asec))
 
 
-SLIT_NUM = np.asarray(SLIT_NUM)
-correct_order_idx = np.argsort(SLIT_NUM)
-SLIT_NUM = SLIT_NUM[correct_order_idx]
-RA = np.asarray(RA)[correct_order_idx]
-DEC = np.asarray(DEC)[correct_order_idx]
-TYPE = np.asarray(TYPE)[correct_order_idx]
-
-# All widths and locs are currently in mm's  -> want pixels
-# X,Y in mm for mask is Y,-X for pixels on ccd  
-#ie axes are flipped and one is inverted
-mm_per_asec = 0.32
-SLIT_X = binxpix_mid - np.array(slit_Y[1:-1])*(1/(xbin*pixscale*mm_per_asec))
-SLIT_Y = binnedy + np.array(slit_X[1:-1])*(1/(ybin*pixscale*mm_per_asec)) - yshift
-##SLIT_X = binxpix_mid + np.array(slit_X[1:-1])*(1/(xbin*pixscale*mm_per_asec))
-##SLIT_Y = binypix_mid + np.array(slit_Y[1:-1])*(1/(ybin*pixscale*mm_per_asec))# +yshift
-#SLIT_WIDTH = np.array(slit_WIDTH[1:])*(1/(ybin*pixscale*mm_per_asec))
-#SLIT_LENGTH = np.array(slit_LENGTH[1:])*(1/(xbin*pixscale*mm_per_asec))
-SLIT_WIDTH = np.array(slit_WIDTH[1:])*(1/(xbin*pixscale*mm_per_asec))
-SLIT_LENGTH = np.array(slit_LENGTH[1:])*(1/(ybin*pixscale*mm_per_asec))
-#SLIT_WIDTH = np.array(slit_LENGTH[1:])*(1/(ybin*pixscale*mm_per_asec))
-#SLIT_LENGTH = np.array(slit_WIDTH[1:])*(1/(xbin*pixscale*mm_per_asec))
-#pdb.set_trace()
 #remove throw away rows and dump into Gal_dat dataframe
 Gal_dat = pd.DataFrame({'RA':RA,'DEC':DEC,'SLIT_WIDTH':SLIT_WIDTH,'SLIT_LENGTH':SLIT_LENGTH,'SLIT_X':SLIT_X,'SLIT_Y':SLIT_Y,'TYPE':TYPE,'NAME':SLIT_NUM})
 
@@ -272,22 +326,22 @@ Gal_dat = pd.DataFrame({'RA':RA,'DEC':DEC,'SLIT_WIDTH':SLIT_WIDTH,'SLIT_LENGTH':
 ############################
 #Query SDSS for galaxy data#
 ############################
-#if os.path.isfile(datadir+clus_id+'/'+clus_id+'_sdssinfo.csv'):
-#    redshift_dat = pd.read_csv(datadir+clus_id+'/'+clus_id+'_sdssinfo.csv')
-#else:
-#    #returns a Pandas dataframe with columns
-#    #objID','SpecObjID','ra','dec','umag','gmag','rmag','imag','zmag','redshift','photo_z','extra'
-#    redshift_dat = query_galaxies(Gal_dat.RA,Gal_dat.DEC)
-#    redshift_dat.to_csv(datadir+clus_id+'/data_products/'+clus_id+'_sdssinfo.csv',index=False)
-#
-#
-##merge into Gal_dat
-#Gal_dat = Gal_dat.join(redshift_dat)
-#
-#gal_z = Gal_dat['spec_z']
-#gal_gmag = Gal_dat['gmag']
-#gal_rmag = Gal_dat['rmag']
-#gal_imag = Gal_dat['imag']
+if os.path.isfile(datadir+clus_id+'/'+clus_id+'_sdssinfo.csv'):
+    redshift_dat = pd.read_csv(datadir+clus_id+'/'+clus_id+'_sdssinfo.csv')
+else:
+    #returns a Pandas dataframe with columns
+    #objID','SpecObjID','ra','dec','umag','gmag','rmag','imag','zmag','redshift','photo_z','extra'
+    redshift_dat = query_galaxies(Gal_dat.RA,Gal_dat.DEC)
+    redshift_dat.to_csv(datadir+clus_id+'/data_products/'+clus_id+'_sdssinfo.csv',index=False)
+
+
+#merge into Gal_dat
+Gal_dat = Gal_dat.join(redshift_dat)
+
+gal_z = Gal_dat['spec_z']
+gal_gmag = Gal_dat['gmag']
+gal_rmag = Gal_dat['rmag']
+gal_imag = Gal_dat['imag']
 
 ####################
 #Open images in ds9#
@@ -319,11 +373,12 @@ d.set('regions sky fk5')
 ####################################################################################
 #Loop through mosaic image and decide if objects are galaxies, stars, sky, or other#
 ####################################################################################
-#skip_assign = 'n'
+#hack
+skip_assign = 'y'
 keys = np.arange(0,Gal_dat.SLIT_WIDTH.size,1).astype('string')
 #if os.path.isfile(datadir+clus_id+'/'+clus_id+'_slittypes.pkl'):
-#    reassign = (raw_input('Detected slit types file in path. Do you wish to use this (y) or remove and re-assign slit types (n)? '))
-skip_assign = 'y'
+#    skip_assign = (raw_input('Detected slit types file in path. Do you wish to use this (y) or remove and re-assign slit types (n)? '))
+#skip_assign = 'y'
 if skip_assign == 'n':
     slit_type = {}
     print('Is this a galaxy (g), a reference star (r), or empty sky (s)?')
@@ -362,10 +417,10 @@ d.set('zoom 0.40')
 #######################################
 #Reduction steps to prep science image#
 #######################################
-#skip_cr_remov = 'n'
+#hack
+skip_cr_remov = 'y'
 #if os.path.isfile(datadir+clus_id+'/data_products/science/'+clus_id+'_science.cr.fits'):
 #    skip_cr_remov = (raw_input('Detected cosmic ray filtered file exists. Do you wish to use this (y) or remove and re-calculate (n)? '))
-skip_cr_remov = 'y'
 if skip_cr_remov == 'n':
     try:
         os.remove(datadir+clus_id+'/data_products/science/'+clus_id+'_science.cr.fits')
@@ -416,10 +471,11 @@ else: arcfits_c = pyfits.open(datadir+clus_id+'/data_products/comp/'+clus_id+'_a
 ##################################################################
 #Loop through regions and shift regions for maximum effectiveness#
 ##################################################################
-reassign = 'n'
-if os.path.isfile(datadir+clus_id+'/'+clus_id+'_slit_pos_qual.tab'):
-    reassign = (raw_input('Detected slit position and quality file in path. Do you wish to use this (y) or remove and re-adjust (n)? '))
-if reassign == 'n':
+#hack
+skip_slitpositioning = 'y'
+#if os.path.isfile(datadir+clus_id+'/'+clus_id+'_slit_pos_qual.tab'):
+#    skip_slitpositioning = (raw_input('Detected slit position and quality file in path. Do you wish to use this (y) or remove and re-adjust (n)? '))
+if skip_slitpositioning == 'n':
     good_spectra = np.array(['n']*len(Gal_dat))
     FINAL_SLIT_X = np.zeros(len(Gal_dat))
     FINAL_SLIT_Y = np.zeros(len(Gal_dat))
@@ -514,7 +570,7 @@ else:
 Gal_dat['FINAL_SLIT_X'],Gal_dat['FINAL_SLIT_Y'],Gal_dat['SLIT_WIDTH'],Gal_dat['good_spectra'] = FINAL_SLIT_X,FINAL_SLIT_Y,BOX_WIDTH,good_spectra
 
 #Need to flip FINAL_SLIT_X coords to account for reverse wavelength spectra
-Gal_dat['FINAL_SLIT_X_FLIP'] = Gal_dat.FINAL_SLIT_X#binnedx - Gal_dat.FINAL_SLIT_X
+Gal_dat['FINAL_SLIT_X_FLIP'] = binnedx - Gal_dat.FINAL_SLIT_X# 
 #Gal_dat['FINAL_SLIT_X_FLIP'] = 4064 - Gal_dat.FINAL_SLIT_X
 ####################################################################
 
@@ -522,35 +578,38 @@ Gal_dat['FINAL_SLIT_X_FLIP'] = Gal_dat.FINAL_SLIT_X#binnedx - Gal_dat.FINAL_SLIT
 ########################
 #Wavelength Calibration#
 ########################
-reassign = 'n'
+#hack
+skip_wavelengthcalib = 'y'
 #wave = np.zeros((len(Gal_dat),4064))
-if os.path.isfile(datadir+clus_id+'/'+clus_id+'_stretchshift.tab'):
-    reassign = (raw_input('Detected file with stretch and shift parameters for each spectra. Do you wish to use this (y) or remove and re-adjust (n)? '))
-if reassign == 'n':
+#if os.path.isfile(datadir+clus_id+'/'+clus_id+'_stretchshift.tab'):
+#    skip_wavelengthcalib = (raw_input('Detected file with stretch and shift parameters for each spectra. Do you wish to use this (y) or remove and re-adjust (n)? '))
+if skip_wavelengthcalib == 'n':
     #create write file
     f = open(datadir+clus_id+'/'+clus_id+'_stretchshift.tab','w')
     f.write('#X_SLIT_FLIP     Y_SLIT     SHIFT     STRETCH     QUAD     CUBE     FOURTH    FIFTH    WIDTH \n')
     
     #initialize polynomial arrays
     fifth,fourth,cube,quad,stretch,shift =  np.zeros((6,len(Gal_dat)))
-    shift_est = 4763.0*np.ones(len(Gal_dat))#4.71e-6*(Gal_dat['FINAL_SLIT_X'] - (binnedx/2)-200)**2 + 4.30e-6*(Gal_dat['FINAL_SLIT_Y'] - (binnedy/2))**2 + binnedx
-    stretch_est = 1.96*np.ones(len(Gal_dat))#-9.75e-9*(Gal_dat['FINAL_SLIT_X'] - (binnedx/2)+100)**2 - 2.84e-9*(Gal_dat['FINAL_SLIT_Y'] - (binnedy/2))**2 + 0.7139
-    quad_est = 8.43e-9*(Gal_dat['FINAL_SLIT_X'] - (binnedx/2)+100) + 1.55e-10*(Gal_dat['FINAL_SLIT_Y'] - (binnedy/2)) + 1.3403e-5
-    cube_est = 7.76e-13*(Gal_dat['FINAL_SLIT_X'] - (binnedx/2)+100) + 4.23e-15*(Gal_dat['FINAL_SLIT_Y'] - (binnedy/2)) - 5.96e-9
+    shift_est = 5066.0+Gal_dat['FINAL_SLIT_X'][0]-Gal_dat['FINAL_SLIT_X']#4.71e-6*(Gal_dat['FINAL_SLIT_X'] - (binnedx/2)-200)**2 + 4.30e-6*(Gal_dat['FINAL_SLIT_Y'] - (binnedy/2))**2 + binnedx
+    stretch_est = 1.997*np.ones(len(Gal_dat))#-9.75e-9*(Gal_dat['FINAL_SLIT_X'] - (binnedx/2)+100)**2 - 2.84e-9*(Gal_dat['FINAL_SLIT_Y'] - (binnedy/2))**2 + 0.7139
+    quad_est = -0.000024*np.ones(len(Gal_dat))#8.43e-9*(Gal_dat['FINAL_SLIT_X'] - (binnedx/2)+100) + 1.55e-10*(Gal_dat['FINAL_SLIT_Y'] - (binnedy/2)) + 1.3403e-5
+    cube_est = (7.76e-13*(Gal_dat['FINAL_SLIT_X'][0] - (binnedx/2)+100) + 4.23e-15*(Gal_dat['FINAL_SLIT_Y'][0] - (binnedy/2)) - 5.96e-9)*np.ones(len(Gal_dat))
     fifth_est,fourth_est = np.zeros((2,len(Gal_dat)))
     calib_data = arcfits_c.data
     p_x = np.arange(0,binnedx,1)
     ii = 0
-    
+    #4763.0*np.ones(len(Gal_dat))# 1.96*np.ones(len(Gal_dat))#
     #do reduction for initial galaxy
     while ii <= stretch.size:
         if good_spectra[ii]=='y':
+            #pdb.set_trace()
             f_x = np.sum(spectra[keys[ii]]['arc_spec'],axis=0)[:binnedx]
             f_x = f_x[::wavelength_dir]
             if len(f_x) != len(p_x):
                 pdb.set_trace()
             d.set('pan to 1150.0 '+str(Gal_dat.FINAL_SLIT_Y[ii])+' physical') 
             d.set('regions command {box('+str(Gal_dat.SLIT_X[ii])+' '+str(Gal_dat.FINAL_SLIT_Y[ii])+' '+str(binnedx)+' '+str(Gal_dat.SLIT_WIDTH[ii])+') #color=green highlite=1}')
+            #pdb.set_trace()
             #pdb.set_trace()
             #initial stretch and shift
             stretch_est[ii],shift_est[ii],quad_est[ii] = interactive_plot(p_x,f_x,stretch_est[ii],shift_est[ii],quad_est[ii],cube_est[ii],fourth_est[ii],fifth_est[ii],Gal_dat.FINAL_SLIT_X_FLIP[ii],wm,fm,cal_states)
@@ -621,10 +680,10 @@ if reassign == 'n':
                 pdb.set_trace()            
             #fit 5th order polynomial to peak/line selections
             params,pcov = curve_fit(polyfour,(np.sort(browser.line_matches['peaks_p'])-Gal_dat.FINAL_SLIT_X_FLIP[ii]),np.sort(browser.line_matches['lines']),p0=[shift_est[ii],stretch_est[ii],quad_est[ii],cube_est[ii],1e-12,1e-12])
-            #cube_est = cube_est + params[3]
+            cube_est = cube_est + params[3]
             fourth_est = fourth_est + params[4]
             fifth_est = fifth_est + params[5]
-            
+            print(params)
             #make calibration and clip on lower anchor point. Apply to Flux as well
             wave_model =  params[0]+params[1]*(p_x-Gal_dat.FINAL_SLIT_X_FLIP[ii])+params[2]*(p_x-Gal_dat.FINAL_SLIT_X_FLIP[ii])**2+params[3]*(p_x-Gal_dat.FINAL_SLIT_X_FLIP[ii])**3.0+params[4]*(p_x-Gal_dat.FINAL_SLIT_X_FLIP[ii])**4.0+params[5]*(p_x-Gal_dat.FINAL_SLIT_X_FLIP[ii])**5.0
             spectra[keys[ii]]['wave'] = wave_model
@@ -674,21 +733,24 @@ if reassign == 'n':
         f.write('\n')
         ii+=1
 
-    usereducedlist = 'n'
-    usereducedlist = str((raw_input('Should we use the reduced line list for the remainder of the galaxies? (y) or (n)? '))).lower()
-    if usereducedlist:
-        wm_full = wm
-        fm_full = fm
-        wm = line_matches['lines'] #line positions
-        fm = line_matches['line_mags'] #line heights
+    #usereducedlist = 'n'
+
     #estimate stretch,shift,quad terms with sliders for 2nd - all galaxies
     for i in range(ii,len(Gal_dat)):
         print(('Calibrating',i,'of',stretch.size))
         if Gal_dat.good_spectra[i] == 'y':
+            #usereducedlist = str((raw_input('Should we use the reduced line list for the remainder of the galaxies? (y) or (n)? '))).lower()
+            #if usereducedlist:
+            #    wm_full = wm
+            #    fm_full = fm
+            #    wm = np.asarray(line_matches['lines']) #line positions
+            #    fm = np.asarray(line_matches['line_mags']) #line heights
+            #    pdb.set_trace()
             if sdss_check:
                 if Gal_dat.spec_z[i] != 0.0: skipgal = False
                 else: skipgal = True
             else: skipgal = False
+            skipgal = False
             if not skipgal:
                 p_x = np.arange(0,binnedx,1)
                 f_x = np.sum(spectra[keys[i]]['arc_spec'],axis=0)[:binnedx]
@@ -704,7 +766,7 @@ if reassign == 'n':
                 est_features = [fifth_est[i],fourth_est[i],cube_est[i],quad_est[i],stretch_est[i],shift_est[i]]
 
                 #run peak identifier and match lines to peaks
-                line_matches = {'lines':[],'peaks_p':[],'peaks_w':[],'peaks_h':[]}
+                line_matches = {'lines':[],'line_mags':[],'peaks_p':[],'peaks_w':[],'peaks_h':[]}
                 xspectra =  fifth_est[i]*(p_x-Gal_dat.FINAL_SLIT_X_FLIP[i])**5 + fourth_est[i]*(p_x-Gal_dat.FINAL_SLIT_X_FLIP[i])**4 + cube_est[i]*(p_x-Gal_dat.FINAL_SLIT_X_FLIP[i])**3 + quad_est[i]*(p_x-Gal_dat.FINAL_SLIT_X_FLIP[i])**2 + stretch_est[i]*(p_x-Gal_dat.FINAL_SLIT_X_FLIP[i]) + shift_est[i]
                 fydat = f_x - signal.medfilt(f_x,171) #used to find noise
                 fyreal = (f_x-f_x.min())/10.0
@@ -720,12 +782,14 @@ if reassign == 'n':
                 fypeak = fyrpeak[fypeak>noise] #significant peaks height
                 for j in range(wm.size):
                     line_matches['lines'].append(wm[j]) #line positions
-                    line_matches['peaks_p'].append(fxrpeak[np.argsort(np.abs(wm[j]-fxpeak))][0]) #closest peak (in pixels)
-                    line_matches['peaks_w'].append(fxpeak[np.argsort(np.abs(wm[j]-fxpeak))][0]) #closest peak (in wavelength)
-                    line_matches['peaks_h'].append(fypeak[np.argsort(np.abs(wm[j]-fxpeak))][0]) #closest peak (height)
+                    line_matches['line_mags'].append(fm[j])
+                    nearest_line = np.argsort(np.abs(wm[j]-fxpeak))
+                    line_matches['peaks_p'].append(fxrpeak[nearest_line][0]) #closest peak (in pixels)
+                    line_matches['peaks_w'].append(fxpeak[nearest_line][0]) #closest peak (in wavelength)
+                    line_matches['peaks_h'].append(fypeak[nearest_line][0]) #closest peak (height)
                 
                 #Pick lines for initial parameter fit
-                cal_states = {'Xe':True,'Ar':False,'HgNe':False,'Ne':False}
+                #cal_states = {'Xe':True,'Ar':False,'HgNe':False,'Ne':False}
                 fig,ax = plt.subplots(1)
                 
                 #maximize window
@@ -771,12 +835,12 @@ if reassign == 'n':
                 except TypeError:
                     params = [shift_est[i],stretch_est[i],quad_est[i],cube_est[i-1],fourth_est[i-1],fifth_est[i-1]]
 
-                
+                print(params)
                 #make calibration and clip on lower anchor point. Apply to Flux as well
                 wave_model = params[0]+params[1]*(p_x-Gal_dat.FINAL_SLIT_X_FLIP[i])+params[2]*(p_x-Gal_dat.FINAL_SLIT_X_FLIP[i])**2+params[3]*(p_x-Gal_dat.FINAL_SLIT_X_FLIP[i])**3.0+params[4]*(p_x-Gal_dat.FINAL_SLIT_X_FLIP[i])**4.0+params[5]*(p_x-Gal_dat.FINAL_SLIT_X_FLIP[i])**5.0
                 spectra[keys[i]]['wave'] = wave_model
                 spectra[keys[i]]['wave2'] = wave_model[p_x >= np.sort(browser.line_matches['peaks_p'])[0]]
-                spectra[keys[i]]['gal_spec2'] = ((np.array(spectra[keys[i]]['gal_spec']).T[::wavelength_dir])[p_x >= np.sort(browser.line_matches['peaks_p'])[0]]).T
+                spectra[keys[i]]['gal_spec2'] = ((np.array(spectra[keys[i]]['gal_spec']).T[:binnedx:wavelength_dir])[p_x >= np.sort(browser.line_matches['peaks_p'])[0]]).T
 
                 flu = f_x[p_x >= np.sort(browser.line_matches['peaks_p'])[0]] - np.min(f_x[p_x >= np.sort(browser.line_matches['peaks_p'])[0]])
                 #flu = flu[::-1]
@@ -786,7 +850,7 @@ if reassign == 'n':
                 plt.plot(wm,fm/np.max(fm),'ro')
                 for j in range(browser.wm.size):
                     plt.axvline(browser.wm[j],color='r')
-                plt.xlim(3800,6000)
+                plt.xlim(3800,7400)
                 try:
                     plt.savefig(datadir+clus_id+'/figs/'+str(i)+'.wave.png')
                 except:
@@ -832,13 +896,6 @@ Gal_dat['shift'],Gal_dat['stretch'],Gal_dat['quad'],Gal_dat['cube'],Gal_dat['fou
 #Redshift Calibrate#
 ####################
 
-#Import template spectrum (SDSS early type) and continuum subtract the flux
-early_type = pyfits.open('spDR2-023.fit')
-coeff0 = early_type[0].header['COEFF0']
-coeff1 = early_type[0].header['COEFF1']
-early_type_flux = early_type[0].data[0] - signal.medfilt(early_type[0].data[0],171)
-early_type_wave = 10**(coeff0 + coeff1*np.arange(0,early_type_flux.size,1))
-
 #initialize data arrays
 redshift_est = np.zeros(len(Gal_dat))
 cor = np.zeros(len(Gal_dat))
@@ -847,6 +904,7 @@ KSN = np.zeros(len(Gal_dat))
 GSN = np.zeros(len(Gal_dat))
 SNavg = np.zeros(len(Gal_dat))
 SNHKmin = np.zeros(len(Gal_dat))
+template = np.zeros(len(Gal_dat))
 
 sdss_elem = np.where(Gal_dat.spec_z > 0.0)[0]
 sdss_red = Gal_dat[Gal_dat.spec_z > 0.0].spec_z
@@ -855,8 +913,26 @@ qualityval = {'Clear':np.zeros(len(Gal_dat))}
 median_sdss_redshift = np.median(Gal_dat.spec_z[Gal_dat.spec_z > 0.0])
 print(('Median SDSS redshift',median_sdss_redshift))
 
-R = z_est()
 
+run_auto = False
+ 
+# **You can typically leave this be unless you have a custom run ** #
+# Create an instantiation of the z_est class for correlating spectra
+# To use default search of HK lines with no priors applied select True
+R = z_est(lower_w=3500.0,upper_w=7500.0,lower_z=0.05,upper_z=0.6,\
+          z_res=3.0e-5,prior_width=0.02,use_zprior=False,\
+          skip_initial_priors=True,\
+          auto_pilot=run_auto)
+     
+     
+template_names = ['spDR2-023.fit','spDR2-025.fit'] #['spDR2-0'+str(x)+'.fit' for x in np.arange(23,31)]
+template_dir='sdss_templates'   #hack
+
+path_to_temps = os.path.abspath(os.path.join(os.curdir,template_dir))  #hack
+#Import template spectrum (SDSS early type) and continuum subtract the flux
+R.add_sdsstemplates_fromfile(path_to_temps,template_names)
+                
+          
 for k in range(len(Gal_dat)):
     if Gal_dat.slit_type[k] == 'g' and Gal_dat.good_spectra[k] == 'y':
         if sdss_check:
@@ -864,21 +940,37 @@ for k in range(len(Gal_dat)):
             else: skipgal = True
         else: skipgal = False
         if not skipgal:
-            F1 = fftpack.rfft(Flux_science[k])
-            cut = F1.copy()
-            W = fftpack.rfftfreq(spectra[keys[k]]['wave2'].size,d=spectra[keys[k]]['wave2'][1001]-spectra[keys[k]]['wave2'][1000])
-            cut[np.where(W>0.15)] = 0
-            Flux_science2 = fftpack.irfft(cut)
-            Flux_sc = Flux_science2 - signal.medfilt(Flux_science2,171)
+            test_waveform = waveform(spectra[keys[k]]['wave2'],Flux_science[k],keys[k])
+            smoothed_waveform = test_waveform#smooth_waveform(test_waveform)
+            #F1 = fftpack.rfft(Flux_science[k])
+            #ut = F1.copy()
+            #W = fftpack.rfftfreq(spectra[keys[k]]['wave2'].size,d=spectra[keys[k]]['wave2'][1001]-spectra[keys[k]]['wave2'][1000])
+            #cut[np.where(W>0.15)] = 0
+            #Flux_science2 = fftpack.irfft(cut)
+            #Flux_sc = Flux_science2 - signal.medfilt(Flux_science2,171)
             d.set('pan to 1150.0 '+str(Gal_dat.FINAL_SLIT_Y[k])+' physical')
-            d.set('regions command {box(2000 '+str(Gal_dat.FINAL_SLIT_Y[k])+' 4500 '+str(Gal_dat.SLIT_WIDTH[k])+') #color=green highlite=1}')
-            redshift_est[k],cor[k],ztest,corr_val,qualityval['Clear'][k] = R.redshift_estimate(early_type_wave,early_type_flux,spectra[keys[k]]['wave2'],Flux_science2,gal_prior=None)
+            d.set('regions command {box('+str(Gal_dat.SLIT_X[k])+' '+str(Gal_dat.FINAL_SLIT_Y[k])+' '+str(binnedx)+' '+str(Gal_dat.SLIT_WIDTH[k])+') #color=green highlite=1}')
+            redshift_outputs = R.redshift_estimate(smoothed_waveform)
+            redshift_est[k] = redshift_outputs.best_zest
+            cor[k] = redshift_outputs.max_cor
+            ztest = redshift_outputs.ztest_vals
+            corr_val = redshift_outputs.corr_vals
+            template[k] = redshift_outputs.template.name
+            if not run_auto:
+                qualityval['Clear'][k] = redshift_outputs.qualityval
             try:
-                HSN[k],KSN[k],GSN[k] = sncalc(redshift_est[k],spectra[keys[k]]['wave2'],Flux_sc)
+                HSN[k],KSN[k],GSN[k] = sncalc(redshift_est[k],smoothed_waveform.wave,smoothed_waveform.continuum_subtracted_flux)
             except ValueError:
                 HSN[k],KSN[k],GSN[k] = 0.0,0.0,0.0
             SNavg[k] = np.average(np.array([HSN[k],KSN[k],GSN[k]]))
             SNHKmin[k] = np.min(np.array([HSN[k],KSN[k]]))
+       	# Create a summary plot of the best z-fit
+        if datadir:
+            savestr = 'redEst_%s_Tmplt%s.png' % (smoothed_waveform.name,redshift_outputs.template.name)  
+            plt_name = os.path.join(datadir,clus_id,'red_ests',savestr)
+            summary_plot(smoothed_waveform.wave, smoothed_waveform.flux, redshift_outputs.template.wave, \
+                        redshift_outputs.template.flux, redshift_outputs.best_zest, redshift_outputs.ztest_vals, \
+                        redshift_outputs.corr_vals, plt_name, smoothed_waveform.name, None) 
 
     else:
         redshift_est[k] = 0.0
@@ -892,20 +984,24 @@ for k in range(len(Gal_dat)):
 #Add redshift estimates, SN, Corr, and qualityflag to the Dataframe
 Gal_dat['est_z'],Gal_dat['cor'],Gal_dat['HSN'],Gal_dat['KSN'],Gal_dat['GSN'],Gal_dat['quality_flag'] = redshift_est,cor,HSN,KSN,GSN,qualityval['Clear']
 
-plt.plot(Gal_dat['spec_z'],Gal_dat['est_z'],'ro')
-#plt.plot(sdss_red,redshift_est2[sdss_elem.astype('int')],'bo')
-#plt.plot(sdss_red,redshift_est3[sdss_elem.astype('int')],'o',c='purple')
-plt.plot(sdss_red,sdss_red,'k')
-plt.savefig(datadir+clus_id+'/redshift_compare.png')
-plt.show()
+if np.any(Gal_dat['spec_z'] != 0):
+    plt.figure()
+    plt.plot(Gal_dat['spec_z'],Gal_dat['est_z'],'ro')
+    plt.plot([0,1],[0,1],'k-.')
+    plt.title('Redshift Comparison',size=18)
+    plt.xlabel('SDSS Spectroscopic Redshift',size=16)
+    plt.ylabel('This Spec Estimate',size=16)
+    plt.savefig(datadir+clus_id+'/redshift_compare.png')
+    plt.show()
 
 f = open(datadir+clus_id+'/estimated_redshifts.tab','w')
-f.write('#RA    DEC    Z_est    Z_sdss  correlation   H S/N    K S/N     G S/N  gal_gmag    gal_rmag    gal_imag\n')
+f.write('RA\tDEC\tZ_est\tZ_sdss\tcorrelation\tH_S/N\tK_S/N\tG_S/N\ttemplate\tgal_gmag\tgal_rmag\tgal_imag\n')
 for k in range(redshift_est.size):
     f.write(Gal_dat.RA[k]+'\t')
     f.write(Gal_dat.DEC[k]+'\t')
     f.write(str(Gal_dat.est_z[k])+'\t')
-    f.write(str(Gal_dat.spec_z[k])+'\t')
+    f.write(str(Gal_dat.spec_z[k])+'\t')\
+    #hack
     #if k in sdss_elem.astype('int'):
     #    f.write(str(sdss_red[sdss_elem==k].values[0])+'\t')
     #else:
@@ -914,11 +1010,20 @@ for k in range(redshift_est.size):
     f.write(str(HSN[k])+'\t')
     f.write(str(KSN[k])+'\t')
     f.write(str(GSN[k])+'\t')
-    #f.write(str(gal_gmag[k])+'\t')
-    #f.write(str(gal_rmag[k])+'\t')
-    #.write(str(gal_imag[k])+'\t')
+    f.write(str(template[k])+'\t')
+    f.write(str(gal_gmag[k])+'\t')
+    f.write(str(gal_rmag[k])+'\t')
+    f.write(str(gal_imag[k])+'\t')
     f.write('\n')
 f.close()
+
+
+plt.figure()
+plt.hist(Gal_dat['est_z'],bins = 50);
+plt.title('Redshift Histogram for Cluster SPT-CL 0549-6205  z~0.376\nMask 0, all qualities',size=18); 
+plt.ylabel('Number of Galaxies',size=16); 
+plt.xlabel('Estimated Redshift',size=16); 
+plt.savefig(datadir+clus_id+'/mask0_redshifthistogram.png')
 
 #Output dataframe
 Gal_dat.to_csv(datadir+clus_id+'/results.csv')

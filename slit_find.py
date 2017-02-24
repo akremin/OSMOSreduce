@@ -253,7 +253,7 @@ def slit_find(flux,science_flux,arc_flux,lower_lim,upper_lim,slitsize = 40,n_emp
     sky_sub = np.zeros(raw_gal.shape) + np.median(sky,axis=0)
     sky_sub_tot = np.zeros(d2_spectra_s.T.shape) + np.median(sky,axis=0)
     pdb.set_trace()
-    plt.imshow(np.log(d2_spectra_s.T),origin='lower')#aspect=35,
+    plt.imshow(np.log(d2_spectra_s.T),aspect=35,origin='lower')#
     plt.axhline(lower_gal,color='k',ls='--')
     plt.axhline(upper_gal,color='k',ls='--')
     plt.xlim(0,binnedx)
@@ -266,12 +266,12 @@ def slit_find(flux,science_flux,arc_flux,lower_lim,upper_lim,slitsize = 40,n_emp
     print 'gal dim:',raw_gal.shape
     print 'sky dim:',sky.shape
 
-    plt.imshow(np.log(d2_spectra_s.T-sky_sub_tot),origin='lower')#aspect=35,
+    plt.imshow(np.log(d2_spectra_s.T-sky_sub_tot),aspect=35,origin='lower')#aspect=35,
     plt.show()
 
-    plt.plot(np.arange(raw_gal.shape[1]),np.sum(raw_gal-sky_sub,axis=0)[::-1])
+    plt.plot(np.arange(raw_gal.shape[1]),np.sum(raw_gal-sky_sub,axis=0))
     plt.show()
-
+    
     return d2_spectra_s.T,d2_spectra_a.T,raw_gal-sky_sub,[lower_gal,upper_gal],slit_width
 
 if __name__ == '__main__':
