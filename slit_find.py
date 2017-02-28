@@ -62,6 +62,7 @@ def chip_background(pixels,flux):
 def identify_slits(pixels,flux,slit_y,slitsize = 40,n_emptypixs = 5,good_detect=True):
     """
     """
+    #pdb.set_trace()
     half_nepixs = (n_emptypixs-1.)/2.
     diff = flux[n_emptypixs:] - flux[:-n_emptypixs]
     diffpix = pixels[half_nepixs:][:diff.size]
@@ -126,6 +127,7 @@ def slit_find(flux,science_flux,arc_flux,lower_lim,upper_lim,slitsize = 40,n_emp
     ##
     #Idenfity slit position as function of x
     ##
+    #pdb.set_trace()
     slicesize = 20
     startingcol = 540
     endingcol = flux.shape[1]-np.mod(flux.shape[1],slicesize)-slicesize

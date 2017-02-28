@@ -1,7 +1,7 @@
 import numpy as np
 from astropy.io import fits as pyfits
 import matplotlib
-matplotlib.use('Qt4Agg')
+matplotlib.use('Qt5Agg')
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Button
 import scipy.signal as signal
@@ -11,7 +11,7 @@ import sys
 import subprocess
 import pickle
 import pdb
-from ds9 import ds9
+from pyds9 import DS9
 import copy
 import os
 import time
@@ -23,8 +23,9 @@ import fnmatch
 from get_photoz import query_galaxies
 from slit_find import slit_find
 from zestipy.data_structures import waveform, redshift_data, smooth_waveform
-from testopt import interactive_plot, air_to_vacuum, LineBrowser, polyfour
+from testopt import interactive_plot, LineBrowser, polyfour
 from sncalc import sncalc
+from calibrations import load_calibration_lines
 from scipy.signal import argrelextrema
 from zestipy.z_est import z_est
 from zestipy.plotting_tools import summary_plot
@@ -56,8 +57,11 @@ binnedy = 1256#1257    # this is in binned pixels
 binxpix_mid = int(binnedx/2)
 binypix_mid = int(binnedy/2)
 n_emptypixs = 5 # should be odd
+instrument = "GOODMAN"
 
-datadir = '/u/home/kremin/value_storage/goodman_jan17/'
+
+#datadir = '/u/home/kremin/value_storage/goodman_jan17/'
+datadir = '/home/kremin/SOAR_data/'
 
 # From goodman file header:
 #PARAM16 =                    0 / Serial Origin,Pixels                           
@@ -97,40 +101,11 @@ def filter_image(img):
     img_cr[bad] = img_sm[bad]
     return img_cr
 
-wm = []
-fm = []
-
-print(('Using calibration lamps: ', cal_lamp))
-
-if 'Xenon' in cal_lamp:
-    wm_Xe,fm_Xe = np.loadtxt('osmos_Xenon.dat',usecols=(0,2),unpack=True)
-    wm_Xe = air_to_vacuum(wm_Xe)
-    wm.extend(wm_Xe)
-    fm.extend(fm_Xe)
-if 'Argon' in cal_lamp:
-    wm_Ar,fm_Ar = np.loadtxt('osmos_Argon.dat',usecols=(0,2),unpack=True)
-    wm_Ar = air_to_vacuum(wm_Ar)
-    wm.extend(wm_Ar)
-    fm.extend(fm_Ar)
-if 'HgNe' in cal_lamp:
-    wm_HgNe,fm_HgNe = np.loadtxt('osmos_HgNe.dat',usecols=(0,2),unpack=True)
-    wm_HgNe = air_to_vacuum(wm_HgNe)
-    wm.extend(wm_HgNe)
-    fm.extend(fm_HgNe)
-if 'Neon' in cal_lamp:
-    wm_Ne,fm_Ne = np.loadtxt('osmos_Ne.dat',usecols=(0,2),unpack=True)
-    wm_Ne = air_to_vacuum(wm_Ne)
-    wm.extend(wm_Ne)
-    fm.extend(fm_Ne)
-
-fm = np.array(fm)[np.argsort(wm)]
-wm = np.array(wm)[np.argsort(wm)]
 
 
-cal_states = {'Xe':('Xenon' in cal_lamp),'Ar':('Argon' in cal_lamp),\
-'HgNe':('HgNe' in cal_lamp),'Ne':('Neon' in cal_lamp)}
+wm, fm, cal_states = load_calibration_lines(cal_lamp)
 
-instrument = "GOODMAN"
+
 ###################
 #Define Cluster ID#
 ###################
@@ -209,14 +184,8 @@ if len(hdulists_arc) < 1:
 #########################################################
 #Need to parse .txt file for slit information#
 ###########################################append
-RA = []
-DEC = []
-TYPE = []
-slit_NUM = []
-slit_X = []
-slit_Y = []
-slit_WIDTH = []
-slit_LENGTH = []    
+RA = []; DEC = []; TYPE = []; slit_NUM = []
+slit_X = []; slit_Y = []; slit_WIDTH = []; slit_LENGTH = []    
 if instrument.upper() == 'OSMOS':      
     for curfile in os.listdir(datadir+clus_id+'/maskfiles/'):
         if fnmatch.fnmatch(curfile, '*.oms'):
@@ -359,7 +328,7 @@ while True: #check to see if images have loaded correctly
         else:
             sys.exit('Check to make sure file '+image_file+' exists in '+datadir+clus_id+'/maskfiles/')
 
-d = ds9() #start pyds9 and set parameters
+d = DS9() #start pyds9 and set parameters
 d.set('frame 1')
 d.set('single')
 d.set('zscale contrast 9.04')
@@ -472,7 +441,7 @@ else: arcfits_c = pyfits.open(datadir+clus_id+'/data_products/comp/'+clus_id+'_a
 #Loop through regions and shift regions for maximum effectiveness#
 ##################################################################
 #hack
-skip_slitpositioning = 'y'
+skip_slitpositioning = 'n'
 #if os.path.isfile(datadir+clus_id+'/'+clus_id+'_slit_pos_qual.tab'):
 #    skip_slitpositioning = (raw_input('Detected slit position and quality file in path. Do you wish to use this (y) or remove and re-adjust (n)? '))
 if skip_slitpositioning == 'n':
@@ -525,6 +494,7 @@ if skip_slitpositioning == 'n':
                                 cutflatdat = flatfits_c.data[lowerbound:upperbound,:]
                                 cutscidat = scifits_c.data[lowerbound:upperbound,:]
                                 cutarcdat = arcfits_c.data[lowerbound:upperbound,:]
+                                pdb.set_trace()
                                 science_spec,arc_spec,gal_spec,gal_cuts,BOX_WIDTH[i] = slit_find(cutflatdat,cutscidat,cutarcdat,lower_lim,upper_lim,int(Gal_dat.SLIT_LENGTH[i]),n_emptypixs,int(Gal_dat.SLIT_Y[i]))
                                 spectra[keys[i]] = {'science_spec':science_spec,'arc_spec':arc_spec,'gal_spec':gal_spec,'gal_cuts':gal_cuts}
                                 print('Is this spectra good (y) or bad (n)?')
