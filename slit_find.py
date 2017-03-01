@@ -26,9 +26,17 @@ def _fullquadfit(dx,a,b,c):
     '''define quadratic galaxy fitting function'''
     return a*dx*dx + b*dx + c
 
-def _gaus(x,a,x0,c):
-    if a <= 0: a = np.inf
-    return a*np.exp(-(x-x0)**2/(2*4.0**2)) + c
+def _ellipsoid(dx,a,b,h,k):
+    '''define quadratic galaxy fitting function'''
+    #return k + b*np.sqrt(1.-(((dx-h)*(dx-h))/(a*a)))
+    psuedox2 = ((dx-h)*(dx-h))/(a*a)
+    sqrt_expansion = 1 + 0.5*psuedox2 - (psuedox2*psuedox2)/8. + (5/16.)*(psuedox2**3) - (5/128.)*(psuedox2**4)
+    return (k + b*sqrt_expansion)
+
+def _gaus(x,amp,sigma,x0,background):
+    if amp <= 0: amp = np.inf
+    # sig = 4.0
+    return amp*np.exp(-(x-x0)**2/(2*sigma**2)) + background
 
 def chip_background(pixels,flux):
     """
@@ -155,15 +163,21 @@ def slit_find(flux,science_flux,arc_flux,lower_lim,upper_lim,slitsize = 40,n_emp
     ax.plot(xpix,last,'r')
     
     class FitQuad:
-        def __init__(self,ax,xpix,first,last):
+        def __init__(self,ax,xpix,first,last,fitting_function,initial_conds):
             self.startx,self.endx=0,0
             self.upper, = ax.plot(xpix,np.zeros(xpix.size),'g',lw=2)
             self.lower, = ax.plot(xpix,np.zeros(xpix.size),'g',lw=2)
             self.first = first
             self.last = last
-            self.xpix = xpix
-            self.user_offset = 0
-        
+            self.xpix = xpix - binxpix_mid
+            self.user_offset = 0.
+            self.fitting_function = fitting_function
+            self.slitwidth = 10
+            self.pof = np.asarray(initial_conds)
+            self.pol = self.pof.copy()
+            self.pol[-1] = self.pol[-1]+self.slitwidth
+
+
         def fitting(self,lower_lim,upper_lim):
             self.lower_lim=lower_lim
             self.upper_lim = upper_lim
@@ -173,19 +187,19 @@ def slit_find(flux,science_flux,arc_flux,lower_lim,upper_lim,slitsize = 40,n_emp
                 if np.sum(~mask) ==0:
                     continue
                 xmask = np.ma.array(self.xpix[self.lower_lim:self.upper_lim],mask=mask)
-                popt,pcov = curve_fit(_fullquadfit,xmask.compressed()-binxpix_mid,self.first[self.lower_lim:self.upper_lim].compressed(),p0=[1e-4,1e-4,50])
-                self.first = np.ma.masked_where(np.abs(self.first - _fullquadfit(self.xpix-binxpix_mid,*popt)) >= 2*n_emptypixs,self.first)
+                popt,pcov = curve_fit(self.fitting_function,xmask.compressed(),self.first[self.lower_lim:self.upper_lim].compressed(),p0=self.pof,maxfev = 100000)
+                self.first = np.ma.masked_where(np.abs(self.first - self.fitting_function(self.xpix,*popt)) >= 2*n_emptypixs,self.first)
             for i in range(3):
                 #pdb.set_trace()
-                mask = np.ma.getmask(self.last[self.lower_lim:self.upper_lim])
+                mask2 = np.ma.getmask(self.last[self.lower_lim:self.upper_lim])
                 if np.sum(~mask) ==0:
                     continue
-                xmask = np.ma.array(self.xpix[self.lower_lim:self.upper_lim],mask=mask)
-                popt2,pcov2 = curve_fit(_fullquadfit,xmask.compressed()-binxpix_mid,self.last[self.lower_lim:self.upper_lim].compressed(),p0=[1e-4,1e-4,50])
-                self.last = np.ma.masked_where(np.abs(self.last - _fullquadfit(self.xpix-binxpix_mid,*popt2)) >= 2*n_emptypixs,self.last)
-
-            self.popt_avg = [np.average([popt[0],popt2[0]]),np.average([popt[1],popt2[1]]),popt[2]-self.user_offset]
-            self.slitwidth = popt2[2]-popt[2]+self.user_offset
+                xmask2 = np.ma.array(self.xpix[self.lower_lim:self.upper_lim],mask=mask2)
+                popt2,pcov2 = curve_fit(self.fitting_function,xmask2.compressed(),self.last[self.lower_lim:self.upper_lim].compressed(),p0=self.pol,maxfev = 100000)
+                self.last = np.ma.masked_where(np.abs(self.last - self.fitting_function(self.xpix,*popt2)) >= 2*n_emptypixs,self.last)
+            self.popt_avg = 0.5*(popt+popt2)
+            self.popt_avg[-1] = popt[-1]-self.user_offset
+            self.slitwidth = popt2[-1]-popt[-1]+self.user_offset
             self.plot_fit()
             return self.popt_avg
 
@@ -206,63 +220,78 @@ def slit_find(flux,science_flux,arc_flux,lower_lim,upper_lim,slitsize = 40,n_emp
             #    self.fitting(lower_lim=self.lower_lim,upper_lim=self.upper_lim)
                 
         def plot_fit(self):
-            self.upper.set_ydata(_fullquadfit(self.xpix-binxpix_mid,*self.popt_avg))
-            self.lower.set_ydata(_fullquadfit(self.xpix-binxpix_mid,self.popt_avg[0],self.popt_avg[1],self.popt_avg[2]+self.slitwidth))
+            self.upper.set_ydata(self.fitting_function(self.xpix,*self.popt_avg))
+            cop = self.popt_avg.copy()
+            cop[-1] = cop[-1]+self.slitwidth
+            self.lower.set_ydata(self.fitting_function(self.xpix,*cop))
             plt.draw()
     
     
     ##
     ## Fit quadratic
     ##
-    Sel = FitQuad(ax,xpix,first,last)
+    fitting_function = _fullquadfit
+    init_conds = np.asarray([1e-4,1e-4,1e-4])
+    #fitting_function = _ellipsoid
+    #init_conds = np.asarray([10.,10.,0.,0.])
+
+    
+    Sel = FitQuad(ax,xpix,first,last,fitting_function,init_conds)
     Sel.fitting(lower_lim,upper_lim)
     xdat = RectangleSelector(ax, Sel.onselect, drawtype='box')
     plt.show()
     popt_avg = Sel.popt_avg
     lower_lim = Sel.lower_lim
-    slit_width = Sel.slitwidth
+    slit_width = np.round(Sel.slitwidth).astype(int)
     
     
     ##
     ## cut out slit
     ##
-    d2_spectra_s = np.zeros((science_flux.shape[1],slitsize))
-    d2_spectra_a = np.zeros((arc_flux.shape[1],slitsize))
+    d2_spectra_s = np.zeros((science_flux.shape[1],slit_width))
+    d2_spectra_a = np.zeros((arc_flux.shape[1],slit_width))
+    xvals = np.arange(0,arc_flux.shape[1],1)
+    lower_yvals = fitting_function(xvals-binxpix_mid,*popt_avg)
+    lower_yinds = np.round(lower_yvals).astype(int)
+    higher_yinds = lower_yinds + slit_width
     for i in range(science_flux.shape[1]):
-        yvals = np.arange(0,science_flux.shape[0],1)
-        fullquadfitvals = _fullquadfit(i-binxpix_mid,*popt_avg)
-        yvalmask = np.where( (yvals >= fullquadfitvals) & (yvals <= (fullquadfitvals + slitsize + n_emptypixs)) )
-        d2_spectra_s[i] = science_flux[:,i][yvalmask][:slitsize]
-        d2_spectra_a[i] = arc_flux[:,i][yvalmask][:slitsize]
+        d2_spectra_s[i] = science_flux[lower_yinds[i]:higher_yinds[i],i]
+        d2_spectra_a[i] = arc_flux[lower_yinds[i]:higher_yinds[i],i]
+        
+    #    yvals = np.arange(0,science_flux.shape[0],1)
+    #    fullquadfitvals = fitting_function(i-binxpix_mid,*popt_avg)
+    #    yvalmask = np.where( (yvals >= fullquadfitvals) & (yvals <= (fullquadfitvals + slit_width)) ) #  + n_emptypixs
+    #    d2_spectra_s[i] = science_flux[:,i][yvalmask][:slit_width]
+    #    d2_spectra_a[i] = arc_flux[:,i][yvalmask][:slit_width]
 
     ##
     ## Identify and cut out galaxy light
     ##
-    #pdb.set_trace()
-    gal_guess = np.arange(0,slitsize,1)[np.median(d2_spectra_s.T/np.max(d2_spectra_s),axis=1)== \
+    pdb.set_trace()
+    gal_guess = np.arange(0,slit_width,1)[np.median(d2_spectra_s.T/np.max(d2_spectra_s),axis=1)== \
                                         np.max(np.median(d2_spectra_s.T/np.max(d2_spectra_s),axis=1))][0]
-    popt_g,pcov_g = curve_fit(_gaus,np.arange(0,slitsize,1),np.median(d2_spectra_s.T/np.max(d2_spectra_s),axis=1),p0=[1,gal_guess,0],maxfev = 8000)
-    gal_pos = popt_g[1]
-    gal_wid = 4.0
+    #_gaus(x,amp,sigma,x0,background)
+    popt_g,pcov_g = curve_fit(_gaus,np.arange(0,slit_width,1),np.median(d2_spectra_s.T/np.max(d2_spectra_s),axis=1),p0=[1,4.0,gal_guess,0],maxfev = 10000)
+    gal_amp,gal_pos,gal_wid,sky_val = popt_g
+    #gal_wid = popt_g[1]#4.0
     #if gal_wid > 5: gal_wid=5
     
     upper_gal = gal_pos + gal_wid*2.0
     lower_gal = gal_pos - gal_wid*2.0
-    if upper_gal >= slitsize: upper_gal = (slitsize-1)
+    if upper_gal >= slit_width: upper_gal = (slit_width-1)
     if lower_gal <= 0: lower_gal = 0
     raw_gal = d2_spectra_s.T[lower_gal:upper_gal,:]
     sky = np.append(d2_spectra_s.T[:lower_gal,:],d2_spectra_s.T[upper_gal:,:],axis=0)
     sky_sub = np.zeros(raw_gal.shape) + np.median(sky,axis=0)
     sky_sub_tot = np.zeros(d2_spectra_s.T.shape) + np.median(sky,axis=0)
-    pdb.set_trace()
     plt.imshow(np.log(d2_spectra_s.T),aspect=35,origin='lower')#
     plt.axhline(lower_gal,color='k',ls='--')
     plt.axhline(upper_gal,color='k',ls='--')
     plt.xlim(0,binnedx)
     plt.show()
 
-    plt.plot(np.arange(0,slitsize,1),_gaus(np.arange(0,slitsize,1),*popt_g))
-    plt.plot(np.arange(0,slitsize,1),np.median(d2_spectra_s.T/np.max(d2_spectra_s),axis=1))
+    plt.plot(np.arange(0,slit_width,1),_gaus(np.arange(0,slit_width,1),*popt_g))
+    plt.plot(np.arange(0,slit_width,1),np.median(d2_spectra_s.T/np.max(d2_spectra_s),axis=1))
     plt.show()
     
     print 'gal dim:',raw_gal.shape
@@ -271,9 +300,24 @@ def slit_find(flux,science_flux,arc_flux,lower_lim,upper_lim,slitsize = 40,n_emp
     plt.imshow(np.log(d2_spectra_s.T-sky_sub_tot),aspect=35,origin='lower')#aspect=35,
     plt.show()
 
-    plt.plot(np.arange(raw_gal.shape[1]),np.sum(raw_gal-sky_sub,axis=0))
+    plt.plot(np.arange(raw_gal.shape[1]),np.sum(raw_gal-sky_sub,axis=0),'b-')
+    plt.plot(np.arange(raw_gal.shape[1]),np.median(sky,axis=0),'r-')
     plt.show()
     
+    plt.figure(); 
+    plt.subplot(311); 
+    plt.imshow(np.log(d2_spectra_s.T),aspect=35,origin='lower');
+    plt.axhline(lower_gal,color='k',ls='--'); 
+    plt.axhline(upper_gal,color='k',ls='--'); 
+    plt.subplot(312); 
+    plt.imshow(np.log(sky_sub_tot),aspect=35,origin='lower'); 
+    plt.subplot(313); 
+    plt.imshow(np.log(d2_spectra_s.T-sky_sub_tot),aspect=35,origin='lower'); 
+    plt.axhline(lower_gal,color='k',ls='--'); 
+    plt.axhline(upper_gal,color='k',ls='--'); 
+    plt.show()
+    
+    pdb.set_trace()
     return d2_spectra_s.T,d2_spectra_a.T,raw_gal-sky_sub,[lower_gal,upper_gal],slit_width
 
 if __name__ == '__main__':

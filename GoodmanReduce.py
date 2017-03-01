@@ -1,7 +1,13 @@
 import numpy as np
 from astropy.io import fits as pyfits
 import matplotlib
-matplotlib.use('Qt5Agg')
+import os
+if os.environ['HOSTNAME'] == 'umdes7.physics.lsa.umich.edu':
+    matplotlib.use('Qt4Agg')
+    from ds9 import ds9 as DS9
+else:
+    matplotlib.use('Qt5Agg')
+    from pyds9 import DS9
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Button
 import scipy.signal as signal
@@ -11,11 +17,8 @@ import sys
 import subprocess
 import pickle
 import pdb
-from pyds9 import DS9
 import copy
-import os
 import time
-
 import re
 import pandas as pd
 import fnmatch
@@ -59,9 +62,11 @@ binypix_mid = int(binnedy/2)
 n_emptypixs = 5 # should be odd
 instrument = "GOODMAN"
 
-
-#datadir = '/u/home/kremin/value_storage/goodman_jan17/'
-datadir = '/home/kremin/SOAR_data/'
+#hack
+if os.environ['HOSTNAME'] == 'umdes7.physics.lsa.umich.edu':
+    datadir = '/u/home/kremin/value_storage/goodman_jan17/'
+else:
+    datadir = '/home/kremin/SOAR_data/'
 
 # From goodman file header:
 #PARAM16 =                    0 / Serial Origin,Pixels                           
@@ -494,7 +499,7 @@ if skip_slitpositioning == 'n':
                                 cutflatdat = flatfits_c.data[lowerbound:upperbound,:]
                                 cutscidat = scifits_c.data[lowerbound:upperbound,:]
                                 cutarcdat = arcfits_c.data[lowerbound:upperbound,:]
-                                pdb.set_trace()
+                                #pdb.set_trace()
                                 science_spec,arc_spec,gal_spec,gal_cuts,BOX_WIDTH[i] = slit_find(cutflatdat,cutscidat,cutarcdat,lower_lim,upper_lim,int(Gal_dat.SLIT_LENGTH[i]),n_emptypixs,int(Gal_dat.SLIT_Y[i]))
                                 spectra[keys[i]] = {'science_spec':science_spec,'arc_spec':arc_spec,'gal_spec':gal_spec,'gal_cuts':gal_cuts}
                                 print('Is this spectra good (y) or bad (n)?')
