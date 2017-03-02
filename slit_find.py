@@ -272,14 +272,14 @@ def slit_find(flux,science_flux,arc_flux,lower_lim,upper_lim,slitsize = 40,n_emp
                                         np.max(np.median(d2_spectra_s.T/np.max(d2_spectra_s),axis=1))][0]
     #_gaus(x,amp,sigma,x0,background)
     popt_g,pcov_g = curve_fit(_gaus,np.arange(0,slit_width,1),np.median(d2_spectra_s.T/np.max(d2_spectra_s),axis=1),p0=[1,4.0,gal_guess,0],maxfev = 10000)
-    gal_amp,gal_pos,gal_wid,sky_val = popt_g
+    gal_amp,gal_wid,gal_pos,sky_val = popt_g
     #gal_wid = popt_g[1]#4.0
     #if gal_wid > 5: gal_wid=5
     
     upper_gal = gal_pos + gal_wid*2.0
     lower_gal = gal_pos - gal_wid*2.0
-    if upper_gal >= slit_width: upper_gal = (slit_width-1)
-    if lower_gal <= 0: lower_gal = 0
+    if upper_gal >= slit_width: upper_gal = (slit_width-2)
+    if lower_gal <= 0: lower_gal = 2
     raw_gal = d2_spectra_s.T[lower_gal:upper_gal,:]
     sky = np.append(d2_spectra_s.T[:lower_gal,:],d2_spectra_s.T[upper_gal:,:],axis=0)
     sky_sub = np.zeros(raw_gal.shape) + np.median(sky,axis=0)
