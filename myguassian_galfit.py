@@ -10,7 +10,8 @@ Created on Wed Mar  1 23:10:11 2017
 #import numpy as np
 #import matplotlib.pyplot as plt
 #from scipy.optimize import curve_fit
-#with open('../../goodman_jan17/Kremin10/Kremin10_reduced_spectra.pkl','rb') as pklfil:  #SOAR_data/Kremin10/Kremin10_reduced_spectra.pkl'
+#data_dir = 'SOAR_data' # 'goodman_jan17'
+#with open('../../'+data_dir+'/Kremin10/Kremin10_reduced_spectra.pkl','rb') as pklfil:  #SOAR_data/Kremin10/Kremin10_reduced_spectra.pkl'
 #    specdict = pkl.load(pklfil)
 #dict1 = specdict['0']
 #arcspec1 = dict1['arc_spec']
@@ -60,16 +61,22 @@ galamps = np.zeros(cutncols)
 galposs = np.zeros(cutncols)
 galwids = np.zeros(cutncols)
 skyvals = np.zeros(cutncols)
+badpos = []
+badwid = []
 for i,col in enumerate(cut_xvals):
     try:
         popt_g,pcov_g = curve_fit(_gaus,yvals,d2_spectra_s[col,:],p0=[1,4.0,gal_guess,np.min(d2_spectra_s[col,:])],maxfev = 100000)
         popt_g[1] = np.abs(popt_g[1])
         #gal_amp,sky_val = popt_g[0],popt_g[3]
-        if popt_g[2] < slit_width and popt_g[2] > 0:
+        if popt_g[2] < 2*slit_width and popt_g[2] > -slit_width:     #slit_width  0
             gal_pos = popt_g[2]
+        else:
+            badpos.append(col)
         # else use value from previous index
-        if popt_g[1] < slit_width:
+        if popt_g[1] < 2*slit_width:
             gal_wid = popt_g[1]
+        else:
+            badwid.append(col)
         # else use value from previous index
     except:
         # if something breaks, implicitly use the previous iterations fit values for this index
@@ -81,7 +88,8 @@ for i,col in enumerate(cut_xvals):
 galwids_fitparams,pcov = curve_fit(_fullquadfit,cut_xvals,galwids,p0=[1e-4,1e-4,1e-4],maxfev = 100000)
 #fitd_galposs = _fullquadfit(cut_xvals,*galposs_fitparams)
 cutxmask = np.ones(len(cut_xvals)).astype(bool)
-for i in range(3):
+
+for i in range(10):
     tempfitd_galwids = _fullquadfit(cut_xvals[cutxmask],*galwids_fitparams)
     dgalwids = tempfitd_galwids-galwids[cutxmask]
     deviants_mask = np.where(np.abs(dgalwids)>3*np.std(dgalwids))
