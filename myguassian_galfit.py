@@ -6,11 +6,11 @@ Created on Wed Mar  1 23:10:11 2017
 @author: kremin
 """
 
-import pickle as pkl
-import numpy as np
-import matplotlib.pyplot as plt
-from scipy.optimize import curve_fit
-#with open('../../SOAR_data/Kremin10/Kremin10_reduced_spectra.pkl','rb') as pklfil:
+#import pickle as pkl
+#import numpy as np
+#import matplotlib.pyplot as plt
+#from scipy.optimize import curve_fit
+#with open('../../goodman_jan17/Kremin10/Kremin10_reduced_spectra.pkl','rb') as pklfil:  #SOAR_data/Kremin10/Kremin10_reduced_spectra.pkl'
 #    specdict = pkl.load(pklfil)
 #dict1 = specdict['0']
 #arcspec1 = dict1['arc_spec']
@@ -29,8 +29,8 @@ from scipy.optimize import curve_fit
 #sky = np.append(d2_spectra_s.T[:lower_gal,:],d2_spectra_s.T[upper_gal:,:],axis=0)
 #sky_sub = np.zeros(raw_gal.shape) + np.median(sky,axis=0)
 #sky_sub_tot = np.zeros(d2_spectra_s.T.shape) + np.median(sky,axis=0)
-lowerpix = 500
-upperpix = -20
+#lowerpix = 500
+#upperpix = -20
 
 def _fullquadfit(dx,a,b,c):
     '''define quadratic galaxy fitting function'''
@@ -78,14 +78,21 @@ for i,col in enumerate(cut_xvals):
     galamps[i],galwids[i],galposs[i],skyvals[i] = gal_amp,gal_wid,gal_pos,sky_val
 
 
-
-
-galposs_fitparams,pcov = curve_fit(_fullquadfit,cut_xvals,galposs,p0=[1e-4,1e-4,1e-4],maxfev = 100000)
 galwids_fitparams,pcov = curve_fit(_fullquadfit,cut_xvals,galwids,p0=[1e-4,1e-4,1e-4],maxfev = 100000)
+#fitd_galposs = _fullquadfit(cut_xvals,*galposs_fitparams)
+cutxmask = np.ones(len(cut_xvals)).astype(bool)
+for i in range(3):
+    tempfitd_galwids = _fullquadfit(cut_xvals[cutxmask],*galwids_fitparams)
+    dgalwids = tempfitd_galwids-galwids[cutxmask]
+    deviants_mask = np.where(np.abs(dgalwids)>3*np.std(dgalwids))
+    cutxmask[deviants_mask] = False   
+    galwids_fitparams,pcov = curve_fit(_fullquadfit,cut_xvals[cutxmask],galwids[cutxmask],p0=[1e-4,1e-4,1e-4],maxfev = 100000)
+    
 
+galposs_fitparams,pcov = curve_fit(_fullquadfit,cut_xvals[cutxmask],galposs[cutxmask],p0=[1e-4,1e-4,1e-4],maxfev = 100000)
 xvals = np.arange(ncols)
-fitd_galposs = _fullquadfit(xvals,*galposs_fitparams)
 fitd_galwids = _fullquadfit(xvals,*galwids_fitparams)
+fitd_galposs = _fullquadfit(xvals,*galposs_fitparams)
 
 naivegalflux = np.zeros(ncols)
 naiveskyflux = np.zeros(ncols)
@@ -94,6 +101,8 @@ fitskyflux = np.zeros(ncols)
 fitgalamps = np.zeros(ncols)
 fitskyamps = np.zeros(ncols)
 totalflux = np.sum(d2_spectra_s,axis=1)
+bad_xvals = cut_xvals[~cutxmask]
+
 for i in xvals:
     try:
         dy_over_sigmas = (yvals-fitd_galposs[i])/fitd_galwids[i]
@@ -107,30 +116,61 @@ for i in xvals:
     fitskyamps[i] = sky_val
     naiveskyflux[i] = slit_width*sky_val
     naivegalflux[i] = totalflux[i] - naiveskyflux[i]
-    fitgalflux[i] = np.sum(_constrained_gaus(dy_over_sigmas,gal_amp,0.))
+    constraind_guasfit = _constrained_gaus(dy_over_sigmas,gal_amp,0.)
+    fitgalflux[i] = np.sum(constraind_guasfit)
     fitskyflux[i] = totalflux[i] - fitgalflux[i]
+    if i in bad_xvals:
+        plt.figure()
+        plt.plot(yvals,constraind_guasfit,'b-')
+        plt.plot(yvals,constraind_guasfit+sky_val,'y-')
+        plt.plot(yvals,d2_spectra_s[i,:],'g-')
+        plt.title('Column i='+str(i)+' bad fit')
+        plt.show()
+        
+
+tempfitd_galwids = _fullquadfit(cut_xvals[cutxmask],*galwids_fitparams)
+dgalwids = tempfitd_galwids-galwids[cutxmask]
+deviants_mask = np.where(np.abs(dgalwids)>3*np.std(dgalwids))
+cutxmask[deviants_mask] = False 
+good_xvals = cut_xvals[cutxmask]
+fullxmask = good_xvals # since xvals is just 0 to ncols, values are same as index
+#xvalmask = np.zeros(ncols).astype(bool)
+#good_xvals = xvals[goodcol_inds]
 
 
-    
+
 plt.figure()
 plt.subplot(211)
 plt.title('Sky  b = fitted  r = naive')
-plt.plot(np.arange(ncols),fitskyflux,'b-')
-plt.plot(np.arange(ncols),naiveskyflux,'r-')
+plt.plot(xvals,fitskyflux,'b-')
+plt.plot(xvals,naiveskyflux,'r-')
 plt.subplot(212)
 plt.title('Galaxies  b = fitted  r = naive')
-plt.plot(np.arange(ncols),fitgalflux,'b-')
-plt.plot(np.arange(ncols),naivegalflux,'r-')
+plt.plot(good_xvals,fitgalflux[fullxmask],'b-')
+plt.plot(good_xvals,naivegalflux[fullxmask],'r-')
 plt.show()
 plt.figure()
-plt.plot(np.arange(ncols),fitskyflux,'b-.',alpha=0.4)
-plt.plot(np.arange(ncols),naiveskyflux,'r-.',alpha=0.4,label='Naive')
-plt.plot(np.arange(ncols),naivegalflux,'r-',alpha=0.4)
-plt.plot(np.arange(ncols),np.sum(raw_gal-sky_sub,axis=0),'g-',alpha=0.4,label='Dans')
-plt.plot(np.arange(ncols),np.median(sky,axis=0)*slit_width,'g-.',alpha=0.4)
+plt.plot(good_xvals,fitgalflux[fullxmask],'b-',alpha=0.4,label='Fitted')
+plt.plot(xvals,fitskyflux,'b-.',alpha=0.4)
+plt.plot(xvals,naiveskyflux,'r-.',alpha=0.4,label='Naive')
+plt.plot(good_xvals,naivegalflux[fullxmask],'r-',alpha=0.4)
+plt.plot(xvals,np.sum(raw_gal-sky_sub,axis=0),'g-',alpha=0.4,label='Dans')
+plt.plot(xvals,np.median(sky,axis=0)*slit_width,'g-.',alpha=0.4)
 plt.legend(loc='best')
 plt.show()
 plt.figure()
-plt.plot(xvals,fitd_galposs); plt.plot(cut_xvals,galposs); plt.show()
+plt.plot(xvals,fitd_galposs);
+plt.plot(good_xvals,galposs[cutxmask])
+plt.plot(cut_xvals,galposs)
+plt.show()
 plt.figure()
-plt.plot(xvals,fitd_galwids); plt.plot(cut_xvals,galwids); plt.show()
+plt.plot(xvals,fitd_galwids)
+plt.plot(good_xvals,galwids[cutxmask])
+plt.plot(cut_xvals,galwids)
+plt.show()
+
+fitd_galposs
+fitd_galwids
+fitgalamps
+fitskyamps
+
