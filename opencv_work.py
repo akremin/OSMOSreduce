@@ -2,9 +2,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 import cv2
 import astropy.io.fits as fits
-
-
-
+import os
+import pdb
+from scipy.signal import argrelextrema
 
 
 def plotcanny(img,minis,maxis):
@@ -100,14 +100,19 @@ def edges(img):
     plt.show()
 
 def load_image(typeoffile):
+    if os.environ['HOSTNAME'] == 'umdes7.physics.lsa.umich.edu':
+        data_dir =  'goodman_jan17'# 
+    else:
+        data_dir = 'SOAR_data'
+
     if typeoffile[:3].lower() == 'sci':
-        filename = './SOAR_data/Kremin10/data_products/science/Kremin10_science.cr.fits'
+        filename = '../../'+data_dir+'/Kremin10/data_products/science/Kremin10_science.cr.fits'
     if typeoffile[:3].lower() == 'arc':                                            
-        filename = './SOAR_data/Kremin10/data_products/comp/Kremin10_arc.cr.fits'
+        filename = '../../'+data_dir+'/Kremin10/data_products/comp/Kremin10_arc.cr.fits'
     if typeoffile[:3].lower() == 'com':                                            
-         filename = './SOAR_data/Kremin10/data_products/comp/Kremin10_arc.cr.fits'
+         filename = '../../'+data_dir+'/Kremin10/data_products/comp/Kremin10_arc.cr.fits'
     if typeoffile[:3].lower() == 'fla':                                            
-        filename = './SOAR_data/Kremin10/data_products/flat/Kremin10_flat.cr.fits'   
+        filename ='../../'+data_dir+'/Kremin10/data_products/flat/Kremin10_flat.cr.fits'   
     ft = fits.open(filename)
     imgdata = ft[0].data
     ft.close()
@@ -117,6 +122,24 @@ def load_image(typeoffile):
     templateo = imgo[572:578,1200:-400]
     template = img[572:578,1200:-400]
     return imgo,img,templateo,template
+
+
+def load_file(filename):
+    ft = fits.open(filename)
+    imgdata = ft[0].data
+    if len(imgdata.shape)==3:
+        imgdata = imgdata[0]
+    #pdb.set_trace()
+    ft.close()
+    for i in range(100):
+        imgdata = cv2.medianBlur(imgdata,5) 
+    imgdata_0 = imgdata-np.min(imgdata)
+    imgo = (255.*(imgdata_0/np.max(imgdata_0))).astype(np.uint8)
+    img = cv2.medianBlur(imgo,5)
+    templateo = imgo[572:578,1200:-400]
+    template = img[572:578,1200:-400]
+    return imgo,img,templateo,template
+
 
 def matched_filter(imgg,template):
      img = imgg.copy()
@@ -153,13 +176,53 @@ def huffcircles():
     cv2.destroyAllWindows()
 
 
-plotcanny(img,[45,145,33],[155,255,33])
-thresh(img,180,31,2)
-plotcannysingle(img,[5,255,40],[105,255,30],21)
-plotcannysingle(img,[5,255,40],[105,255,30],101)
-edges(img)
-plotcannysingle(img,[1,26,5],[180,250,10],5)
-imgo,img,templateo,template = load_image('comp')
+#imgo,img,templateo,template = load_image('science')
+#plotcanny(img,[45,145,33],[155,255,33])
+#thresh(img,180,31,2)
+#plotcannysingle(img,[5,255,40],[105,255,30],21)
+#plotcannysingle(img,[5,255,40],[105,255,30],101)
+#edges(img)
+#plotcannysingle(img,[1,26,5],[180,250,10],5)
+#imgo,img,templateo,template = load_image('comp')
+#
+#matched_filter(img,template)
 
-matched_filter(img,template)
+# vast vast majority of pixels are below ~10-20 in this normalization
+name = 'flat'
+low = 10
+high = 240
+imgo,img,templateo,template = load_image(name)
+edges = cv2.Canny(img,low,high)#,11)
+plt.figure()
+plt.subplot(111),plt.imshow(edges,cmap = 'gray')
+plt.title('Edge Image'+str(low)+' '+str(high)+' '+name), plt.xticks([]), plt.yticks([])
+plt.show()
+#flatfiles = [x for x in os.listdir('.') if x.split('.')[-1]=='fits']
+#for name in flatfiles:
+#    imgo,img,templateo,template = load_file(name)
+#    edges = cv2.Canny(img,10,240,11)
+#    plt.figure()
+#    plt.subplot(111),plt.imshow(edges,cmap = 'gray')
+#    plt.title('Edge Image'+str(20)+' '+str(240)+' '+name.split('.fits')[0]), plt.xticks([]), plt.yticks([])
+#    plt.show()
+slit_extents = np.sum(edges/256.,axis=0)
+col_rightmost_end = np.argmax(slit_extents)
+
+
+cross_section = np.sum(edges/256.,axis=1)
+line_edges = argrelextrema(cross_section,np.greater)[0]
+too_close = np.where(line_edges[1:] - line_edges[:-1]  < 4)[0]
+bool_mask = np.ones(line_edges.size).astype(bool)
+for pos in too_close:
+    bool_mask[pos+1] = cross_section[pos] > cross_section[pos+1]
+    bool_mask[pos] = cross_section[pos] <= cross_section[pos+1]
+
+
+final_slit_edges = line_edges[bool_mask]
+
+plt.figure()
+plt.plot(np.arange(cross_section.size), cross_section)
+for edge in final_slit_edges:
+    plt.axvline(edge,color='r',linestyle='dashed')
+plt.show()
 

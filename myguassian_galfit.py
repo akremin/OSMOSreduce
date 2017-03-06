@@ -6,32 +6,39 @@ Created on Wed Mar  1 23:10:11 2017
 @author: kremin
 """
 
-#import pickle as pkl
-#import numpy as np
-#import matplotlib.pyplot as plt
-#from scipy.optimize import curve_fit
-#data_dir = 'SOAR_data' # 'goodman_jan17'
-#with open('../../'+data_dir+'/Kremin10/Kremin10_reduced_spectra.pkl','rb') as pklfil:  #SOAR_data/Kremin10/Kremin10_reduced_spectra.pkl'
-#    specdict = pkl.load(pklfil)
-#dict1 = specdict['0']
-#arcspec1 = dict1['arc_spec']
-#galspec1 = dict1['gal_spec']
-#scispec1 = dict1['science_spec']
-#gcut1,gcut2 = dict1['gal_cuts']
-#gcut1 = 6
-#gcut2 = 22
-#slit_width = 26
-#lower_gal = 3
-#upper_gal = 19
-#slit_width = 23
-#d2_spectra_s = (scispec1.T)[:,3:]
-#d2_spectra_a = (arcspec1.T)[:,3:]
-#raw_gal = d2_spectra_s.T[lower_gal:upper_gal,:]
-#sky = np.append(d2_spectra_s.T[:lower_gal,:],d2_spectra_s.T[upper_gal:,:],axis=0)
-#sky_sub = np.zeros(raw_gal.shape) + np.median(sky,axis=0)
-#sky_sub_tot = np.zeros(d2_spectra_s.T.shape) + np.median(sky,axis=0)
-#lowerpix = 500
-#upperpix = -20
+start_up=False
+if start_up:
+    import pickle as pkl
+    import numpy as np
+    import matplotlib.pyplot as plt
+    from scipy.optimize import curve_fit
+    import os
+    if os.environ['HOSTNAME'] == 'umdes7.physics.lsa.umich.edu':
+        data_dir =  'goodman_jan17'# 
+    else:
+        data_dir = 'SOAR_data'
+
+    with open('../../'+data_dir+'/Kremin10/Kremin10_reduced_spectra.pkl','rb') as pklfil:  #SOAR_data/Kremin10/Kremin10_reduced_spectra.pkl'
+        specdict = pkl.load(pklfil)
+    dict1 = specdict['0']
+    arcspec1 = dict1['arc_spec']
+    galspec1 = dict1['gal_spec']
+    scispec1 = dict1['science_spec']
+    gcut1,gcut2 = dict1['gal_cuts']
+    gcut1 = 6
+    gcut2 = 22
+    slit_width = 26
+    lower_gal = 3
+    upper_gal = 19
+    slit_width = 23
+    d2_spectra_s = (scispec1.T)[:,3:]
+    d2_spectra_a = (arcspec1.T)[:,3:]
+    raw_gal = d2_spectra_s.T[lower_gal:upper_gal,:]
+    sky = np.append(d2_spectra_s.T[:lower_gal,:],d2_spectra_s.T[upper_gal:,:],axis=0)
+    sky_sub = np.zeros(raw_gal.shape) + np.median(sky,axis=0)
+    sky_sub_tot = np.zeros(d2_spectra_s.T.shape) + np.median(sky,axis=0)
+    lowerpix = 500
+    upperpix = -20
 
 def _fullquadfit(dx,a,b,c):
     '''define quadratic galaxy fitting function'''
