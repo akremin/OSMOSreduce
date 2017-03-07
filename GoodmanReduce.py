@@ -23,6 +23,8 @@ import re
 import pandas as pd
 import fnmatch
 
+from slit_find import normalized_Canny, get_template, match_template
+
 from get_photoz import query_galaxies
 from slit_find import slit_find
 from zestipy.data_structures import waveform, redshift_data, smooth_waveform
@@ -439,8 +441,9 @@ if skip_cr_remov == 'n':
     arcfits_c.writeto(datadir+clus_id+'/data_products/comp/'+clus_id+'_arc.cr.fits')
 else: arcfits_c = pyfits.open(datadir+clus_id+'/data_products/comp/'+clus_id+'_arc.cr.fits')[0]
 
-
-
+low = 10
+high = 240
+flat_edges = normalized_Canny(flatfits_c.data,low,high)
 
 ##################################################################
 #Loop through regions and shift regions for maximum effectiveness#
@@ -499,8 +502,9 @@ if skip_slitpositioning == 'n':
                                 cutflatdat = flatfits_c.data[lowerbound:upperbound,:]
                                 cutscidat = scifits_c.data[lowerbound:upperbound,:]
                                 cutarcdat = arcfits_c.data[lowerbound:upperbound,:]
+                                cutedges = flat_edges[lowerbound:upperbound,:]
                                 #pdb.set_trace()
-                                science_spec,arc_spec,gal_spec,gal_cuts,BOX_WIDTH[i] = slit_find(cutflatdat,cutscidat,cutarcdat,lower_lim,upper_lim,int(Gal_dat.SLIT_LENGTH[i]),n_emptypixs,int(Gal_dat.SLIT_Y[i]))
+                                science_spec,arc_spec,gal_spec,gal_cuts,BOX_WIDTH[i] = slit_find(cutflatdat,cutscidat,cutarcdat,cutedges,lower_lim,upper_lim,int(Gal_dat.SLIT_LENGTH[i]),n_emptypixs,int(Gal_dat.SLIT_Y[i]))
                                 spectra[keys[i]] = {'science_spec':science_spec,'arc_spec':arc_spec,'gal_spec':gal_spec,'gal_cuts':gal_cuts}
                                 print('Is this spectra good (y) or bad (n)?')
                                 while True:

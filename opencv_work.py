@@ -226,3 +226,8 @@ for edge in final_slit_edges:
     plt.axvline(edge,color='r',linestyle='dashed')
 plt.show()
 
+plt.figure()
+plt.imshow(imgo,cmap='gray')
+for edge in final_slit_edges:
+    plt.axhline(edge,color='r',linestyle='dashed')
+plt.show()
