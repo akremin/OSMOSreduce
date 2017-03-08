@@ -100,7 +100,7 @@ def edges(img):
     plt.show()
 
 def load_image(typeoffile):
-    if os.environ['HOSTNAME'] == 'umdes7.physics.lsa.umich.edu':
+    if 'HOSTNAME' in os.environ.keys() and os.environ['HOSTNAME'] == 'umdes7.physics.lsa.umich.edu':
         data_dir =  'goodman_jan17'# 
     else:
         data_dir = 'SOAR_data'

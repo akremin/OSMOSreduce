@@ -394,9 +394,12 @@ def slit_find(flux,science_flux,arc_flux,edges,lower_lim,upper_lim,slitsize = 40
     skyvals = np.zeros(cutncols)
     badpos = []
     badwid = []
+    gaus_param_lowerbounds = [0,0,0-4,0] # [amp,sigma,x0,background]
+    gaus_param_upperbounds = [np.inf,slit_width,slit_width+4,np.inf]
+    gaus_param_constraints = (gaus_constriant_lowerbounds,gaus_constraint_upperbounds)
     for i,col in enumerate(cut_xvals):
         try:
-            popt_g,pcov_g = curve_fit(_gaus,yvals,d2_spectra_s[col,:],p0=[1,4.0,gal_guess,np.min(d2_spectra_s[col,:])],maxfev = 100000)
+            popt_g,pcov_g = curve_fit(_gaus,yvals,d2_spectra_s[col,:],p0=[1,4.0,gal_guess,np.min(d2_spectra_s[col,:])],bounds=gaus_param_constraints,maxfev = 100000)
             popt_g[1] = np.abs(popt_g[1])
             #gal_amp,sky_val = popt_g[0],popt_g[3]
             if popt_g[2] < 2*slit_width and popt_g[2] > -slit_width:     #slit_width  0
@@ -424,6 +427,7 @@ def slit_find(flux,science_flux,arc_flux,edges,lower_lim,upper_lim,slitsize = 40
     #    deviants_mask = np.where(np.abs(dgalwids)>3*np.std(dgalwids))
     #    cutxmask[deviants_mask] = False   
     #    galwids_fitparams,pcov = curve_fit(_fullquadfit,cut_xvals[cutxmask],galwids[cutxmask],p0=[1e-4,1e-4,1e-4],maxfev = 100000)  
+
     def bad_locs(dgalwids):
         abs_slopes = np.abs(np.gradient(dgalwids))
         return np.where(abs_slopes > 5*np.median(abs_slopes))[0] + 1
@@ -480,13 +484,13 @@ def slit_find(flux,science_flux,arc_flux,edges,lower_lim,upper_lim,slitsize = 40
         constraind_guasfit = _constrained_gaus(dy_over_sigmas,gal_amp,0.)
         fitgalflux[i] = np.sum(constraind_guasfit)
         fitskyflux[i] = totalflux[i] - fitgalflux[i]
-        #if i in bad_xvals:
-        #    plt.figure()
-        #    plt.plot(yvals,constraind_guasfit,'b-')
-        #    plt.plot(yvals,constraind_guasfit+sky_val,'y-')
-        #    plt.plot(yvals,d2_spectra_s[i,:],'g-')
-        #    plt.title('Column i='+str(i)+' bad fit')
-        #    plt.show()   
+        if i in bad_xvals:
+            plt.figure()
+            plt.plot(yvals,constraind_guasfit,'b-')
+            plt.plot(yvals,constraind_guasfit+sky_val,'y-')
+            plt.plot(yvals,d2_spectra_s[i,:],'g-')
+            plt.title('Column i='+str(i)+' bad fit')
+            plt.show()   
     tempfitd_galwids = _fullquadfit(cut_xvals[cutxmask],*galwids_fitparams)
     dgalwids = tempfitd_galwids-galwids[cutxmask]
     deviants_mask = np.where(np.abs(dgalwids)>3*np.std(dgalwids))

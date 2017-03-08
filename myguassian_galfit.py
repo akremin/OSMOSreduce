@@ -6,14 +6,14 @@ Created on Wed Mar  1 23:10:11 2017
 @author: kremin
 """
 
-start_up=False
+start_up=True
 if start_up:
     import pickle as pkl
     import numpy as np
     import matplotlib.pyplot as plt
     from scipy.optimize import curve_fit
     import os
-    if os.environ['HOSTNAME'] == 'umdes7.physics.lsa.umich.edu':
+    if 'HOSTNAME' in os.environ.keys() and os.environ['HOSTNAME'] == 'umdes7.physics.lsa.umich.edu':
         data_dir =  'goodman_jan17'# 
     else:
         data_dir = 'SOAR_data'
