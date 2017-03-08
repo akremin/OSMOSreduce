@@ -46,7 +46,9 @@ def match_template(imgdata,template):
      plt.imshow(res)
      plt.show()
     
-    
+def bad_locs(dgalwids):
+    abs_slopes = np.abs(np.gradient(dgalwids))
+    return np.where(abs_slopes > 5*np.median(abs_slopes))[0] + 1   
 
 def _quadfit(x,a,b):
     '''define quadratic galaxy fitting function'''
@@ -323,7 +325,7 @@ def slit_find(flux,science_flux,arc_flux,edges,lower_lim,upper_lim,slitsize = 40
     ##
     ## Identify and cut out galaxy light
     ##
-    pdb.set_trace()
+    #pdb.set_trace()
     gal_guess = np.arange(0,slit_width,1)[np.median(d2_spectra_s.T/np.max(d2_spectra_s),axis=1)== \
                                         np.max(np.median(d2_spectra_s.T/np.max(d2_spectra_s),axis=1))][0]
     #_gaus(x,amp,sigma,x0,background)
@@ -376,7 +378,7 @@ def slit_find(flux,science_flux,arc_flux,edges,lower_lim,upper_lim,slitsize = 40
     #############################################
     # My mods
     #############################################
-    pdb.set_trace()
+    #pdb.set_trace()
     ncols = d2_spectra_s.shape[0]
     
     normdspect = d2_spectra_s/np.max(d2_spectra_s)
@@ -388,35 +390,23 @@ def slit_find(flux,science_flux,arc_flux,edges,lower_lim,upper_lim,slitsize = 40
     upperpix = xpix[-1]
     cut_xvals = np.arange(lowerpix,upperpix)
     cutncols = len(cut_xvals)
-    galamps = np.zeros(cutncols)
     galposs = np.zeros(cutncols)
     galwids = np.zeros(cutncols)
-    skyvals = np.zeros(cutncols)
-    badpos = []
-    badwid = []
-    gaus_param_lowerbounds = [0,0,0-4,0] # [amp,sigma,x0,background]
-    gaus_param_upperbounds = [np.inf,slit_width,slit_width+4,np.inf]
-    gaus_param_constraints = (gaus_constriant_lowerbounds,gaus_constraint_upperbounds)
+    #gaus_param_lowerbounds = [0,0,0-4,0] # [amp,sigma,x0,background]
+    #gaus_param_upperbounds = [np.inf,slit_width,slit_width+4,np.inf]
+    #gaus_param_constraints = (gaus_param_lowerbounds,gaus_param_upperbounds)
     for i,col in enumerate(cut_xvals):
         try:
-            popt_g,pcov_g = curve_fit(_gaus,yvals,d2_spectra_s[col,:],p0=[1,4.0,gal_guess,np.min(d2_spectra_s[col,:])],bounds=gaus_param_constraints,maxfev = 100000)
-            popt_g[1] = np.abs(popt_g[1])
-            #gal_amp,sky_val = popt_g[0],popt_g[3]
-            if popt_g[2] < 2*slit_width and popt_g[2] > -slit_width:     #slit_width  0
+            popt_g,pcov_g = curve_fit(_gaus,yvals,d2_spectra_s[col,:],p0=[1,4.0,gal_guess,np.min(d2_spectra_s[col,:])],maxfev = 100000)
+            if np.abs(popt_g[2]-slit_width)<= slit_width and np.abs(popt_g[2])<=2*slit_width:
                 gal_pos = popt_g[2]
-            else:
-                badpos.append(col)
-            # else use value from previous index
-            if popt_g[1] < 2*slit_width:
-                gal_wid = popt_g[1]
-            else:
-                badwid.append(col)
+                gal_wid = np.abs(popt_g[1])
             # else use value from previous index
         except:
             # if something breaks, implicitly use the previous iterations fit values for this index
             print i
         #print popt_g
-        galamps[i],galwids[i],galposs[i],skyvals[i] = gal_amp,gal_wid,gal_pos,sky_val
+        galwids[i],galposs[i] = gal_wid,gal_pos
     
     #fitd_galposs = _fullquadfit(cut_xvals,*galposs_fitparams)
     cutxmask = np.ones(len(cut_xvals)).astype(bool)
@@ -428,9 +418,7 @@ def slit_find(flux,science_flux,arc_flux,edges,lower_lim,upper_lim,slitsize = 40
     #    cutxmask[deviants_mask] = False   
     #    galwids_fitparams,pcov = curve_fit(_fullquadfit,cut_xvals[cutxmask],galwids[cutxmask],p0=[1e-4,1e-4,1e-4],maxfev = 100000)  
 
-    def bad_locs(dgalwids):
-        abs_slopes = np.abs(np.gradient(dgalwids))
-        return np.where(abs_slopes > 5*np.median(abs_slopes))[0] + 1
+
     for i in range(3):
         galcut = galwids[cutxmask]; 
         badds = bad_locs(galcut)
@@ -440,13 +428,11 @@ def slit_find(flux,science_flux,arc_flux,edges,lower_lim,upper_lim,slitsize = 40
         temp[badds] = False
         cutxmask[cutxmask]=temp
         del temp
-    for i in range(4):
-        deviants_mask = bad_locs(galwids[cutxmask])+1
-        if deviants_mask[-1] > cutxmask[cutxmask].size:
-            deviants_mask = deviants_mask[:-1]
-        cutxmask[cutxmask][deviants_mask] = False 
     galwids_fitparams,pcov = curve_fit(_fullquadfit,cut_xvals[cutxmask],galwids[cutxmask],p0=[1e-4,1e-4,1e-4],maxfev = 100000)  
-    for i in range(3):
+    change_in_trues = True
+    size_fin = cutxmask.sum()
+    while change_in_trues:
+        size_init = size_fin
         tempfitd_galwids = _fullquadfit(cut_xvals[cutxmask],*galwids_fitparams)
         dgalwids = tempfitd_galwids-galwids[cutxmask]
         deviants_mask = np.where(np.abs(dgalwids)>3*np.std(dgalwids))
@@ -455,7 +441,10 @@ def slit_find(flux,science_flux,arc_flux,edges,lower_lim,upper_lim,slitsize = 40
         cutxmask[cutxmask] = temp
         del temp
         galwids_fitparams,pcov = curve_fit(_fullquadfit,cut_xvals[cutxmask],galwids[cutxmask],p0=[1e-4,1e-4,1e-4],maxfev = 100000)  
-
+        size_fin = cutxmask.sum()
+        if size_init == size_fin:
+            change_in_trues = False
+            
     galposs_fitparams,pcov = curve_fit(_fullquadfit,cut_xvals[cutxmask],galposs[cutxmask],p0=[1e-4,1e-4,1e-4],maxfev = 100000)
     xvals = np.arange(ncols)
     fitd_galwids = _fullquadfit(xvals,*galwids_fitparams)
@@ -466,6 +455,8 @@ def slit_find(flux,science_flux,arc_flux,edges,lower_lim,upper_lim,slitsize = 40
     fitskyflux = np.zeros(ncols)
     fitgalamps = np.zeros(ncols)
     fitskyamps = np.zeros(ncols)
+    fitgalamperrs = np.zeros(ncols)
+    fitskyamperrs = np.zeros(ncols)
     totalflux = np.sum(d2_spectra_s,axis=1)
     bad_xvals = cut_xvals[~cutxmask]
     for i in xvals:
@@ -473,58 +464,87 @@ def slit_find(flux,science_flux,arc_flux,edges,lower_lim,upper_lim,slitsize = 40
             dy_over_sigmas = (yvals-fitd_galposs[i])/fitd_galwids[i]
             popt_cg,pcov_cg = curve_fit(_constrained_gaus,dy_over_sigmas,d2_spectra_s[i,:],p0=[1,np.min(d2_spectra_s[i,:])],maxfev = 100000)
             gal_amp,sky_val = popt_cg
+            errs = np.sqrt(np.diag(pcov_cg))
         except:
             # if something breaks, implicitly use the previous iterations fit values for this index
             print i
         print popt_cg
         fitgalamps[i] = gal_amp
         fitskyamps[i] = sky_val
+        fitgalamperrs[i] = errs[0]
+        fitskyamperrs[i] = errs[1]
         naiveskyflux[i] = slit_width*sky_val
         naivegalflux[i] = totalflux[i] - naiveskyflux[i]
         constraind_guasfit = _constrained_gaus(dy_over_sigmas,gal_amp,0.)
         fitgalflux[i] = np.sum(constraind_guasfit)
         fitskyflux[i] = totalflux[i] - fitgalflux[i]
-        if i in bad_xvals:
-            plt.figure()
-            plt.plot(yvals,constraind_guasfit,'b-')
-            plt.plot(yvals,constraind_guasfit+sky_val,'y-')
-            plt.plot(yvals,d2_spectra_s[i,:],'g-')
-            plt.title('Column i='+str(i)+' bad fit')
-            plt.show()   
+        #if i in bad_xvals:
+        #    plt.figure()
+        #    plt.plot(yvals,constraind_guasfit,'b-')
+        #    plt.plot(yvals,constraind_guasfit+sky_val,'y-')
+        #    plt.plot(yvals,d2_spectra_s[i,:],'g-')
+        #    plt.title('Column i='+str(i)+' bad fit')
+        #    plt.show()   
     tempfitd_galwids = _fullquadfit(cut_xvals[cutxmask],*galwids_fitparams)
     dgalwids = tempfitd_galwids-galwids[cutxmask]
     deviants_mask = np.where(np.abs(dgalwids)>3*np.std(dgalwids))
     cutxmask[deviants_mask] = False 
     good_xvals = cut_xvals[cutxmask]
+    
+    maskthebaderrs = np.ones(fitgalamps.size).astype(bool)
+    maskthebaderrs[fitgalamperrs == np.inf] = False
+    change_in_trues = True
+    size_fin = maskthebaderrs.sum()
+    while change_in_trues:
+        size_init = size_fin     
+        dfiterrs = fitgalamperrs[maskthebaderrs]-np.mean(fitgalamperrs[maskthebaderrs])
+        temp = maskthebaderrs[maskthebaderrs]
+        temp[dfiterrs > 5*np.std(dfiterrs)] = False
+        maskthebaderrs[maskthebaderrs] = temp
+        del temp
+        size_fin = maskthebaderrs.sum()
+        if size_init == size_fin:
+            change_in_trues = False        
+
+    plt.figure()
+    plt.plot(xvals[maskthebaderrs],dfiterrs,'b-')
+    plt.axhline(5*np.std(dfiterrs),color='r',linestyle='dashed')
+    plt.axhline(-5*np.std(dfiterrs),color='r',linestyle='dashed')
+    plt.show()
+
     fullxmask = good_xvals # since xvals is just 0 to ncols, values are same as index
     plt.figure()
     plt.subplot(211)
-    plt.title('Sky  b = fitted  r = naive')
+    plt.title('Sky  Masked b = fitted  r = naive')
     plt.plot(xvals,fitskyflux,'b-')
     plt.plot(xvals,naiveskyflux,'r-')
     plt.subplot(212)
-    plt.title('Galaxies  b = fitted  r = naive')
-    plt.plot(xvals,fitgalflux,'b-')
-    plt.plot(xvals,naivegalflux,'r-')
+    plt.title('Galaxies  Masked b = fitted  r = naive')
+    plt.plot(xvals[maskthebaderrs],fitgalflux[maskthebaderrs],'b-')
+    plt.plot(xvals[maskthebaderrs],naivegalflux[maskthebaderrs],'r-')
     plt.show()
     plt.figure()
-    plt.plot(xvals,fitgalflux,'b-',alpha=0.4,label='Fitted')
+    plt.plot(xvals[maskthebaderrs],fitgalflux[maskthebaderrs],'b-',alpha=0.4,label='Fitted')
     plt.plot(xvals,fitskyflux,'b-.',alpha=0.4)
     plt.plot(xvals,naiveskyflux,'r-.',alpha=0.4,label='Naive')
-    plt.plot(xvals,naivegalflux,'r-',alpha=0.4)
+    plt.plot(xvals[maskthebaderrs],naivegalflux[maskthebaderrs],'r-',alpha=0.4)
     plt.plot(xvals,np.sum(raw_gal-sky_sub,axis=0),'g-',alpha=0.4,label='Dans')
     plt.plot(xvals,np.median(sky,axis=0)*slit_width,'g-.',alpha=0.4)
     plt.legend(loc='best')
     plt.show()
     plt.figure()
-    plt.plot(xvals,fitd_galposs);
-    plt.plot(good_xvals,galposs[cutxmask])
-    plt.plot(cut_xvals,galposs)
+    plt.plot(xvals,fitd_galposs,label='fittedvals');
+    plt.plot(good_xvals,galposs[cutxmask],label='maskedfromwidth')
+    plt.plot(cut_xvals,galposs,label='allusedvals')
+    #plt.plot(xvals[maskthebaderrs],galposs[maskthebaderrs],label='maskedfromerr')
+    plt.legend(loc='best')
     plt.show()
     plt.figure()
-    plt.plot(xvals,fitd_galwids)
-    plt.plot(good_xvals,galwids[cutxmask])
-    plt.plot(cut_xvals,galwids)
+    plt.plot(xvals,fitd_galwids,label='fittedvals')
+    plt.plot(good_xvals,galwids[cutxmask],label='maskedfromwidth')
+    plt.plot(cut_xvals,galwids,label='allusedvals')
+    #plt.plot(xvals[maskthebaderrs],galposs[maskthebaderrs],label='maskedfromerr')
+    plt.legend(loc='best')
     plt.show()    
     
     pdb.set_trace()
