@@ -109,33 +109,37 @@ def filter_image(img):
     return img_cr
 
 
-
-wm, fm, cal_states = load_calibration_lines(cal_lamp)
-
-
 ###################
 #Define Cluster ID#
 ###################
 try:
     id_import = str(sys.argv[1])
     clus_id = id_import
+    masknumber = str(sys.argv[2])
 except:
     print("Cluster Name Error: You must enter a cluster name to perform reduction")
     print(' ')
     idnew = str((raw_input("Cluster ID: ")))
+    masknumber = str(raw_input('What mask was it?'))  
     clus_id = idnew
 
 print(('Reducing cluster: ',clus_id))
 ###############################################################
+
+wm, fm, cal_states = load_calibration_lines(cal_lamp)
+
 #hack
 with open(datadir+clus_id+'/GOODMAN_selected_comparison_lines-Kremin10.pkl','rb') as linestouse:
     linedict = pickle.load(linestouse)
     wm = np.asarray(linedict['lines'])
     fm = np.asarray(linedict['line_mags'])
     del linedict
+    
+    
+    
 #ask if you want to only reduce sdss galaxies with spectra
 try:
-    sdss_check = str(sys.argv[2])
+    sdss_check = str(sys.argv[3])
     if sdss_check == 'sdss':
         sdss_check = True
     else:
@@ -155,23 +159,23 @@ for curfile in os.listdir(datadir+clus_id+'/maskfiles/'): #search and import all
 #import, clean, and add science fits files
 sciencefiles = np.array([])
 hdulists_science = np.array([])
-for curfile in os.listdir(datadir+clus_id+'/data_products/science/'): #search and import all science filenames
+for curfile in os.listdir(datadir+clus_id+'/mask'+masknumber+'/data_products/science/'): #search and import all science filenames
     if fnmatch.fnmatch(curfile, '*b.fits'):
         sciencefiles = np.append(sciencefiles,curfile)
-        scifits = pyfits.open(datadir+clus_id+'/data_products/science/'+curfile)
+        scifits = pyfits.open(datadir+clus_id+'/mask'+masknumber+'/data_products/science/'+curfile)
         hdulists_science = np.append(hdulists_science,scifits)
 science_file = sciencefiles[0]
-hdulist_science = pyfits.open(datadir+clus_id+'/data_products/science/'+science_file)
+hdulist_science = pyfits.open(datadir+clus_id+'/mask'+masknumber+'/data_products/science/'+science_file)
 naxis1 = hdulist_science[0].header['NAXIS2']
 naxis2 = hdulist_science[0].header['NAXIS1']
 
 #import flat data
 flatfiles = np.array([])
 hdulists_flat = np.array([])
-for curfile in os.listdir(datadir+clus_id+'/data_products/flat/'): #search and import all science filenames
+for curfile in os.listdir(datadir+clus_id+'/mask'+masknumber+'/data_products/flat/'): #search and import all science filenames
     if fnmatch.fnmatch(curfile, '*b.fits'):
         flatfiles = np.append(flatfiles,curfile)
-        flatfits = pyfits.open(datadir+clus_id+'/data_products/flat/'+curfile)
+        flatfits = pyfits.open(datadir+clus_id+'/mask'+masknumber+'/data_products/flat/'+curfile)
         hdulists_flat = np.append(hdulists_flat,flatfits)
 if len(hdulists_flat) < 1:
     raise Exception('proc4k.py did not detect any flat files')
@@ -179,10 +183,10 @@ if len(hdulists_flat) < 1:
 #import arc data
 arcfiles = np.array([])
 hdulists_arc = np.array([])
-for curfile in os.listdir(datadir+clus_id+'/data_products/comp/'): #search and import all science curfilenames
+for curfile in os.listdir(datadir+clus_id+'/mask'+masknumber+'/data_products/comp/'): #search and import all science curfilenames
     if fnmatch.fnmatch(curfile, '*b.fits'):
         arcfiles = np.append(arcfiles,curfile)
-        arcfits = pyfits.open(datadir+clus_id+'/data_products/comp/'+curfile)
+        arcfits = pyfits.open(datadir+clus_id+'/mask'+masknumber+'/data_products/comp/'+curfile)
         hdulists_arc = np.append(hdulists_arc,arcfits)
 if len(hdulists_arc) < 1:
     raise Exception('proc4k.py did not detect any arc files')
@@ -302,13 +306,13 @@ Gal_dat = pd.DataFrame({'RA':RA,'DEC':DEC,'SLIT_WIDTH':SLIT_WIDTH,'SLIT_LENGTH':
 ############################
 #Query SDSS for galaxy data#
 ############################
-if os.path.isfile(datadir+clus_id+'/'+clus_id+'_sdssinfo.csv'):
-    redshift_dat = pd.read_csv(datadir+clus_id+'/'+clus_id+'_sdssinfo.csv')
+if os.path.isfile(datadir+clus_id+'/mask'+masknumber+'/'+clus_id+'_sdssinfo.csv'):
+    redshift_dat = pd.read_csv(datadir+clus_id+'/mask'+masknumber+'/'+clus_id+'_sdssinfo.csv')
 else:
     #returns a Pandas dataframe with columns
     #objID','SpecObjID','ra','dec','umag','gmag','rmag','imag','zmag','redshift','photo_z','extra'
     redshift_dat = query_galaxies(Gal_dat.RA,Gal_dat.DEC)
-    redshift_dat.to_csv(datadir+clus_id+'/data_products/'+clus_id+'_sdssinfo.csv',index=False)
+    redshift_dat.to_csv(datadir+clus_id+'/mask'+masknumber+'/data_products/'+clus_id+'_sdssinfo.csv',index=False)
 
 
 #merge into Gal_dat
@@ -322,8 +326,8 @@ gal_imag = Gal_dat['imag']
 ####################
 #Open images in ds9#
 ####################
-p = subprocess.Popen('ds9 '+datadir+clus_id+'/maskfiles/'+image_file+' -geometry 1200x900 -scale sqrt -scale mode zscale -fits '+datadir+clus_id+'/data_products/comp/'+arcfiles[0],shell=True)
-#p = subprocess.Popen('ds9 '+datadir+clus_id+'/data_products/'+'/'+image_file+' -geometry 1200x900 -scale sqrt -scale mode zscale -fits '+clus_id+'/data_products/comp/'+arcfiles[0],shell=True)
+p = subprocess.Popen('ds9 '+datadir+clus_id+'/maskfiles/'+image_file+' -geometry 1200x900 -scale sqrt -scale mode zscale -fits '+datadir+clus_id+'/mask'+masknumber+'/data_products/comp/'+arcfiles[0],shell=True)
+#p = subprocess.Popen('ds9 '+datadir+clus_id+'/mask'+masknumber+'/data_products/'+'/'+image_file+' -geometry 1200x900 -scale sqrt -scale mode zscale -fits '+clus_id+'/data_products/comp/'+arcfiles[0],shell=True)
 time.sleep(2)
 print("Have the images loaded? (y/n)")
 while True: #check to see if images have loaded correctly
@@ -352,7 +356,7 @@ d.set('regions sky fk5')
 #hack
 skip_assign = 'y'
 keys = np.arange(0,Gal_dat.SLIT_WIDTH.size,1).astype('string')
-#if os.path.isfile(datadir+clus_id+'/'+clus_id+'_slittypes.pkl'):
+#if os.path.isfile(datadir+clus_id+'/mask'+masknumber+'/'+clus_id+'_slittypes.pkl'):
 #    skip_assign = (raw_input('Detected slit types file in path. Do you wish to use this (y) or remove and re-assign slit types (n)? '))
 #skip_assign = 'y'
 if skip_assign == 'n':
@@ -375,9 +379,9 @@ if skip_assign == 'n':
         else:
             print('Mask file disagrees\n')
         slit_type[keys[i]] = char.lower()
-    pickle.dump(slit_type,open(datadir+clus_id+'/'+clus_id+'_slittypes.pkl','wb'))
+    pickle.dump(slit_type,open(datadir+clus_id+'/mask'+masknumber+'/'+clus_id+'_slittypes.pkl','wb'))
 else:
-    slit_type = pickle.load(open(datadir+clus_id+'/'+clus_id+'_slittypes.pkl','rb'))
+    slit_type = pickle.load(open(datadir+clus_id+'/mask'+masknumber+'/'+clus_id+'_slittypes.pkl','rb'))
 
 stypes = pd.DataFrame(list(slit_type.values()),index=np.array(list(slit_type.keys())).astype('int'),columns=['slit_type'])
 Gal_dat = Gal_dat.join(stypes)
@@ -395,11 +399,11 @@ d.set('zoom 0.40')
 #######################################
 #hack
 skip_cr_remov = 'y'
-#if os.path.isfile(datadir+clus_id+'/data_products/science/'+clus_id+'_science.cr.fits'):
+#if os.path.isfile(datadir+clus_id+'/mask'+masknumber+'/data_products/science/'+clus_id+'_science.cr.fits'):
 #    skip_cr_remov = (raw_input('Detected cosmic ray filtered file exists. Do you wish to use this (y) or remove and re-calculate (n)? '))
 if skip_cr_remov == 'n':
     try:
-        os.remove(datadir+clus_id+'/data_products/science/'+clus_id+'_science.cr.fits')
+        os.remove(datadir+clus_id+'/mask'+masknumber+'/data_products/science/'+clus_id+'_science.cr.fits')
     except: pass
     scifits_c = copy.copy(hdulists_science[0]) #copy I will use to hold the smoothed and added results
     scifits_c.data *= 0.0
@@ -407,15 +411,15 @@ if skip_cr_remov == 'n':
     for scifits in hdulists_science:
         filt = filter_image(scifits.data)
         scifits_c.data += filt + np.abs(np.nanmin(filt))
-    scifits_c.writeto(datadir+clus_id+'/data_products/science/'+clus_id+'_science.cr.fits')
+    scifits_c.writeto(datadir+clus_id+'/mask'+masknumber+'/data_products/science/'+clus_id+'_science.cr.fits')
 else: 
-    scifits_c = pyfits.open(datadir+clus_id+'/data_products/science/'+clus_id+'_science.cr.fits')[0]
+    scifits_c = pyfits.open(datadir+clus_id+'/mask'+masknumber+'/data_products/science/'+clus_id+'_science.cr.fits')[0]
     print('loading pre-prepared cosmic ray filtered files...')
 
 print('FLAT REDUCTION')
 if skip_cr_remov == 'n':
     try:
-        os.remove(datadir+clus_id+'/data_products/flat/'+clus_id+'_flat.cr.fits')
+        os.remove(datadir+clus_id+'/mask'+masknumber+'/data_products/flat/'+clus_id+'_flat.cr.fits')
     except: pass
     flatfits_c = copy.copy(hdulists_flat[0]) #copy I will use to hold the smoothed and added results
     flat_data = np.zeros((hdulists_flat.size,naxis1,naxis2))
@@ -425,21 +429,21 @@ if skip_cr_remov == 'n':
         flat_data[i] = (filt+np.abs(np.nanmin(filt)))/np.max(filt+np.abs(np.nanmin(filt)))
         i += 1
     flatfits_c.data = np.median(flat_data,axis=0)
-    flatfits_c.writeto(datadir+clus_id+'/data_products/flat/'+clus_id+'_flat.cr.fits')
-else: flatfits_c = pyfits.open(datadir+clus_id+'/data_products/flat/'+clus_id+'_flat.cr.fits')[0]
+    flatfits_c.writeto(datadir+clus_id+'/mask'+masknumber+'/data_products/flat/'+clus_id+'_flat.cr.fits')
+else: flatfits_c = pyfits.open(datadir+clus_id+'/mask'+masknumber+'/data_products/flat/'+clus_id+'_flat.cr.fits')[0]
 
 print('ARC REDUCTION')
 if skip_cr_remov == 'n':
     try:
-        os.remove(datadir+clus_id+'/data_products/comp/'+clus_id+'_arc.cr.fits')
+        os.remove(datadir+clus_id+'/mask'+masknumber+'/data_products/comp/'+clus_id+'_arc.cr.fits')
     except: pass
     arcfits_c = copy.copy(hdulists_arc[0]) #copy I will use to hold the smoothed and added results
     arcfits_c.data *= 0.0
     for arcfits in hdulists_arc:
         filt = arcfits.data#filter_image(arcfits.data)
         arcfits_c.data += filt + np.abs(np.nanmin(filt))
-    arcfits_c.writeto(datadir+clus_id+'/data_products/comp/'+clus_id+'_arc.cr.fits')
-else: arcfits_c = pyfits.open(datadir+clus_id+'/data_products/comp/'+clus_id+'_arc.cr.fits')[0]
+    arcfits_c.writeto(datadir+clus_id+'/mask'+masknumber+'/data_products/comp/'+clus_id+'_arc.cr.fits')
+else: arcfits_c = pyfits.open(datadir+clus_id+'/mask'+masknumber+'/data_products/comp/'+clus_id+'_arc.cr.fits')[0]
 
 low = 10
 high = 240
@@ -449,8 +453,10 @@ flat_edges = normalized_Canny(flatfits_c.data,low,high)
 #Loop through regions and shift regions for maximum effectiveness#
 ##################################################################
 #hack
-skip_slitpositioning = 'n'
-#if os.path.isfile(datadir+clus_id+'/'+clus_id+'_slit_pos_qual.tab'):
+skip_slitpositioning = 'y'
+
+figure_save_loc = datadir+clus_id+'/mask'+masknumber+'/figs/gal'
+#if os.path.isfile(datadir+clus_id+'/mask'+masknumber+'/'+clus_id+'_slit_pos_qual.tab'):
 #    skip_slitpositioning = (raw_input('Detected slit position and quality file in path. Do you wish to use this (y) or remove and re-adjust (n)? '))
 if skip_slitpositioning == 'n':
     good_spectra = np.array(['n']*len(Gal_dat))
@@ -504,14 +510,14 @@ if skip_slitpositioning == 'n':
                                 cutarcdat = arcfits_c.data[lowerbound:upperbound,:]
                                 cutedges = flat_edges[lowerbound:upperbound,:]
                                 #pdb.set_trace()
-                                science_spec,arc_spec,gal_spec,gal_cuts,BOX_WIDTH[i] = slit_find(cutflatdat,cutscidat,cutarcdat,cutedges,lower_lim,upper_lim,int(Gal_dat.SLIT_LENGTH[i]),n_emptypixs,int(Gal_dat.SLIT_Y[i]))
-                                spectra[keys[i]] = {'science_spec':science_spec,'arc_spec':arc_spec,'gal_spec':gal_spec,'gal_cuts':gal_cuts}
+                                science_spec,arc_spec,gal_spec,spec_mask,gal_cuts,BOX_WIDTH[i] = slit_find(cutflatdat,cutscidat,cutarcdat,cutedges,lower_lim,upper_lim,int(Gal_dat.SLIT_LENGTH[i]),n_emptypixs,int(Gal_dat.SLIT_Y[i]),figure_save_loc+str(i))
+                                spectra[keys[i]] = {'science_spec':science_spec,'arc_spec':arc_spec,'gal_spec':gal_spec,'spec_mask':spec_mask,'gal_cuts':gal_cuts}
                                 print('Is this spectra good (y) or bad (n)?')
                                 while True:
                                     char = getch()
                                     if char.lower() in ("y","n"):
                                         break
-                                plt.close()
+                                plt.close('all')
                                 good_spectra[i] = char.lower()
 
 
@@ -539,12 +545,12 @@ if skip_slitpositioning == 'n':
         print((FINAL_SLIT_X[i],FINAL_SLIT_Y[i],BOX_WIDTH[i]))
         d.set('regions delete all')
     print(FINAL_SLIT_X)
-    np.savetxt(datadir+clus_id+'/'+clus_id+'_slit_pos_qual.tab',np.array(list(zip(FINAL_SLIT_X,FINAL_SLIT_Y,BOX_WIDTH,good_spectra)),dtype=[('float',float),('float2',float),('int',int),('str','|S1')]),delimiter='\t',fmt='%10.2f %10.2f %3d %s')
-    pickle.dump(spectra,open(datadir+clus_id+'/'+clus_id+'_reduced_spectra.pkl','wb'))
+    np.savetxt(datadir+clus_id+'/mask'+masknumber+'/'+clus_id+'_slit_pos_qual.tab',np.array(list(zip(FINAL_SLIT_X,FINAL_SLIT_Y,BOX_WIDTH,good_spectra)),dtype=[('float',float),('float2',float),('int',int),('str','|S1')]),delimiter='\t',fmt='%10.2f %10.2f %3d %s')
+    pickle.dump(spectra,open(datadir+clus_id+'/mask'+masknumber+'/'+clus_id+'_reduced_spectra.pkl','wb'))
 else:
-    FINAL_SLIT_X,FINAL_SLIT_Y,BOX_WIDTH = np.loadtxt(datadir+clus_id+'/'+clus_id+'_slit_pos_qual.tab',dtype='float',usecols=(0,1,2),unpack=True)
-    good_spectra = np.loadtxt(datadir+clus_id+'/'+clus_id+'_slit_pos_qual.tab',dtype='string',usecols=(3,),unpack=True)
-    spectra = pickle.load(open(datadir+clus_id+'/'+clus_id+'_reduced_spectra.pkl','rb'))
+    FINAL_SLIT_X,FINAL_SLIT_Y,BOX_WIDTH = np.loadtxt(datadir+clus_id+'/mask'+masknumber+'/'+clus_id+'_slit_pos_qual.tab',dtype='float',usecols=(0,1,2),unpack=True)
+    good_spectra = np.loadtxt(datadir+clus_id+'/mask'+masknumber+'/'+clus_id+'_slit_pos_qual.tab',dtype='string',usecols=(3,),unpack=True)
+    spectra = pickle.load(open(datadir+clus_id+'/mask'+masknumber+'/'+clus_id+'_reduced_spectra.pkl','rb'))
 
 Gal_dat['FINAL_SLIT_X'],Gal_dat['FINAL_SLIT_Y'],Gal_dat['SLIT_WIDTH'],Gal_dat['good_spectra'] = FINAL_SLIT_X,FINAL_SLIT_Y,BOX_WIDTH,good_spectra
 
@@ -560,20 +566,27 @@ Gal_dat['FINAL_SLIT_X_FLIP'] = binnedx - Gal_dat.FINAL_SLIT_X#
 #hack
 skip_wavelengthcalib = 'y'
 #wave = np.zeros((len(Gal_dat),4064))
-#if os.path.isfile(datadir+clus_id+'/'+clus_id+'_stretchshift.tab'):
-#    skip_wavelengthcalib = (raw_input('Detected file with stretch and shift parameters for each spectra. Do you wish to use this (y) or remove and re-adjust (n)? '))
-if skip_wavelengthcalib == 'n':
-    #create write file
-    f = open(datadir+clus_id+'/'+clus_id+'_stretchshift.tab','w')
-    f.write('#X_SLIT_FLIP     Y_SLIT     SHIFT     STRETCH     QUAD     CUBE     FOURTH    FIFTH    WIDTH \n')
-    
+#if os.path.isfile(datadir+clus_id+'/mask'+masknumber+'/'+clus_id+'_stretchshift.tab'):
+#    skip_wavelengthcalib =  (raw_input('Detected file with stretch and shift parameters for each spectra. Do you wish to use this (y), or to redo (n)? ')).lower()
+
+if os.path.isfile(datadir+clus_id+'/mask'+masknumber+'/'+clus_id+'_stretchshift.tab') and skip_wavelengthcalib == 'n':
+    use_previous_calib = (raw_input('Detected file with stretch and shift parameters for each spectra. Do you wish to use this as a starting point? ')).lower()
+if skip_wavelengthcalib == 'n':   
     #initialize polynomial arrays
     fifth,fourth,cube,quad,stretch,shift =  np.zeros((6,len(Gal_dat)))
-    shift_est = 5066.0+Gal_dat['FINAL_SLIT_X'][0]-Gal_dat['FINAL_SLIT_X']#4.71e-6*(Gal_dat['FINAL_SLIT_X'] - (binnedx/2)-200)**2 + 4.30e-6*(Gal_dat['FINAL_SLIT_Y'] - (binnedy/2))**2 + binnedx
-    stretch_est = 1.997*np.ones(len(Gal_dat))#-9.75e-9*(Gal_dat['FINAL_SLIT_X'] - (binnedx/2)+100)**2 - 2.84e-9*(Gal_dat['FINAL_SLIT_Y'] - (binnedy/2))**2 + 0.7139
-    quad_est = -0.000024*np.ones(len(Gal_dat))#8.43e-9*(Gal_dat['FINAL_SLIT_X'] - (binnedx/2)+100) + 1.55e-10*(Gal_dat['FINAL_SLIT_Y'] - (binnedy/2)) + 1.3403e-5
-    cube_est = (7.76e-13*(Gal_dat['FINAL_SLIT_X'][0] - (binnedx/2)+100) + 4.23e-15*(Gal_dat['FINAL_SLIT_Y'][0] - (binnedy/2)) - 5.96e-9)*np.ones(len(Gal_dat))
-    fifth_est,fourth_est = np.zeros((2,len(Gal_dat)))
+    if use_previous_calib:
+        shift_est,stretch_est,quad_est,cube_est,fourth_est,fifth_est = np.loadtxt(datadir+clus_id+'/mask'+masknumber+'/'+clus_id+'_stretchshift.tab',dtype='float',usecols=(2,3,4,5,6,7),unpack=True)
+    else:
+        shift_est = 5066.0+Gal_dat['FINAL_SLIT_X'][0]-Gal_dat['FINAL_SLIT_X']#4.71e-6*(Gal_dat['FINAL_SLIT_X'] - (binnedx/2)-200)**2 + 4.30e-6*(Gal_dat['FINAL_SLIT_Y'] - (binnedy/2))**2 + binnedx
+        stretch_est = 1.997*np.ones(len(Gal_dat))#-9.75e-9*(Gal_dat['FINAL_SLIT_X'] - (binnedx/2)+100)**2 - 2.84e-9*(Gal_dat['FINAL_SLIT_Y'] - (binnedy/2))**2 + 0.7139
+        quad_est = -0.000024*np.ones(len(Gal_dat))#8.43e-9*(Gal_dat['FINAL_SLIT_X'] - (binnedx/2)+100) + 1.55e-10*(Gal_dat['FINAL_SLIT_Y'] - (binnedy/2)) + 1.3403e-5
+        cube_est = (7.76e-13*(Gal_dat['FINAL_SLIT_X'][0] - (binnedx/2)+100) + 4.23e-15*(Gal_dat['FINAL_SLIT_Y'][0] - (binnedy/2)) - 5.96e-9)*np.ones(len(Gal_dat))
+        fifth_est,fourth_est = np.zeros((2,len(Gal_dat)))
+
+    #create write file
+    f = open(datadir+clus_id+'/mask'+masknumber+'/'+clus_id+'_stretchshift.tab','w')
+    f.write('#X_SLIT_FLIP     Y_SLIT     SHIFT     STRETCH     QUAD     CUBE     FOURTH    FIFTH    WIDTH \n')
+
     calib_data = arcfits_c.data
     p_x = np.arange(0,binnedx,1)
     ii = 0
@@ -680,11 +693,14 @@ if skip_wavelengthcalib == 'n':
             for j in range(browser.wm.size):
                 plt.axvline(browser.wm[j],color='r')
             plt.xlim(3800,7500)
-            try:
-                plt.savefig(datadir+clus_id+'/figs/'+str(ii)+'.wave.png')
+            plt.xlabel('Wavelength in A')
+            plt.ylabel('Calibration Lamp Counts')
+            plt.title(clus_id+'  Mask '+masknumber+'  Galaxy '+str(ii))
+            try: 
+                plt.savefig(datadir+clus_id+'/mask'+masknumber+'/figs/'+str(ii)+'.wave.png')
             except:
-                os.mkdir(datadir+clus_id+'/figs')
-                plt.savefig(datadir+clus_id+'/figs/'+str(ii)+'.wave.png')
+                os.mkdir(datadir+clus_id+'/mask'+masknumber+'/figs')
+                plt.savefig(datadir+clus_id+'/mask'+masknumber+'/figs/'+str(ii)+'.wave.png')
             plt.show()
             f.write(str(Gal_dat.FINAL_SLIT_X_FLIP[ii])+'\t')
             f.write(str(Gal_dat.FINAL_SLIT_Y[ii])+'\t')
@@ -830,11 +846,14 @@ if skip_wavelengthcalib == 'n':
                 for j in range(browser.wm.size):
                     plt.axvline(browser.wm[j],color='r')
                 plt.xlim(3800,7400)
+                plt.xlabel('Wavelength in A')
+                plt.ylabel('Calibration Lamp Counts')
+                plt.title(clus_id+'  Mask '+masknumber+'  Galaxy '+str(i))
                 try:
-                    plt.savefig(datadir+clus_id+'/figs/'+str(i)+'.wave.png')
+                    plt.savefig(datadir+clus_id+'/mask'+masknumber+'/figs/'+str(i)+'.wave.png')
                 except:
-                    os.mkdir(datadir+clus_id+'/figs')
-                    plt.savefig(datadir+clus_id+'/figs/'+str(i)+'.wave.png')
+                    os.mkdir(datadir+clus_id+'/mask'+masknumber+'/figs')
+                    plt.savefig(datadir+clus_id+'/mask'+masknumber+'/figs/'+str(i)+'.wave.png')
                 plt.close()
 
         f.write(str(Gal_dat.FINAL_SLIT_X_FLIP[i])+'\t')
@@ -848,18 +867,22 @@ if skip_wavelengthcalib == 'n':
         f.write(str(Gal_dat.SLIT_WIDTH[i])+'\t')
         f.write('\n')
     f.close()
-    pickle.dump(spectra,open(datadir+clus_id+'/'+clus_id+'_reduced_spectra_wavecal.pkl','wb'))
+    pickle.dump(spectra,open(datadir+clus_id+'/mask'+masknumber+'/'+clus_id+'_reduced_spectra_wavecal.pkl','wb'))
 else:
-    xslit,yslit,shift,stretch,quad,cube,fourth,fifth,wd = np.loadtxt(datadir+clus_id+'/'+clus_id+'_stretchshift.tab',dtype='float',usecols=(0,1,2,3,4,5,6,7,8),unpack=True)
-    spectra = pickle.load(open(datadir+clus_id+'/'+clus_id+'_reduced_spectra_wavecal.pkl','rb'))
+    xslit,yslit,shift,stretch,quad,cube,fourth,fifth,wd = np.loadtxt(datadir+clus_id+'/mask'+masknumber+'/'+clus_id+'_stretchshift.tab',dtype='float',usecols=(0,1,2,3,4,5,6,7,8),unpack=True)
+    spectra = pickle.load(open(datadir+clus_id+'/mask'+masknumber+'/'+clus_id+'_reduced_spectra_wavecal.pkl','rb'))
 
 #summed science slits + filtering to see spectra
 #Flux_science_old = np.array([np.sum(scifits_c2.data[Gal_dat.FINAL_SLIT_Y[i]-Gal_dat.SLIT_WIDTH[i]/2.0:Gal_dat.FINAL_SLIT_Y[i]+Gal_dat.SLIT_WIDTH[i]/2.0,:],axis=0)[::-1] for i in range(len(Gal_dat))])
 #Flux_science = np.array([np.sum(spectra[keys[i]]['gal_spec'],axis=0)[::-1] for i in range(len(Gal_dat))])
 Flux_science = []
+#pdb.set_trace()
 for i in range(len(Gal_dat)):
     try:
-        Flux_science.append(np.sum(spectra[keys[i]]['gal_spec2'],axis=0))
+        if len(spectra[keys[i]]['gal_spec2'].shape)==2:
+            Flux_science.append(np.sum(spectra[keys[i]]['gal_spec2'],axis=0))
+        elif len(spectra[keys[i]]['gal_spec2'].shape)==1:
+            Flux_science.append(spectra[keys[i]]['gal_spec2'])
     except KeyError:
         if i != 0:
             Flux_science.append(np.zeros(len(Flux_science[i-1])))
@@ -904,7 +927,7 @@ R = z_est(lower_w=3500.0,upper_w=7500.0,lower_z=0.05,upper_z=0.6,\
           auto_pilot=run_auto)
      
      
-template_names = ['spDR2-023.fit','spDR2-025.fit'] #['spDR2-0'+str(x)+'.fit' for x in np.arange(23,31)]
+template_names = ['spDR2-023.fit','spDR2-024.fit','spDR2-028.fit'] #['spDR2-0'+str(x)+'.fit' for x in np.arange(23,31)]
 template_dir='sdss_templates'   #hack
 
 path_to_temps = os.path.abspath(os.path.join(os.curdir,template_dir))  #hack
@@ -919,7 +942,7 @@ for k in range(len(Gal_dat)):
             else: skipgal = True
         else: skipgal = False
         if not skipgal:
-            test_waveform = waveform(spectra[keys[k]]['wave2'],Flux_science[k],keys[k])
+            test_waveform = waveform(spectra[keys[k]]['wave2'],Flux_science[k],keys[k],spectra[keys[k]]['spec_mask'])
             smoothed_waveform = test_waveform#smooth_waveform(test_waveform)
             #F1 = fftpack.rfft(Flux_science[k])
             #ut = F1.copy()
@@ -935,6 +958,7 @@ for k in range(len(Gal_dat)):
             ztest = redshift_outputs.ztest_vals
             corr_val = redshift_outputs.corr_vals
             template[k] = redshift_outputs.template.name
+            print (redshift_outputs.best_zest,redshift_outputs.max_cor,redshift_outputs.template.name)
             if not run_auto:
                 qualityval['Clear'][k] = redshift_outputs.qualityval
             try:
@@ -943,10 +967,9 @@ for k in range(len(Gal_dat)):
                 HSN[k],KSN[k],GSN[k] = 0.0,0.0,0.0
             SNavg[k] = np.average(np.array([HSN[k],KSN[k],GSN[k]]))
             SNHKmin[k] = np.min(np.array([HSN[k],KSN[k]]))
-       	# Create a summary plot of the best z-fit
-        if datadir:
+            # Create a summary plot of the best z-fit
             savestr = 'redEst_%s_Tmplt%s.png' % (smoothed_waveform.name,redshift_outputs.template.name)  
-            plt_name = os.path.join(datadir,clus_id,'red_ests',savestr)
+            plt_name = os.path.join(datadir,clus_id,'mask'+str(masknumber),'red_ests',savestr)
             summary_plot(smoothed_waveform.wave, smoothed_waveform.flux, redshift_outputs.template.wave, \
                         redshift_outputs.template.flux, redshift_outputs.best_zest, redshift_outputs.ztest_vals, \
                         redshift_outputs.corr_vals, plt_name, smoothed_waveform.name, None) 
@@ -970,10 +993,10 @@ if np.any(Gal_dat['spec_z'] != 0):
     plt.title('Redshift Comparison',size=18)
     plt.xlabel('SDSS Spectroscopic Redshift',size=16)
     plt.ylabel('This Spec Estimate',size=16)
-    plt.savefig(datadir+clus_id+'/redshift_compare.png')
+    plt.savefig(datadir+clus_id+'/mask'+masknumber+'/redshift_compare.png')
     plt.show()
 
-f = open(datadir+clus_id+'/estimated_redshifts.tab','w')
+f = open(datadir+clus_id+'/mask'+masknumber+'/estimated_redshifts.tab','w')
 f.write('RA\tDEC\tZ_est\tZ_sdss\tcorrelation\tH_S/N\tK_S/N\tG_S/N\ttemplate\tgal_gmag\tgal_rmag\tgal_imag\n')
 for k in range(redshift_est.size):
     f.write(Gal_dat.RA[k]+'\t')
@@ -998,11 +1021,13 @@ f.close()
 
 
 plt.figure()
-plt.hist(Gal_dat['est_z'],bins = 50);
-plt.title('Redshift Histogram for Cluster SPT-CL 0549-6205  z~0.376\nMask 0, all qualities',size=18); 
-plt.ylabel('Number of Galaxies',size=16); 
-plt.xlabel('Estimated Redshift',size=16); 
-plt.savefig(datadir+clus_id+'/mask0_redshifthistogram.png')
+plt.hist(Gal_dat['est_z'],bins = 50)
+true_name = (raw_input('Whats the standard name of this object?'))
+true_redshift = (raw_input('What was its redshift?')) #0.376
+plt.title('Redshift Histogram for Cluster '+true_name+'  z~'+true_redshift+'\nMask '+masknumber+', all qualities',size=18)
+plt.ylabel('Number of Galaxies',size=16)
+plt.xlabel('Estimated Redshift',size=16)
+plt.savefig(datadir+clus_id+'/mask'+masknumber+'/masknumber+_redshifthistogram.png')
 
 #Output dataframe
-Gal_dat.to_csv(datadir+clus_id+'/results.csv')
+Gal_dat.to_csv(datadir+clus_id+'/mask'+masknumber+'/mask'+masknumber+'_results.csv')

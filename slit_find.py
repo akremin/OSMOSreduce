@@ -11,7 +11,8 @@ from matplotlib.widgets import  RectangleSelector
 import warnings
 import pdb
 import cv2
-
+from makegif import make_gif
+import os
 #warnings.filterwarnings("ignore")
 binnedx = 2070    # 4064    # this is in binned pixels
 binnedy = 1256    # this is in binned pixels
@@ -173,7 +174,7 @@ def identify_slits(pixels,flux,slit_y,slitsize = 40,n_emptypixs = 5,good_detect=
 
 
 
-def slit_find(flux,science_flux,arc_flux,edges,lower_lim,upper_lim,slitsize = 40,n_emptypixs = 5,slit_yloc = 300):
+def slit_find(flux,science_flux,arc_flux,edges,lower_lim,upper_lim,slitsize = 40,n_emptypixs = 5,slit_yloc = 300,figure_save_loc='./'):
     ##
     #Idenfity slit position as function of x
     ##
@@ -205,7 +206,7 @@ def slit_find(flux,science_flux,arc_flux,edges,lower_lim,upper_lim,slitsize = 40
             continue
         elif len(edge) == 2:
             xpix.append(column)
-            first.append(edge[0]+3)
+            first.append(edge[0]+3)#3
             last.append(edge[1])
         #elif len(edge) > 2:
         #    xpix.append(column)
@@ -221,7 +222,7 @@ def slit_find(flux,science_flux,arc_flux,edges,lower_lim,upper_lim,slitsize = 40
     ax.plot(xpix,last,'r')
     
     class FitQuad:
-        def __init__(self,ax,xpix,first,last,fitting_function,initial_conds):
+        def __init__(self,ax,xpix,first,last,fitting_function,initial_conds,savename=''):
             self.startx,self.endx=0,0
             self.upper, = ax.plot(xpix,np.zeros(xpix.size),'g',lw=2)
             self.lower, = ax.plot(xpix,np.zeros(xpix.size),'g',lw=2)
@@ -234,7 +235,7 @@ def slit_find(flux,science_flux,arc_flux,edges,lower_lim,upper_lim,slitsize = 40
             self.pof = np.asarray(initial_conds)
             self.pol = self.pof.copy()
             self.pol[-1] = self.pol[-1]+self.slitwidth
-
+            self.savename = savename
 
         def fitting(self,lower_lim,upper_lim):
             self.lower_lim=lower_lim
@@ -283,6 +284,7 @@ def slit_find(flux,science_flux,arc_flux,edges,lower_lim,upper_lim,slitsize = 40
             cop[-1] = cop[-1]+self.slitwidth
             self.lower.set_ydata(self.fitting_function(self.xpix,*cop))
             plt.draw()
+            plt.savefig(self.savename)
     
     
     ##
@@ -293,15 +295,14 @@ def slit_find(flux,science_flux,arc_flux,edges,lower_lim,upper_lim,slitsize = 40
     #fitting_function = _ellipsoid
     #init_conds = np.asarray([10.,10.,0.,0.])
 
-    
-    Sel = FitQuad(ax,xpix,first,last,fitting_function,init_conds)
+    savename = figure_save_loc+'_2dslit_curvature_fitting.png'
+    Sel = FitQuad(ax,xpix,first,last,fitting_function,init_conds,savename)
     Sel.fitting(lower_lim,upper_lim)
     xdat = RectangleSelector(ax, Sel.onselect, drawtype='box')
     plt.show()
     popt_avg = Sel.popt_avg
     lower_lim = Sel.lower_lim
     slit_width = np.round(Sel.slitwidth).astype(int)
-    
     
     ##
     ## cut out slit
@@ -329,7 +330,7 @@ def slit_find(flux,science_flux,arc_flux,edges,lower_lim,upper_lim,slitsize = 40
     gal_guess = np.arange(0,slit_width,1)[np.median(d2_spectra_s.T/np.max(d2_spectra_s),axis=1)== \
                                         np.max(np.median(d2_spectra_s.T/np.max(d2_spectra_s),axis=1))][0]
     #_gaus(x,amp,sigma,x0,background)
-    popt_g,pcov_g = curve_fit(_gaus,np.arange(0,slit_width,1),np.median(d2_spectra_s.T/np.max(d2_spectra_s),axis=1),p0=[1,4.0,gal_guess,0],maxfev = 10000)
+    popt_g,pcov_g = curve_fit(_gaus,np.arange(0,slit_width,1),np.median(d2_spectra_s.T/np.max(d2_spectra_s),axis=1),p0=[1,4.0,gal_guess,0],maxfev = 100000)
     gal_amp,gal_wid,gal_pos,sky_val = popt_g
     #gal_wid = popt_g[1]#4.0
     #if gal_wid > 5: gal_wid=5
@@ -346,34 +347,40 @@ def slit_find(flux,science_flux,arc_flux,edges,lower_lim,upper_lim,slitsize = 40
     plt.axhline(lower_gal,color='k',ls='--')
     plt.axhline(upper_gal,color='k',ls='--')
     plt.xlim(0,binnedx)
-    plt.show()
+    plt.savefig(figure_save_loc+'_dansgalaxyloc.png')
+    #plt.show()
 
     plt.plot(np.arange(0,slit_width,1),_gaus(np.arange(0,slit_width,1),*popt_g))
     plt.plot(np.arange(0,slit_width,1),np.median(d2_spectra_s.T/np.max(d2_spectra_s),axis=1))
-    plt.show()
+    plt.savefig(figure_save_loc+'_xsumd_gausfit.png')
+    #plt.show()
     
     print 'gal dim:',raw_gal.shape
     print 'sky dim:',sky.shape
 
     plt.imshow(np.log(d2_spectra_s.T-sky_sub_tot),aspect=35,origin='lower')#aspect=35,
-    plt.show()
+    plt.title('Gal Spectra with Median Sky Subtracted')
+    plt.savefig(figure_save_loc+'_medskysubd_2dgalspec.png')
+    #plt.show()
 
-    plt.plot(np.arange(raw_gal.shape[1]),np.sum(raw_gal-sky_sub,axis=0),'b-')
-    plt.plot(np.arange(raw_gal.shape[1]),np.median(sky,axis=0),'r-')
-    plt.show()
+    #plt.plot(np.arange(raw_gal.shape[1]),np.sum(raw_gal-sky_sub,axis=0),'b-')
+    #plt.plot(np.arange(raw_gal.shape[1]),np.median(sky,axis=0),'r-')
+    #plt.show()
     
-    plt.figure(); 
-    plt.subplot(311); 
-    plt.imshow(np.log(d2_spectra_s.T),aspect=35,origin='lower');
-    plt.axhline(lower_gal,color='k',ls='--'); 
-    plt.axhline(upper_gal,color='k',ls='--'); 
-    plt.subplot(312); 
-    plt.imshow(np.log(sky_sub_tot),aspect=35,origin='lower'); 
-    plt.subplot(313); 
-    plt.imshow(np.log(d2_spectra_s.T-sky_sub_tot),aspect=35,origin='lower'); 
-    plt.axhline(lower_gal,color='k',ls='--'); 
-    plt.axhline(upper_gal,color='k',ls='--'); 
-    plt.show()
+    plt.figure()
+    plt.subplot(311)
+    plt.title('Spectra, Median Sky, Med Sky Subd Gal Spec')
+    plt.imshow(np.log(d2_spectra_s.T),aspect=35,origin='lower')
+    plt.axhline(lower_gal,color='k',ls='--')
+    plt.axhline(upper_gal,color='k',ls='--')
+    plt.subplot(312)
+    plt.imshow(np.log(sky_sub_tot),aspect=35,origin='lower')
+    plt.subplot(313)
+    plt.imshow(np.log(d2_spectra_s.T-sky_sub_tot),aspect=35,origin='lower')
+    plt.axhline(lower_gal,color='k',ls='--')
+    plt.axhline(upper_gal,color='k',ls='--')
+    plt.savefig(figure_save_loc+'_2dgalspec_withandwo_sky.png')
+    #plt.show()
     
     #############################################
     # My mods
@@ -398,7 +405,7 @@ def slit_find(flux,science_flux,arc_flux,edges,lower_lim,upper_lim,slitsize = 40
     for i,col in enumerate(cut_xvals):
         try:
             popt_g,pcov_g = curve_fit(_gaus,yvals,d2_spectra_s[col,:],p0=[1,4.0,gal_guess,np.min(d2_spectra_s[col,:])],maxfev = 100000)
-            if np.abs(popt_g[2]-slit_width)<= slit_width and np.abs(popt_g[2])<=2*slit_width:
+            if np.abs(popt_g[2]-slit_width)<= slit_width and np.abs(popt_g[2])<=slit_width:
                 gal_pos = popt_g[2]
                 gal_wid = np.abs(popt_g[1])
             # else use value from previous index
@@ -410,14 +417,6 @@ def slit_find(flux,science_flux,arc_flux,edges,lower_lim,upper_lim,slitsize = 40
     
     #fitd_galposs = _fullquadfit(cut_xvals,*galposs_fitparams)
     cutxmask = np.ones(len(cut_xvals)).astype(bool)
-    
-    #for i in range(10):
-    #    tempfitd_galwids = _fullquadfit(cut_xvals[cutxmask],*galwids_fitparams)
-    #    dgalwids = tempfitd_galwids-galwids[cutxmask]
-    #    deviants_mask = np.where(np.abs(dgalwids)>3*np.std(dgalwids))
-    #    cutxmask[deviants_mask] = False   
-    #    galwids_fitparams,pcov = curve_fit(_fullquadfit,cut_xvals[cutxmask],galwids[cutxmask],p0=[1e-4,1e-4,1e-4],maxfev = 100000)  
-
 
     for i in range(3):
         galcut = galwids[cutxmask]; 
@@ -459,6 +458,7 @@ def slit_find(flux,science_flux,arc_flux,edges,lower_lim,upper_lim,slitsize = 40
     fitskyamperrs = np.zeros(ncols)
     totalflux = np.sum(d2_spectra_s,axis=1)
     bad_xvals = cut_xvals[~cutxmask]
+    pltnames = []
     for i in xvals:
         try:
             dy_over_sigmas = (yvals-fitd_galposs[i])/fitd_galwids[i]
@@ -468,7 +468,6 @@ def slit_find(flux,science_flux,arc_flux,edges,lower_lim,upper_lim,slitsize = 40
         except:
             # if something breaks, implicitly use the previous iterations fit values for this index
             print i
-        print popt_cg
         fitgalamps[i] = gal_amp
         fitskyamps[i] = sky_val
         fitgalamperrs[i] = errs[0]
@@ -478,19 +477,29 @@ def slit_find(flux,science_flux,arc_flux,edges,lower_lim,upper_lim,slitsize = 40
         constraind_guasfit = _constrained_gaus(dy_over_sigmas,gal_amp,0.)
         fitgalflux[i] = np.sum(constraind_guasfit)
         fitskyflux[i] = totalflux[i] - fitgalflux[i]
+        #plt.close()
+        #plt.figure()
+        #plt.plot(yvals,constraind_guasfit,'b-')
+        #plt.plot(yvals,constraind_guasfit+sky_val,'y-')
+        #plt.plot(yvals,d2_spectra_s[i,:],'g-')
         #if i in bad_xvals:
-        #    plt.figure()
-        #    plt.plot(yvals,constraind_guasfit,'b-')
-        #    plt.plot(yvals,constraind_guasfit+sky_val,'y-')
-        #    plt.plot(yvals,d2_spectra_s[i,:],'g-')
-        #    plt.title('Column i='+str(i)+' bad fit')
-        #    plt.show()   
+        #    plt.title('Column i='+str(i)+' *Flagged Bad* fit')
+        #else:
+        #    plt.title('Column i='+str(i)+' fit')
+        #plt_name = '_temp'+str(i)+'.png'
+        #plt.savefig(plt_name)
+        #pltnames.append(plt_name)
+        #if i in bad_xvals:
+        #    plt.show()
+
+    #make_gif(pltnames,figure_save_loc+'_gaussianfit.gif',delay=5)
+    #os.system('rm ./_temp*.png')
     tempfitd_galwids = _fullquadfit(cut_xvals[cutxmask],*galwids_fitparams)
     dgalwids = tempfitd_galwids-galwids[cutxmask]
     deviants_mask = np.where(np.abs(dgalwids)>3*np.std(dgalwids))
     cutxmask[deviants_mask] = False 
     good_xvals = cut_xvals[cutxmask]
-    
+  
     maskthebaderrs = np.ones(fitgalamps.size).astype(bool)
     maskthebaderrs[fitgalamperrs == np.inf] = False
     change_in_trues = True
@@ -510,7 +519,21 @@ def slit_find(flux,science_flux,arc_flux,edges,lower_lim,upper_lim,slitsize = 40
     plt.plot(xvals[maskthebaderrs],dfiterrs,'b-')
     plt.axhline(5*np.std(dfiterrs),color='r',linestyle='dashed')
     plt.axhline(-5*np.std(dfiterrs),color='r',linestyle='dashed')
-    plt.show()
+    plt.ylabel('Fitting Error in Gal Amp')
+    plt.xlabel('Pixel Loc on ccd')
+    plt.title('Sigma Clip Masking for Galaxy Spectrum')
+    plt.savefig(figure_save_loc+'_sigclipped_galamperr.png')
+    #plt.show()
+    #for i in xvals[~maskthebaderrs]:
+    #    plt.figure()
+    #    dy_over_sigmas = (yvals-fitd_galposs[i])/fitd_galwids[i]
+    #    constraind_guasfit = _constrained_gaus(dy_over_sigmas,fitgalamps[i],0.)
+    #    plt.plot(yvals,constraind_guasfit,'b-')
+    #    plt.plot(yvals,constraind_guasfit+fitskyamps[i],'y-')
+    #    plt.plot(yvals,d2_spectra_s[i,:],'g-')
+    #    plt.title('Column i='+str(i)+' bad fit')
+    #    plt.show()  
+
 
     fullxmask = good_xvals # since xvals is just 0 to ncols, values are same as index
     plt.figure()
@@ -522,33 +545,56 @@ def slit_find(flux,science_flux,arc_flux,edges,lower_lim,upper_lim,slitsize = 40
     plt.title('Galaxies  Masked b = fitted  r = naive')
     plt.plot(xvals[maskthebaderrs],fitgalflux[maskthebaderrs],'b-')
     plt.plot(xvals[maskthebaderrs],naivegalflux[maskthebaderrs],'r-')
-    plt.show()
+    plt.savefig(figure_save_loc+'_skyandgalspectra_allfits.png')
+    #plt.show()
+    
     plt.figure()
     plt.plot(xvals[maskthebaderrs],fitgalflux[maskthebaderrs],'b-',alpha=0.4,label='Fitted')
-    plt.plot(xvals,fitskyflux,'b-.',alpha=0.4)
-    plt.plot(xvals,naiveskyflux,'r-.',alpha=0.4,label='Naive')
-    plt.plot(xvals[maskthebaderrs],naivegalflux[maskthebaderrs],'r-',alpha=0.4)
+    plt.plot(xvals[maskthebaderrs],naivegalflux[maskthebaderrs],'r-',alpha=0.4,label='Naive')
     plt.plot(xvals,np.sum(raw_gal-sky_sub,axis=0),'g-',alpha=0.4,label='Dans')
-    plt.plot(xvals,np.median(sky,axis=0)*slit_width,'g-.',alpha=0.4)
     plt.legend(loc='best')
-    plt.show()
+    plt.savefig(figure_save_loc+'_galspectra_dancompare.png')
+    #plt.show()
+    
+    plt.figure()
+    plt.plot(xvals,fitskyflux,'b-.',alpha=0.4,label='Fitted')
+    plt.plot(xvals,naiveskyflux,'r-.',alpha=0.4,label='Naive')
+    plt.plot(xvals,np.median(sky,axis=0)*slit_width,'g-.',alpha=0.4,label='Dans')
+    plt.legend(loc='best')
+    plt.savefig(figure_save_loc+'_skyspectra_dancompare.png')
+
     plt.figure()
     plt.plot(xvals,fitd_galposs,label='fittedvals');
     plt.plot(good_xvals,galposs[cutxmask],label='maskedfromwidth')
     plt.plot(cut_xvals,galposs,label='allusedvals')
+    ignore_infs = fitd_galposs[fitd_galposs != np.inf]
+    fitmean = np.mean(ignore_infs)
+    fivesig = 5*np.std(ignore_infs-fitmean)
+    plt.ylim(fitmean-fivesig, fitmean+fivesig)
+    del fitmean, fivesig, ignore_infs
     #plt.plot(xvals[maskthebaderrs],galposs[maskthebaderrs],label='maskedfromerr')
     plt.legend(loc='best')
-    plt.show()
+    plt.savefig(figure_save_loc+'_galcenter_fit.png')  
+  
     plt.figure()
     plt.plot(xvals,fitd_galwids,label='fittedvals')
     plt.plot(good_xvals,galwids[cutxmask],label='maskedfromwidth')
     plt.plot(cut_xvals,galwids,label='allusedvals')
+    ignore_infs = fitd_galwids[fitd_galwids != np.inf]
+    fitmean = np.mean(ignore_infs)
+    fivesig = 5*np.std(ignore_infs-fitmean)
+    plt.ylim(fitmean-fivesig, fitmean+fivesig)
     #plt.plot(xvals[maskthebaderrs],galposs[maskthebaderrs],label='maskedfromerr')
     plt.legend(loc='best')
+    plt.savefig(figure_save_loc+'_galwidth_fit.png')
     plt.show()    
     
-    pdb.set_trace()
-    return d2_spectra_s.T,d2_spectra_a.T,raw_gal-sky_sub,[lower_gal,upper_gal],slit_width
+    #pdb.set_trace()
+    dorf = str((raw_input("Which should we save, Dans or the Fitted? (d or f)"))).lower()
+    if dorf != 'd':
+        return d2_spectra_s.T,d2_spectra_a.T,fitgalflux,maskthebaderrs,[lower_gal,upper_gal],slit_width
+    else:
+        return d2_spectra_s.T,d2_spectra_a.T,raw_gal-sky_sub,maskthebaderrs,[lower_gal,upper_gal],slit_width
 
 if __name__ == '__main__':
     '''

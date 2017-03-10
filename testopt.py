@@ -55,7 +55,10 @@ def gaussian_lines(line_x,line_a,xgrid,width=2.0):
     return temp
 
 def polyfour(x,a,b,c,d,e,f):
-    return a + b*x + c*x**2.0 + d*x**3.0 + e*x**4.0 + f*x**5.0
+    if type(x) == type(np.array([])) or type(x) == type([]):
+        return np.array(a + b*x + c*x**2.0 + d*x**3.0 + e*x**4.0 + f*x**5.0).astype(float)
+    else:
+        return float(a + b*x + c*x**2.0 + d*x**3.0 + e*x**4.0 + f*x**5.0)
 
 def wavecalibrate(px,fx,slit_x,stretch_est=0.0,shift_est=0.0,quad_est=0.0,cube_est=0.0,fourth_est=0.0,fifth_est=0.0):
     #flip and normalize flux

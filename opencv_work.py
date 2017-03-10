@@ -106,13 +106,13 @@ def load_image(typeoffile):
         data_dir = 'SOAR_data'
 
     if typeoffile[:3].lower() == 'sci':
-        filename = '../../'+data_dir+'/Kremin10/data_products/science/Kremin10_science.cr.fits'
+        filename = '../../'+data_dir+'/Kremin10/mask1/data_products/science/Kremin10_science.cr.fits'
     if typeoffile[:3].lower() == 'arc':                                            
-        filename = '../../'+data_dir+'/Kremin10/data_products/comp/Kremin10_arc.cr.fits'
+        filename = '../../'+data_dir+'/Kremin10/mask1/data_products/comp/Kremin10_arc.cr.fits'
     if typeoffile[:3].lower() == 'com':                                            
-         filename = '../../'+data_dir+'/Kremin10/data_products/comp/Kremin10_arc.cr.fits'
+         filename = '../../'+data_dir+'/Kremin10/mask1/data_products/comp/Kremin10_arc.cr.fits'
     if typeoffile[:3].lower() == 'fla':                                            
-        filename ='../../'+data_dir+'/Kremin10/data_products/flat/Kremin10_flat.cr.fits'   
+        filename ='../../'+data_dir+'/Kremin10/mask1/data_products/flat/Kremin10_flat.cr.fits'   
     ft = fits.open(filename)
     imgdata = ft[0].data
     ft.close()
