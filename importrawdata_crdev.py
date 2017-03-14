@@ -25,7 +25,7 @@ import fnmatch
 import cv2
 from slit_find import normalized_Canny, get_template, match_template
 from scipy.signal import argrelextrema
-
+import lacosmic
 
 
 
@@ -130,4 +130,4 @@ for fit in hdulists_science:
     sobys.append(sobely)
     laps.append(laplacian)
     
-    
+clean,cmask = lacosmic.lacosmic(data=hdulist_science[0].data,contrast=2.5,cr_threshold=10,neighbor_threshold=6,effective_gain=0.56,readnoise=3.69)
