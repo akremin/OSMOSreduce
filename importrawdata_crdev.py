@@ -26,8 +26,19 @@ import cv2
 from slit_find import normalized_Canny, get_template, match_template
 from scipy.signal import argrelextrema
 import lacosmic
+import PyCosmic
 
-
+def comparemethods(orig,lacos,pycos,dancos,imgtag=''):
+    plt.figure()
+    plt.subplot(221)
+    plt.imshow(orig,cmap='gray'),plt.title('Original'), plt.xticks([]), plt.yticks([])
+    plt.subplot(223)
+    plt.imshow(lacos,cmap='gray'),plt.title('LACosmic '+imgtag), plt.xticks([]), plt.yticks([])
+    plt.subplot(222)
+    plt.imshow(dancos,cmap='gray'),plt.title('Dans Code '+imgtag), plt.xticks([]), plt.yticks([])
+    plt.subplot(224)
+    plt.imshow(pycos,cmap='gray'),plt.title('PyCosmic '+imgtag), plt.xticks([]), plt.yticks([])
+    plt.show()
 
 def filter_image(img):
     img_sm = signal.medfilt(img,5)
@@ -35,7 +46,7 @@ def filter_image(img):
     bad = np.abs(img-img_sm) / sigma > 8.0
     img_cr = img.copy()
     img_cr[bad] = img_sm[bad]
-    return img_cr
+    return img_cr,bad
     
 def getrawdata(datadir,clus_id,masknumber):
     #import, clean, and add science fits files
@@ -118,16 +129,34 @@ else:
     
 clus_id = 'Kremin10'
 masknumber = '1'
+#cans = []
+#sobxs = []
+#sobys = []
+#laps = [] 
+
+
+# Take in all the data
 #hdulists_science,hdulists_flat,hdulists_arc,naxis1,naxis2 = getrawdata(datadir,clus_id,masknumber)
-cans = []
-sobxs = []
-sobys = []
-laps = [] 
-for fit in hdulists_science:
-    canny,sobelx,sobely,laplacian = edges(fit.data)
-    cans.append(canny)
-    sobxs.append(sobelx)
-    sobys.append(sobely)
-    laps.append(laplacian)
+
+# Find edges in all the data
+#for fit in hdulists_science:
+#    canny,sobelx,sobely,laplacian = edges(fit.data)
+#    cans.append(canny)
+#    sobxs.append(sobelx)
+#    sobys.append(sobely)
+#    laps.append(laplacian)
+
     
-clean,cmask = lacosmic.lacosmic(data=hdulist_science[0].data,contrast=2.5,cr_threshold=10,neighbor_threshold=6,effective_gain=0.56,readnoise=3.69)
+#original_science = hdulists_science[0].data
+#dfilt,danmask = filter_image(hdulists_science[0].data)
+#dan = dfilt + np.abs(np.nanmin(dfilt))
+#lacos,lacosmask = lacosmic.lacosmic(data=hdulists_science[0].data,contrast=2.5,cr_threshold=10,neighbor_threshold=6,effective_gain=0.56,readnoise=3.69)
+#hdulists_science[0].writeto('./science00.fits')
+pycos, pycosmask = PyCosmic.detCos('science00.fits','science00_cleanedmask.fits','science00_cleaned.fits',rdnoise='RDNOISE',sigma_det=8,gain=1.0,verbose=True,return_data=True)#gain = 'GAIN'
+#dpy = original_science-pycos
+#dlac = original_science-lacos
+#ddan = original_science-dan
+comparemethods(original_science,lacosmask,pycosmask,danmask,'CR Mask')
+comparemethods(original_science,lacos,pycos,dan,'CR Removed')
+comparemethods(original_science,dlac,dpy,ddan,'(Orig-CR Removed)')
+plt.figure(); plt.imshow(lacosmask.astype(np.int8)-pycosmask.astype(np.int8),cmap='gray'); plt.xticks([]), plt.yticks([]); plt.show()
