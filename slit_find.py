@@ -187,7 +187,8 @@ def slit_find(flux,science_flux,arc_flux,edges,lower_lim,upper_lim,slitsize = 40
     last = []
     xpix = []
     pixels = np.arange(flux.shape[1])
-    flux = np.log(flux)
+    #flux = np.log(flux)
+    #pdb.set_trace()
     fig,ax = plt.subplots(1)
     ax.imshow(flux - chip_background(pixels,flux),aspect=25)
     
@@ -246,7 +247,7 @@ def slit_find(flux,science_flux,arc_flux,edges,lower_lim,upper_lim,slitsize = 40
                 if np.sum(~mask) ==0:
                     continue
                 xmask = np.ma.array(self.xpix[self.lower_lim:self.upper_lim],mask=mask)
-                popt,pcov = curve_fit(self.fitting_function,xmask.compressed(),self.first[self.lower_lim:self.upper_lim].compressed(),p0=self.pof,maxfev = 100000)
+                popt,pcov = curve_fit(self.fitting_function,xmask.compressed(),self.first[self.lower_lim:self.upper_lim].compressed(),p0=self.pof,maxfev = 1000000)
                 self.first = np.ma.masked_where(np.abs(self.first - self.fitting_function(self.xpix,*popt)) >= 2*n_emptypixs,self.first)
             for i in range(3):
                 #pdb.set_trace()
@@ -254,7 +255,7 @@ def slit_find(flux,science_flux,arc_flux,edges,lower_lim,upper_lim,slitsize = 40
                 if np.sum(~mask) ==0:
                     continue
                 xmask2 = np.ma.array(self.xpix[self.lower_lim:self.upper_lim],mask=mask2)
-                popt2,pcov2 = curve_fit(self.fitting_function,xmask2.compressed(),self.last[self.lower_lim:self.upper_lim].compressed(),p0=self.pol,maxfev = 100000)
+                popt2,pcov2 = curve_fit(self.fitting_function,xmask2.compressed(),self.last[self.lower_lim:self.upper_lim].compressed(),p0=self.pol,maxfev = 1000000)
                 self.last = np.ma.masked_where(np.abs(self.last - self.fitting_function(self.xpix,*popt2)) >= 2*n_emptypixs,self.last)
             self.popt_avg = 0.5*(popt+popt2)
             self.popt_avg[-1] = popt[-1]-self.user_offset
@@ -294,7 +295,6 @@ def slit_find(flux,science_flux,arc_flux,edges,lower_lim,upper_lim,slitsize = 40
     init_conds = np.asarray([1e-4,1e-4,1e-4])
     #fitting_function = _ellipsoid
     #init_conds = np.asarray([10.,10.,0.,0.])
-
     savename = figure_save_loc+'_2dslit_curvature_fitting.png'
     Sel = FitQuad(ax,xpix,first,last,fitting_function,init_conds,savename)
     Sel.fitting(lower_lim,upper_lim)
@@ -330,7 +330,7 @@ def slit_find(flux,science_flux,arc_flux,edges,lower_lim,upper_lim,slitsize = 40
     gal_guess = np.arange(0,slit_width,1)[np.median(d2_spectra_s.T/np.max(d2_spectra_s),axis=1)== \
                                         np.max(np.median(d2_spectra_s.T/np.max(d2_spectra_s),axis=1))][0]
     #_gaus(x,amp,sigma,x0,background)
-    popt_g,pcov_g = curve_fit(_gaus,np.arange(0,slit_width,1),np.median(d2_spectra_s.T/np.max(d2_spectra_s),axis=1),p0=[1,4.0,gal_guess,0],maxfev = 100000)
+    popt_g,pcov_g = curve_fit(_gaus,np.arange(0,slit_width,1),np.median(d2_spectra_s.T/np.max(d2_spectra_s),axis=1),p0=[1,4.0,gal_guess,0],maxfev = 1000000)
     gal_amp,gal_wid,gal_pos,sky_val = popt_g
     #gal_wid = popt_g[1]#4.0
     #if gal_wid > 5: gal_wid=5
@@ -404,7 +404,7 @@ def slit_find(flux,science_flux,arc_flux,edges,lower_lim,upper_lim,slitsize = 40
     #gaus_param_constraints = (gaus_param_lowerbounds,gaus_param_upperbounds)
     for i,col in enumerate(cut_xvals):
         try:
-            popt_g,pcov_g = curve_fit(_gaus,yvals,d2_spectra_s[col,:],p0=[1,4.0,gal_guess,np.min(d2_spectra_s[col,:])],maxfev = 100000)
+            popt_g,pcov_g = curve_fit(_gaus,yvals,d2_spectra_s[col,:],p0=[1,4.0,gal_guess,np.min(d2_spectra_s[col,:])],maxfev = 1000000)
             if np.abs(popt_g[2]-slit_width)<= slit_width and np.abs(popt_g[2])<=slit_width:
                 gal_pos = popt_g[2]
                 gal_wid = np.abs(popt_g[1])
@@ -421,13 +421,15 @@ def slit_find(flux,science_flux,arc_flux,edges,lower_lim,upper_lim,slitsize = 40
     for i in range(3):
         galcut = galwids[cutxmask]; 
         badds = bad_locs(galcut)
+        if badds == [] or badds == np.array([]) or len(badds)<2:
+            continue
         temp = cutxmask[cutxmask] 
         if badds[-1] >= temp.size:
             badds = badds[:-1]
         temp[badds] = False
         cutxmask[cutxmask]=temp
         del temp
-    galwids_fitparams,pcov = curve_fit(_fullquadfit,cut_xvals[cutxmask],galwids[cutxmask],p0=[1e-4,1e-4,1e-4],maxfev = 100000)  
+    galwids_fitparams,pcov = curve_fit(_fullquadfit,cut_xvals[cutxmask],galwids[cutxmask],p0=[1e-4,1e-4,1e-4],maxfev = 1000000)  
     change_in_trues = True
     size_fin = cutxmask.sum()
     while change_in_trues:
@@ -439,12 +441,12 @@ def slit_find(flux,science_flux,arc_flux,edges,lower_lim,upper_lim,slitsize = 40
         temp[deviants_mask] = False
         cutxmask[cutxmask] = temp
         del temp
-        galwids_fitparams,pcov = curve_fit(_fullquadfit,cut_xvals[cutxmask],galwids[cutxmask],p0=[1e-4,1e-4,1e-4],maxfev = 100000)  
+        galwids_fitparams,pcov = curve_fit(_fullquadfit,cut_xvals[cutxmask],galwids[cutxmask],p0=[1e-4,1e-4,1e-4],maxfev = 1000000)  
         size_fin = cutxmask.sum()
         if size_init == size_fin:
             change_in_trues = False
             
-    galposs_fitparams,pcov = curve_fit(_fullquadfit,cut_xvals[cutxmask],galposs[cutxmask],p0=[1e-4,1e-4,1e-4],maxfev = 100000)
+    galposs_fitparams,pcov = curve_fit(_fullquadfit,cut_xvals[cutxmask],galposs[cutxmask],p0=[1e-4,1e-4,1e-4],maxfev = 1000000)
     xvals = np.arange(ncols)
     fitd_galwids = _fullquadfit(xvals,*galwids_fitparams)
     fitd_galposs = _fullquadfit(xvals,*galposs_fitparams)    
@@ -462,7 +464,7 @@ def slit_find(flux,science_flux,arc_flux,edges,lower_lim,upper_lim,slitsize = 40
     for i in xvals:
         try:
             dy_over_sigmas = (yvals-fitd_galposs[i])/fitd_galwids[i]
-            popt_cg,pcov_cg = curve_fit(_constrained_gaus,dy_over_sigmas,d2_spectra_s[i,:],p0=[1,np.min(d2_spectra_s[i,:])],maxfev = 100000)
+            popt_cg,pcov_cg = curve_fit(_constrained_gaus,dy_over_sigmas,d2_spectra_s[i,:],p0=[1,np.min(d2_spectra_s[i,:])],maxfev = 1000000)
             gal_amp,sky_val = popt_cg
             errs = np.sqrt(np.diag(pcov_cg))
         except:

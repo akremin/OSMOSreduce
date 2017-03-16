@@ -496,3 +496,123 @@ if __name__ == '__main__':
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+import sys
+def getch():
+    import tty, termios
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+    try:
+        tty.setraw(sys.stdin.fileno())
+        ch = sys.stdin.read(1)
+    finally:
+        termios.tcsetattr(fd,termios.TCSADRAIN,old_settings)
+    return ch
+    
+    
+import os
+if os.environ['HOSTNAME'] == 'umdes7.physics.lsa.umich.edu':
+    from ds9 import ds9 as DS9
+else:
+    from pyds9 import DS9
+def get_slit_types(Gal_dat = {}, keys={}, d=DS9()):
+    slit_type = {}
+    print('Is this a galaxy (g), a reference star (r), or empty sky (s)?')
+    for i in range(len(Gal_dat)):
+        d.set('pan to '+Gal_dat.RA[i]+' '+Gal_dat.DEC[i]+' wcs fk5')
+        if Gal_dat.SLIT_WIDTH[i] == '1.0':
+            d.set('regions command {box('+Gal_dat.RA[i]+' '+Gal_dat.DEC[i]+' 3 24) #color=green}')
+        else:
+            d.set('regions command {box('+Gal_dat.RA[i]+' '+Gal_dat.DEC[i]+' 12 12) #color=green}')
+        while True:
+            char = getch()
+            if char.lower() in ("g", "r", "s"):
+                break
+        if char.lower() == 'g' and Gal_dat['TYPE'][i] == 'Target':
+            print('Mask file confirms that was a targeted galaxy\n')
+        elif char.lower() == 'r' and Gal_dat['TYPE'][i] == 'Alignment':
+            print('Mask file confirms that was an alignment object\n')
+        else:
+            print('Mask file disagrees\n')
+        slit_type[keys[i]] = char.lower()
+    return slit_type
+
+import PyCosmic
+def remove_cosmic_rays(sciencelist = [],readnoise='RDNOISE',sigmadet=8,crgain=1.0,crverbose=True,crreturndata=True):
+    scifits_crs = []
+    for i,scifil in enumerate(sciencelist):
+        rootfile = scifil.split('.fits')[0]
+        savefile = rootfile+'.cr.fits'
+        maskfile = rootfile+'.crmask.fits'
+        if os.path.exists(savefile):
+            try:
+                os.remove(savefile)
+            except: pass
+        if os.path.exists(maskfile):
+            try:
+                os.remove(maskfile)
+            except: pass    
+        pycos,pycosmask,pyheader = PyCosmic.detCos(scifil,maskfile,savefile,rdnoise=readnoise,sigma_det=sigmadet,gain=crgain,verbose=crverbose,return_data=crreturndata)#gain = 'GAIN'
+        if i == 0:
+            header = pyheader
+        scifits_crs.append(pycos)
+    return np.asarray(scifits_crs), header
+
+def openfits(sciencelist = []):
+    scifits_crs = []
+    for i,scifil in enumerate(sciencelist):
+        fitshdu = pyfits.open(scifil)
+        if i == 0:
+            header = fitshdu[0].header
+        scifits_crs.append(fitshdu[0].data)
+        fitshdu.close()
+    return np.asarray(scifits_crs), header
+
+
+import numpy as np
+import astropy.io.fits as pyfits
+def combine_fits(fits_crs,curheader,savefile,combining_function = np.sum):
+    ##### Take care of this first
+    #if os.path.exists(savefile):
+    #    try:
+    #        os.remove(savefile)
+    #    except: pass
+    sumddata = combining_function(fits_crs,axis=0)
+    pyfits.writeto(filename=savefile,data=sumddata,header=curheader,clobber=True)    
+    return sumddata
+    
+    
+    
+    
+def filter_image(img):
+    img_sm = signal.medfilt(img,5)
+    sigma = 2.0 
+    bad = np.abs(img-img_sm) / sigma > 8.0
+    img_cr = img.copy()
+    img_cr[bad] = img_sm[bad]
+    return img_cr
+    
+def deprecated_cr_removal(scifiles):
+    scifiles_crs,header = openfits(scifiles)
+    data = np.zeros(scifiles_crs.shape)
+    for i in range(scifiles_crs.shape[0]):
+        fit = scifiles_crs[i,:,:]
+        filt = filter_image(fit)
+        data[i] = (filt+np.abs(np.nanmin(filt)))/np.max(filt+np.abs(np.nanmin(filt)))
+    return data,header
+    

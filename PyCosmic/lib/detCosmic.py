@@ -212,7 +212,7 @@ def detCos(image,  out_mask, out_clean,  rdnoise, sigma_det=5, rlim=1.2, iter=5,
     out.writeFitsData(out_mask, extension_mask=0)
     out.writeFitsData(out_clean, extension_data=0)
     if return_data:
-        return out.getData(),out.getMask()
+        return out.getData(),out.getMask(),out.getHeader()
        
         
 
