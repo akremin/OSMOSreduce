@@ -586,17 +586,12 @@ def openfits(sciencelist = []):
 
 import numpy as np
 import astropy.io.fits as pyfits
+import pdb
 def combine_fits(fits_crs,curheader,savefile,combining_function = np.sum):
-    ##### Take care of this first
-    #if os.path.exists(savefile):
-    #    try:
-    #        os.remove(savefile)
-    #    except: pass
+    pdb.set_trace()
     sumddata = combining_function(fits_crs,axis=0)
     pyfits.writeto(filename=savefile,data=sumddata,header=curheader,clobber=True)    
     return sumddata
-    
-    
     
     
 def filter_image(img):

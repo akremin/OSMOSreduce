@@ -276,16 +276,16 @@ Gal_dat = pd.DataFrame({'RA':RA,'DEC':DEC,'SLIT_WIDTH':SLIT_WIDTH,'SLIT_LENGTH':
 ############################
 #Query SDSS for galaxy data#
 ############################
-if os.path.isfile(datadir+clus_id+'/mask'+masknumber+'/'+clus_id+'_sdssinfo.csv'):
-    redshift_dat = pd.read_csv(datadir+clus_id+'/mask'+masknumber+'/'+clus_id+'_sdssinfo.csv')
-else:
-    #returns a Pandas dataframe with columns
-    #objID','SpecObjID','ra','dec','umag','gmag','rmag','imag','zmag','redshift','photo_z','extra'
-    redshift_dat = query_galaxies(Gal_dat.RA,Gal_dat.DEC)
-    redshift_dat.to_csv(datadir+clus_id+'/mask'+masknumber+'/data_products/'+clus_id+'_sdssinfo.csv',index=False)
-
-#merge into Gal_dat
-Gal_dat = Gal_dat.join(redshift_dat)
+#if os.path.isfile(datadir+clus_id+'/mask'+masknumber+'/'+clus_id+'_sdssinfo.csv'):
+#    redshift_dat = pd.read_csv(datadir+clus_id+'/mask'+masknumber+'/'+clus_id+'_sdssinfo.csv')
+#else:
+#    #returns a Pandas dataframe with columns
+#    #objID','SpecObjID','ra','dec','umag','gmag','rmag','imag','zmag','redshift','photo_z','extra'
+#    redshift_dat = query_galaxies(Gal_dat.RA,Gal_dat.DEC)
+#    redshift_dat.to_csv(datadir+clus_id+'/mask'+masknumber+'/data_products/'+clus_id+'_sdssinfo.csv',index=False)
+#
+##merge into Gal_dat
+#Gal_dat = Gal_dat.join(redshift_dat)
 
 
 #######################################
@@ -403,7 +403,7 @@ else:
     flatfi.close()
 
 savefile = datadir+clus_id+'/mask'+masknumber+'/data_products/comp/'+clus_id+'_comp.cr.fits'
-if skip_cr_remov == 'n':
+if skip_cr_remov == 'y':
     print('ARC REDUCTION')
     arcfits_crs,curheader = openfits(arcfiles)
     arcfits_c = combine_fits(arcfits_crs,curheader,savefile)
