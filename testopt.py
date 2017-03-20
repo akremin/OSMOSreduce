@@ -523,7 +523,20 @@ def getch():
     finally:
         termios.tcsetattr(fd,termios.TCSADRAIN,old_settings)
     return ch
-    
+
+def prompt_user(question,yesnoq = True):   
+    print(question)
+    while True: #check to see if images have loaded correctly
+        char = getch()
+        if yesnoq:
+            if char.lower() in ("y", "n"):
+                return char.lower()
+        else:
+            return char.lower()
+            
+
+
+
     
 import os
 if os.environ['HOSTNAME'] == 'umdes7.physics.lsa.umich.edu':
@@ -586,8 +599,73 @@ def openfits(sciencelist = []):
 
 import numpy as np
 import astropy.io.fits as pyfits
-import pdb
-def combine_fits(fits_crs,curheader,savefile,combining_function = np.sum):
+
+def correlate(img1,img2):
+    corr = signal.correlate2d(img1,img2, boundary='fill', mode='same',fillvalue=0.)
+    y, x = np.unravel_index(np.argmax(corr), corr.shape)
+    print x,y
+    plt.figure(); plt.imshow(corr); plt.plot([x],[y],'c*'); plt.show()
+        
+        
+def align_images(scifits,flatfits,arcfits,d=DS9()):
+    pdb.set_trace()
+    d.set('frame 1')
+    d.set_np2arr(flatfits[0])
+    d.set('scale log')
+    d.set('scale mode minmax')
+    d.set('cmap Grey')
+    d.set('zoom 4')
+    d.set('frame 2')
+    d.set_np2arr(flatfits[-1])
+    d.set('blink interval 1')
+    d.set('blink')
+    vshiftq = prompt_user("Is there an obserble vertical shift?")
+    d.set('frame 1')
+    d.set('frame clear')
+    #d.set('frame delete')
+    d.set('frame 2')
+    d.set('frame clear')
+    #d.set('frame delete')
+    d.set('frame 1')
+    d.set_np2arr(arcfits[0])
+    d#.set('scale log')
+    #d.set('scale mode minmax')
+    #d.set('min max low -100')
+    #d.set('min max high 62500')
+    #d.set('cmap Grey')
+    #d.set('zoom 4')
+    #d.set('frame new')
+    d.set('frame 2')
+    d.set_np2arr(arcfits[-1])
+    #d.set('scale log')
+    #d.set('scale mode minmax')
+    #d.set('zscale contrast 20.')
+    #d.set('zscale bias 0.1')
+    #d.set('cmap Grey')
+    #d.set('zoom 4')
+    d.set('blink')
+    hshiftq = prompt_user("Is there an obserble horizontal shift?")
+    if vshiftq == 'y' or hshiftq == 'y':
+        offsetx,offsety = [0.],[0.]
+        for arcfit in arcfits[1:]:
+                d.set('frame 2')
+                d.set('frame clear')
+                #d.set('frame 2')
+                d.set_np2arr(arcfit)
+                #d.set('scale log')
+                #d.set('scale mode minmax')
+                #d.set('cmap Grey')  
+                #d.set('zoom 4')
+                d.set('blink')
+                yshift = prompt_user("What is the observed vertical shift?",False)
+                xshift = prompt_user("What is the observed horizontal shift?",False)
+                offsetx.append(float(xshift))
+                offsety.append(float(yshift))
+    pdb.set_trace()
+    return np.asarray(offsetx),np.asarray(offsety)
+    
+   
+def combine_fits(fits_crs,alignment_info,curheader,savefile,combining_function = np.sum):
     pdb.set_trace()
     sumddata = combining_function(fits_crs,axis=0)
     pyfits.writeto(filename=savefile,data=sumddata,header=curheader,clobber=True)    
@@ -603,11 +681,12 @@ def filter_image(img):
     return img_cr
     
 def deprecated_cr_removal(scifiles):
-    scifiles_crs,header = openfits(scifiles)
+    scifiles_crs,curheader = openfits(scifiles)
     data = np.zeros(scifiles_crs.shape)
     for i in range(scifiles_crs.shape[0]):
         fit = scifiles_crs[i,:,:]
         filt = filter_image(fit)
         data[i] = (filt+np.abs(np.nanmin(filt)))/np.max(filt+np.abs(np.nanmin(filt)))
-    return data,header
+        pyfits.writeto(filename=(scifiles[i].split('.fits')[0])+'.cr.fits',data=data[i],header=curheader,clobber=True)
+    return data,curheader
     

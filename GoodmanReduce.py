@@ -28,7 +28,7 @@ from slit_find import normalized_Canny, get_template, match_template
 from get_photoz import query_galaxies
 from slit_find import slit_find
 from zestipy.data_structures import waveform, redshift_data, smooth_waveform
-from testopt import interactive_plot, LineBrowser, polyfour, getch,get_slit_types,combine_fits,remove_cosmic_rays,openfits
+from testopt import interactive_plot, LineBrowser, polyfour, getch,get_slit_types,combine_fits,remove_cosmic_rays,openfits, align_images
 from sncalc import sncalc
 from calibrations import load_calibration_lines
 from scipy.signal import argrelextrema
@@ -48,6 +48,12 @@ bottom of the mask and the center of the mask respectively.
 Please list the calibration lamp(s) used during your observations here
 '''
 cal_lamp = ['HgNe','Argon','Neon']  #['Xenon','Argon'] #'Xenon','Argon','HgNe','Neon'
+#hack
+skip_cr_remov = 'y'
+skip_combinefits = 'n'
+skip_slitpositioning = 'n'
+skip_wavelengthcalib = 'n'
+
 
 pixscale = 0.15 #arcsec/pixel  #pixel scale at for Goodman
 wavelength_dir = 1   # Goodman has wavelengths increasing as pixel val increases, OSMOS is reversed #-1
@@ -325,7 +331,7 @@ if len(arcfiles) < 1:
 ####################
 #Open images in ds9#
 ####################
-p = subprocess.Popen('ds9 '+datadir+clus_id+'/maskfiles/'+image_file+' -geometry 1200x900 -scale sqrt -scale mode zscale -fits '+arcfiles[0],shell=True)
+p = subprocess.Popen('ds9 '+datadir+clus_id+'/maskfiles/'+image_file+' -geometry 1200x900 -scale sqrt -scale mode zscale',shell=True)
 #p = subprocess.Popen('ds9 '+datadir+clus_id+'/mask'+masknumber+'/data_products/'+'/'+image_file+' -geometry 1200x900 -scale sqrt -scale mode zscale -fits '+clus_id+'/data_products/comp/'+arcfiles[0],shell=True)
 time.sleep(2)
 print("Have the images loaded? (y/n)")
@@ -338,7 +344,7 @@ while True: #check to see if images have loaded correctly
         else:
             sys.exit('Check to make sure file '+image_file+' exists in '+datadir+clus_id+'/maskfiles/')
 
-d = DS9() #start pyds9 and set parameters
+d = DS9(start=False) #start pyds9 and set parameters
 d.set('frame 1')
 d.set('single')
 d.set('zscale contrast 9.04')
@@ -368,49 +374,89 @@ stypes = pd.DataFrame(list(slit_type.values()),index=np.array(list(slit_type.key
 Gal_dat = Gal_dat.join(stypes)
 ##################################################################
 
+d.set('frame 1')
+d.set('frame clear')
+d.set('frame delete')
+d.set(')
+d.set('frame 1')
+d.set('single')
+d.set('zscale contrast 9.04')
+d.set('zscale bias 0.055')
+d.set('zoom 2')
+d.set('cmap Grey')
 
-d.set('frame 2')
+
+###########################################
+# Get data, remove cosmic rays #
+###########################################
+#hack
+
+#if os.path.isfile(datadir+clus_id+'/mask'+masknumber+'/data_products/science/'+clus_id+'_science.cr.fits'):
+#    skip_cr_remov = (raw_input('Detected cosmic ray filtered file exists. Do you wish to use this (y) or remove and re-calculate (n)? '))
+if skip_cr_remov == 'n':
+    print('SCIENCE REDUCTION')
+    scifits_crs,scicurheader = remove_cosmic_rays(sciencefiles)
+    #print('FLAT REDUCTION')
+    #flatfits_crs,fltcurheader = openfits(flatfiles)#remove_cosmic_rays(flatfiles)
+    #print('ARC REDUCTION')
+    #arcfits_crs,arccurheader = openfits(arcfiles)
+
+
+
+
+###########################################
+# Merge the cosmic ray removed data #
+###########################################
+   
+scisavefile = datadir+clus_id+'/mask'+masknumber+'/data_products/science/'+clus_id+'_science.cr.fits'
+flatsavefile = datadir+clus_id+'/mask'+masknumber+'/data_products/flat/'+clus_id+'_flat.cr.fits'
+arcsavefile = datadir+clus_id+'/mask'+masknumber+'/data_products/comp/'+clus_id+'_comp.cr.fits'
+
+if skip_combinefits == 'n':
+    crscifiles = [x.split('.fits')[0]+'.cr.fits' for x in sciencefiles]
+    if skip_cr_remov == 'y':   
+        print('loading pre-prepared cosmic ray filtered files...')
+        scifits_crs,scicurheader = openfits(crscifiles)
+    flatfits_crs,fltcurheader = openfits(flatfiles)
+    arcfits_crs,arccurheader = openfits(arcfiles)
+    al_scifits,al_flatfits,al_arcfits = align_images(scifits_crs,flatfits_crs,arcfits_crs,d)       
+    scifits_c = combine_fits(scifits_crs,al_scifits,scicurheader,scisavefile)
+    flatfits_c = combine_fits(flatfits_crs,al_flatfits,fltcurheader,flatsavefile,combining_function=np.median)
+    arcfits_c = combine_fits(arcfits_crs,al_arcfits,arccurheader,arcsavefile)
+else: 
+    print('loading pre-prepared and combined cosmic ray filtered files...')
+    scifi = pyfits.open(scisavefile)
+    scifits_c = scifi[0].data
+    scicurheader = scifi[0].header
+    scifi.close()
+    flatfi = pyfits.open(flatsavefile)
+    flatfits_c = flatfi[0].data
+    fltcurheader = flatfi[0].header
+    flatfi.close()
+    arcfi = pyfits.open(arcsavefile)
+    arcfits_c = arcfi[0].data
+    arccurheader = arcfi[0].header
+    arcfi.close()
+
+
+
+
+
+d.set('frame 1')
+d.set_np2arr(arcfits_c)
+d.set('single')
+d.set('zscale bias 0.055')
 d.set('zscale contrast 0.25')
 d.set('zoom 0.40')
 
 
-###########################################
-# Get data, remove cosmic rays, and merge #
-###########################################
-#hack
-skip_cr_remov = 'y'
-#if os.path.isfile(datadir+clus_id+'/mask'+masknumber+'/data_products/science/'+clus_id+'_science.cr.fits'):
-#    skip_cr_remov = (raw_input('Detected cosmic ray filtered file exists. Do you wish to use this (y) or remove and re-calculate (n)? '))
-savefile = datadir+clus_id+'/mask'+masknumber+'/data_products/science/'+clus_id+'_science.cr.fits'
-if skip_cr_remov == 'n':
-    print('SCIENCE REDUCTION')
-    scifits_crs,curheader = remove_cosmic_rays(sciencefiles)
-    scifits_c = combine_fits(scifits_crs,curheader,savefile)
-else: 
-     scifi = pyfits.open(savefile)
-     scifits_c = scifi[0].data
-     scifi.close()
-     print('loading pre-prepared cosmic ray filtered files...')
 
-savefile = datadir+clus_id+'/mask'+masknumber+'/data_products/flat/'+clus_id+'_flat.cr.fits'
-if skip_cr_remov == 'n':
-    print('FLAT REDUCTION')
-    flatfits_crs,curheader = openfits(flatfiles)#remove_cosmic_rays(flatfiles)
-    flatfits_c = combine_fits(flatfits_crs,curheader,savefile,combining_function=np.median)
-else: 
-    flatfi = pyfits.open(savefile)
-    flatfits_c = flatfi[0].data
-    flatfi.close()
 
-savefile = datadir+clus_id+'/mask'+masknumber+'/data_products/comp/'+clus_id+'_comp.cr.fits'
-if skip_cr_remov == 'y':
-    print('ARC REDUCTION')
-    arcfits_crs,curheader = openfits(arcfiles)
-    arcfits_c = combine_fits(arcfits_crs,curheader,savefile)
-else: 
-    arcfi = pyfits.open(savefile)
-    arcfits_c = arcfi[0].data
-    arcfi.close()
+
+
+
+
+
 
 low = 10
 high = 240
@@ -420,7 +466,7 @@ flat_edges = normalized_Canny(flatfits_c,low,high)
 #Loop through regions and shift regions for maximum effectiveness#
 ##################################################################
 #hack
-skip_slitpositioning = 'n'
+
 
 figure_save_loc = datadir+clus_id+'/mask'+masknumber+'/figs/gal'
 #if os.path.isfile(datadir+clus_id+'/mask'+masknumber+'/'+clus_id+'_slit_pos_qual.tab'):
@@ -531,7 +577,7 @@ Gal_dat['FINAL_SLIT_X_FLIP'] = binnedx - Gal_dat.FINAL_SLIT_X#
 #Wavelength Calibration#
 ########################
 #hack
-skip_wavelengthcalib = 'n'
+
 #wave = np.zeros((len(Gal_dat),4064))
 if os.path.isfile(datadir+clus_id+'/mask'+masknumber+'/'+clus_id+'_stretchshift.tab'):
     skip_wavelengthcalib =  (raw_input('Detected file with stretch and shift parameters for each spectra. Do you wish to use this (y), or to redo (n)? ')).lower()
