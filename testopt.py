@@ -513,22 +513,31 @@ if __name__ == '__main__':
 
 
 import sys
-def getch():
+def getch(maxchars=1):
     import tty, termios
     fd = sys.stdin.fileno()
     old_settings = termios.tcgetattr(fd)
     try:
         tty.setraw(sys.stdin.fileno())
-        ch = sys.stdin.read(1)
+        outch = ''
+        for i in range(maxchars):
+            ch = sys.stdin.read(1)
+            if ch == '\n' or ch == '\r':
+                break
+            sys.stdout.write(ch)
+            outch = outch+ch
     finally:
         termios.tcsetattr(fd,termios.TCSADRAIN,old_settings)
-    return ch
+        print "\n"
+    return outch
 
-def prompt_user(question,yesnoq = True):   
+def prompt_user(question,yesnoq = True,maxchars=1):   
     print(question)
-    while True: #check to see if images have loaded correctly
-        char = getch()
+    while True:
+        char = getch(maxchars).strip('\n\r\t ;:')
         if yesnoq:
+            if len(char) > 1:
+                char = char[0].lower()
             if char.lower() in ("y", "n"):
                 return char.lower()
         else:
@@ -565,9 +574,12 @@ def get_slit_types(Gal_dat = {}, keys={}, d=DS9()):
         slit_type[keys[i]] = char.lower()
     return slit_type
 
+
+
 import PyCosmic
 def remove_cosmic_rays(sciencelist = [],readnoise='RDNOISE',sigmadet=8,crgain=1.0,crverbose=True,crreturndata=True):
     scifits_crs = []
+    headers = []
     for i,scifil in enumerate(sciencelist):
         rootfile = scifil.split('.fits')[0]
         savefile = rootfile+'.cr.fits'
@@ -581,94 +593,176 @@ def remove_cosmic_rays(sciencelist = [],readnoise='RDNOISE',sigmadet=8,crgain=1.
                 os.remove(maskfile)
             except: pass    
         pycos,pycosmask,pyheader = PyCosmic.detCos(scifil,maskfile,savefile,rdnoise=readnoise,sigma_det=sigmadet,gain=crgain,verbose=crverbose,return_data=crreturndata)#gain = 'GAIN'
-        if i == 0:
-            header = pyheader
+        headers.append(pyheader)
         scifits_crs.append(pycos)
-    return np.asarray(scifits_crs), header
+    return np.asarray(scifits_crs), headers
 
-def openfits(sciencelist = []):
-    scifits_crs = []
-    for i,scifil in enumerate(sciencelist):
-        fitshdu = pyfits.open(scifil)
-        if i == 0:
-            header = fitshdu[0].header
-        scifits_crs.append(fitshdu[0].data)
+def openfits(fitlist = []):
+    fits_crs = []
+    fits_heads = []
+    for i,fil in enumerate(fitlist):
+        fitshdu = pyfits.open(fil)
+        fits_crs.append(fitshdu[0].data)
+        fits_heads.append(fitshdu[0].header)
         fitshdu.close()
-    return np.asarray(scifits_crs), header
+    return np.asarray(fits_crs), fits_heads
 
 
 import numpy as np
 import astropy.io.fits as pyfits
-
 def correlate(img1,img2):
     corr = signal.correlate2d(img1,img2, boundary='fill', mode='same',fillvalue=0.)
     y, x = np.unravel_index(np.argmax(corr), corr.shape)
     print x,y
     plt.figure(); plt.imshow(corr); plt.plot([x],[y],'c*'); plt.show()
         
+
+def align_images(scifits,flatfit,arcfits,d=DS9()):
+    offsetx,offsety = find_image_offsets(arcfits,flatfit,d)
+    # Offsets are a relative thing. So normalize to positive shifts
+    offsetx = offsetx - np.min(offsetx)
+    offsety = offsety - np.min(offsety)
+    maxxshift = np.max(offsetx)
+    maxyshift = np.max(offsety)
+
+    # Get the current size of the images
+    ydim,xdim = arcfits[0].shape
+    
+    # horizontal shift
+    # We want the resulting dimension to be divisible by 2
+    if (xdim-maxxshift) % 2 != 0:
+        offsetx = offsetx + 1
+        maxxshift = maxxshift + 1
+    if (ydim-maxyshift) % 2 != 0:
+        offsety = offsety + 1
+        maxyshift = maxyshift + 1
+
+    # Now we do the horizontal shift
+    flatx = offsetx[-1]
+    flaty = offsety[-1]
+    offsetx = offsetx[:-1]
+    offsety = offsety[:-1]
+    xcor_scis = []
+    xcor_arcs = []
+    if maxxshift > 0:
+        leftpad = np.zeros((ydim,maxxshift-flatx))
+        rightpad = np.zeros((ydim,flatx))
+        xcor_flat = np.hstack((leftpad,flatfit,rightpad))
+        for shif,sci,arc in zip(offsetx,scifits,arcfits):
+            leftpad = np.zeros((ydim,maxxshift-shif))
+            rightpad = np.zeros((ydim,shif))
+            xcor_scis.append(np.hstack((leftpad,sci,rightpad)))
+            xcor_arcs.append(np.hstack((leftpad,sci,rightpad)))
+    else:
+        xcor_flat = flatfit
+        xcor_scis = scifits
+        xcor_arcs = arcfits
+    xcor_scis = np.asarray(xcor_scis)
+    xcor_arcs = np.asarray(xcor_arcs)
+    final_scis = []
+    final_arcs = []
+    if maxyshift > 0:
+        toppad = np.zeros((flaty,xdim+maxxshift))
+        botpad = np.zeros((maxyshift-flaty,xdim+maxxshift))
+        final_flat = np.vstack((toppad,xcor_flat,botpad))
+        for shif,sci,arc in zip(offsety,xcor_scis,xcor_arcs):
+            toppad = np.zeros((shif,xdim+maxxshift))
+            botpad = np.zeros((maxyshift-shif,xdim+maxxshift))
+            final_scis.append(np.vstack((toppad,sci,botpad)))
+            final_arcs.append(np.vstack((toppad,arc,botpad)))
+    else:
+        final_flat = xcor_flat
+        final_scis = xcor_scis
+        final_arcs = xcor_arcs
+    return np.asarray(final_scis),final_flat, np.asarray(final_arcs),maxxshift,maxyshift
         
-def align_images(scifits,flatfits,arcfits,d=DS9()):
-    pdb.set_trace()
+    
+      
+def find_image_offsets(arcfits,flatfit,d):
     d.set('frame 1')
-    d.set_np2arr(flatfits[0])
+    d.set('frame clear')
+    d.set_np2arr(arcfits[0])
     d.set('scale log')
     d.set('scale mode minmax')
-    d.set('cmap Grey')
-    d.set('zoom 4')
+    d.set('cmap grey')
+    d.set('zoom 2')
     d.set('frame 2')
-    d.set_np2arr(flatfits[-1])
+    d.set('frame clear')
+    d.set_np2arr(flatfit)
+    d.set('scale log')
+    d.set('scale mode minmax')
+    d.set('cmap grey')
+    d.set('zoom 2')
     d.set('blink interval 1')
     d.set('blink')
-    vshiftq = prompt_user("Is there an obserble vertical shift?")
+    flatvshift = prompt_user("What is the observable vertical shift?",yesnoq=False,maxchars=5)
+    flathshift = prompt_user("What is the observable horizontal shift?",yesnoq=False,maxchars=5)
+    d.set('single')
     d.set('frame 1')
     d.set('frame clear')
-    #d.set('frame delete')
-    d.set('frame 2')
-    d.set('frame clear')
-    #d.set('frame delete')
-    d.set('frame 1')
     d.set_np2arr(arcfits[0])
-    d#.set('scale log')
-    #d.set('scale mode minmax')
-    #d.set('min max low -100')
-    #d.set('min max high 62500')
-    #d.set('cmap Grey')
-    #d.set('zoom 4')
-    #d.set('frame new')
+    d.set('scale log')
+    d.set('scale mode minmax')
+    d.set('cmap grey')
+    d.set('zoom 2')
     d.set('frame 2')
+    d.set('frame clear')
     d.set_np2arr(arcfits[-1])
-    #d.set('scale log')
-    #d.set('scale mode minmax')
-    #d.set('zscale contrast 20.')
-    #d.set('zscale bias 0.1')
-    #d.set('cmap Grey')
-    #d.set('zoom 4')
+    d.set('scale log')
+    d.set('scale mode minmax')
+    d.set('cmap grey')
+    d.set('zoom 2')
+    d.set('blink interval 1')
     d.set('blink')
+    offsetx,offsety = np.zeros(len(arcfits)+1),np.zeros(len(arcfits)+1)
+    offsetx[-1] = float(flathshift)
+    offsety[-1] = float(flatvshift)    
+    vshiftq = prompt_user("Is there an obserble vertical shift?")
     hshiftq = prompt_user("Is there an obserble horizontal shift?")
-    if vshiftq == 'y' or hshiftq == 'y':
-        offsetx,offsety = [0.],[0.]
-        for arcfit in arcfits[1:]:
+    vertshift = (vshiftq == 'y')
+    horshift = (hshiftq == 'y')
+    if vertshift or horshift:
+        for i in np.arange(1,len(arcfits)):
+                d.set('single')
+                d.set('frame 1')
+                d.set('frame clear')
+                d.set_np2arr(arcfits[0])
+                d.set('scale log')
+                d.set('scale mode minmax')
+                d.set('cmap grey')
+                d.set('zoom 2')
                 d.set('frame 2')
                 d.set('frame clear')
-                #d.set('frame 2')
-                d.set_np2arr(arcfit)
-                #d.set('scale log')
-                #d.set('scale mode minmax')
-                #d.set('cmap Grey')  
-                #d.set('zoom 4')
+                d.set_np2arr(arcfits[i])
+                d.set('scale log')
+                d.set('scale mode minmax')
+                d.set('cmap grey')  
+                d.set('zoom 2')
                 d.set('blink')
-                yshift = prompt_user("What is the observed vertical shift?",False)
-                xshift = prompt_user("What is the observed horizontal shift?",False)
-                offsetx.append(float(xshift))
-                offsety.append(float(yshift))
-    pdb.set_trace()
-    return np.asarray(offsetx),np.asarray(offsety)
+                if vertshift:
+                    yshift = prompt_user("What is the observed vertical shift?",yesnoq=False,maxchars=5)
+                    try:
+                        offsety[i] = float(yshift)
+                    except:
+                        print "That wasn't a valid float, setting the shift to 0"
+                if horshift:
+                    xshift = prompt_user("What is the observed horizontal shift?",yesnoq=False,maxchars=5)
+                    try:
+                        offsetx[i] = float(xshift)
+                    except:
+                        print xshift
+                        print "That wasn't a valid float, setting the shift to 0"
+    return offsetx,offsety
     
    
-def combine_fits(fits_crs,alignment_info,curheader,savefile,combining_function = np.sum):
-    pdb.set_trace()
+def combine_fits(fits_crs,curheaders,filenames, savefile,combining_function = np.sum):
     sumddata = combining_function(fits_crs,axis=0)
-    pyfits.writeto(filename=savefile,data=sumddata,header=curheader,clobber=True)    
+    head = curheaders[0]
+    funcname = str(combining_function).split(' ')[1]
+    head.add_history('Combined the following files with function '+funcname)
+    for filname in filenames:
+        head.add_history(filname)
+    pyfits.writeto(filename=savefile,data=sumddata,header=curheaders[0],clobber=True)    
     return sumddata
     
     
@@ -681,12 +775,43 @@ def filter_image(img):
     return img_cr
     
 def deprecated_cr_removal(scifiles):
-    scifiles_crs,curheader = openfits(scifiles)
+    scifiles_crs,curheaders = openfits(scifiles)
     data = np.zeros(scifiles_crs.shape)
     for i in range(scifiles_crs.shape[0]):
         fit = scifiles_crs[i,:,:]
         filt = filter_image(fit)
         data[i] = (filt+np.abs(np.nanmin(filt)))/np.max(filt+np.abs(np.nanmin(filt)))
-        pyfits.writeto(filename=(scifiles[i].split('.fits')[0])+'.cr.fits',data=data[i],header=curheader,clobber=True)
-    return data,curheader
+        pyfits.writeto(filename=(scifiles[i].split('.fits')[0])+'.cr.fits',data=data[i],header=curheaders[i],clobber=True)
+    return data,curheaders
+
+
+import datetime
+def get_datetime_object(header,headcardname='DATE-OBS',splitdtkey='T',splitdkey='-',splittkey=':'):
+    date,time = header[headcardname].split(splitdtkey)
+    yr,mth,day = date.split(splitdkey)
+    hr,mins,fsecs = time.split(splittkey)
+    secs,milsecs = fsecs.split('.')
+    return datetime.datetime(int(yr),int(mth),int(day),int(hr),int(mins),int(secs),int(milsecs))
+    
+def pair_images_bytime(arcimgs,sciheaders,archeaders):
+    scitimes = []
+    for head in sciheaders:
+        scitimes.append(get_datetime_object(head))
+    arctimes = []
+    for head in archeaders:
+        arctimes.append(get_datetime_object(head))
+    #scitimes = np.asarray(scitimes)
+    #arctimes = np.asarray(arctimes)
+    matched_arcimgs = []
+    matched_archeads = []
+    matched_arctime = []
+    bests = []
+    for tim in scitimes:
+        dtimes = [np.abs((tim-ar).total_seconds()) for ar in arctimes]
+        best = np.argmin(dtimes)
+        matched_arcimgs.append(arcimgs[best])
+        matched_archeads.append(archeaders[best])
+        matched_arctime.append(arctimes[best])
+        bests.append(best)
+    return np.asarray(matched_arcimgs),matched_archeads,np.asarray(scitimes),np.asarray(matched_arctime),np.asarray(bests)
     

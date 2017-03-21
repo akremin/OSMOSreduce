@@ -21,6 +21,7 @@ import copy
 import time
 import re
 import pandas as pd
+import datetime
 import fnmatch
 import PyCosmic
 from slit_find import normalized_Canny, get_template, match_template
@@ -28,7 +29,7 @@ from slit_find import normalized_Canny, get_template, match_template
 from get_photoz import query_galaxies
 from slit_find import slit_find
 from zestipy.data_structures import waveform, redshift_data, smooth_waveform
-from testopt import interactive_plot, LineBrowser, polyfour, getch,get_slit_types,combine_fits,remove_cosmic_rays,openfits, align_images
+from testopt import interactive_plot, LineBrowser, polyfour, getch,get_slit_types,combine_fits,remove_cosmic_rays,openfits, align_images,pair_images_bytime
 from sncalc import sncalc
 from calibrations import load_calibration_lines
 from scipy.signal import argrelextrema
@@ -50,7 +51,7 @@ Please list the calibration lamp(s) used during your observations here
 cal_lamp = ['HgNe','Argon','Neon']  #['Xenon','Argon'] #'Xenon','Argon','HgNe','Neon'
 #hack
 skip_cr_remov = 'y'
-skip_combinefits = 'n'
+skip_combinefits = 'y'
 skip_slitpositioning = 'n'
 skip_wavelengthcalib = 'n'
 
@@ -259,7 +260,7 @@ if instrument.upper() == 'GOODMAN':
     # All widths and locs are currently in mm's  -> want pixels
     # X,Y in mm for mask is Y,-X for pixels on ccd  
     #ie axes are flipped and one is inverted
-    SLIT_X = binxpix_mid - np.array(slit_Y[1:-1])*(1/(xbin*pixscale*mm_per_asec))
+    SLIT_X = binxpix_mid - np.array(slit_Y[1:-1])*(1/(xbin*pixscale*mm_per_asec)) - xshift
     SLIT_Y = binnedy + np.array(slit_X[1:-1])*(1/(ybin*pixscale*mm_per_asec)) - yshift
     SLIT_WIDTH = np.array(slit_WIDTH[1:])*(1/(xbin*pixscale*mm_per_asec))
     SLIT_LENGTH = np.array(slit_LENGTH[1:])*(1/(ybin*pixscale*mm_per_asec))
@@ -376,14 +377,12 @@ Gal_dat = Gal_dat.join(stypes)
 
 d.set('frame 1')
 d.set('frame clear')
-d.set('frame delete')
-d.set(')
-d.set('frame 1')
 d.set('single')
-d.set('zscale contrast 9.04')
-d.set('zscale bias 0.055')
-d.set('zoom 2')
-d.set('cmap Grey')
+#d.set('zscale contrast 9.04')
+#d.set('zscale bias 0.055')
+#d.set('zoom 2')
+d.set('cmap rainbow')
+d.set('cmap grey')
 
 
 ###########################################
@@ -395,13 +394,11 @@ d.set('cmap Grey')
 #    skip_cr_remov = (raw_input('Detected cosmic ray filtered file exists. Do you wish to use this (y) or remove and re-calculate (n)? '))
 if skip_cr_remov == 'n':
     print('SCIENCE REDUCTION')
-    scifits_crs,scicurheader = remove_cosmic_rays(sciencefiles)
+    scifits_crs,sciheaders = remove_cosmic_rays(sciencefiles)
     #print('FLAT REDUCTION')
     #flatfits_crs,fltcurheader = openfits(flatfiles)#remove_cosmic_rays(flatfiles)
     #print('ARC REDUCTION')
     #arcfits_crs,arccurheader = openfits(arcfiles)
-
-
 
 
 ###########################################
@@ -416,13 +413,20 @@ if skip_combinefits == 'n':
     crscifiles = [x.split('.fits')[0]+'.cr.fits' for x in sciencefiles]
     if skip_cr_remov == 'y':   
         print('loading pre-prepared cosmic ray filtered files...')
-        scifits_crs,scicurheader = openfits(crscifiles)
-    flatfits_crs,fltcurheader = openfits(flatfiles)
-    arcfits_crs,arccurheader = openfits(arcfiles)
-    al_scifits,al_flatfits,al_arcfits = align_images(scifits_crs,flatfits_crs,arcfits_crs,d)       
-    scifits_c = combine_fits(scifits_crs,al_scifits,scicurheader,scisavefile)
-    flatfits_c = combine_fits(flatfits_crs,al_flatfits,fltcurheader,flatsavefile,combining_function=np.median)
-    arcfits_c = combine_fits(arcfits_crs,al_arcfits,arccurheader,arcsavefile)
+        scifits_crs,sciheaders = openfits(crscifiles)
+    flatfits_crs,fltheaders = openfits(flatfiles)
+    unaligned_flatfits_c = combine_fits(flatfits_crs,fltheaders,flatfiles,flatsavefile,combining_function=np.median)
+    unmatched_arcfits_crs,unmatched_archeaders = openfits(arcfiles)
+    arcfits_crs,archeaders,scitimes,matched_arctimes,matchinds = pair_images_bytime(unmatched_arcfits_crs,sciheaders,unmatched_archeaders)
+    al_scifits,al_flatfits,al_arcfits,dx,dy = align_images(scifits_crs,unaligned_flatfits_c,arcfits_crs,d)       
+    Gal_dat.SLIT_X = Gal_dat.SLIT_X + dx
+    Gal_dat.SLIT_Y = Gal_dat.SLIT_Y + dy
+    binnedx,binnedy = al_scifits[0].shape  # this is in binned pixels
+    binxpix_mid = int(binnedx/2)
+    binypix_mid = int(binnedy/2)
+    scifits_c = combine_fits(al_scifits,sciheaders,crscifiles,scisavefile)
+    arcfits_c = combine_fits(al_arcfits,archeaders,arcfiles[matchinds],arcsavefile)
+    flatfits_c = al_flatfits
 else: 
     print('loading pre-prepared and combined cosmic ray filtered files...')
     scifi = pyfits.open(scisavefile)
