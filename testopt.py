@@ -652,7 +652,7 @@ def align_images(scifits,flatfit,arcfits,d=DS9()):
             leftpad = np.zeros((ydim,maxxshift-shif))
             rightpad = np.zeros((ydim,shif))
             xcor_scis.append(np.hstack((leftpad,sci,rightpad)))
-            xcor_arcs.append(np.hstack((leftpad,sci,rightpad)))
+            xcor_arcs.append(np.hstack((leftpad,arc,rightpad)))
     else:
         xcor_flat = flatfit
         xcor_scis = scifits

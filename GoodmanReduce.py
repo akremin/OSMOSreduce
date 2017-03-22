@@ -405,28 +405,28 @@ if skip_cr_remov == 'n':
 # Merge the cosmic ray removed data #
 ###########################################
    
-scisavefile = datadir+clus_id+'/mask'+masknumber+'/data_products/science/'+clus_id+'_science.cr.fits'
-flatsavefile = datadir+clus_id+'/mask'+masknumber+'/data_products/flat/'+clus_id+'_flat.cr.fits'
-arcsavefile = datadir+clus_id+'/mask'+masknumber+'/data_products/comp/'+clus_id+'_comp.cr.fits'
-
+scisavefile = datadir+clus_id+'/mask'+masknumber+'/data_products/science/'+clus_id+'_science.cr.aligned.combined.fits'
+flatsavefile = datadir+clus_id+'/mask'+masknumber+'/data_products/flat/'+clus_id+'_flat.aligned.combined.fits'
+arcsavefile = datadir+clus_id+'/mask'+masknumber+'/data_products/comp/'+clus_id+'_comp.aligned.combined.fits'
 if skip_combinefits == 'n':
     crscifiles = [x.split('.fits')[0]+'.cr.fits' for x in sciencefiles]
     if skip_cr_remov == 'y':   
         print('loading pre-prepared cosmic ray filtered files...')
         scifits_crs,sciheaders = openfits(crscifiles)
     flatfits_crs,fltheaders = openfits(flatfiles)
-    unaligned_flatfits_c = combine_fits(flatfits_crs,fltheaders,flatfiles,flatsavefile,combining_function=np.median)
+    unaligned_flatfits_c = combine_fits(flatfits_crs,fltheaders,flatfiles,flatsavefile.replace('.aligned',''),combining_function=np.median)
     unmatched_arcfits_crs,unmatched_archeaders = openfits(arcfiles)
     arcfits_crs,archeaders,scitimes,matched_arctimes,matchinds = pair_images_bytime(unmatched_arcfits_crs,sciheaders,unmatched_archeaders)
     al_scifits,al_flatfits,al_arcfits,dx,dy = align_images(scifits_crs,unaligned_flatfits_c,arcfits_crs,d)       
     Gal_dat.SLIT_X = Gal_dat.SLIT_X + dx
     Gal_dat.SLIT_Y = Gal_dat.SLIT_Y + dy
-    binnedx,binnedy = al_scifits[0].shape  # this is in binned pixels
+    binnedy,binnedx = al_scifits[0].shape  # this is in binned pixels
     binxpix_mid = int(binnedx/2)
     binypix_mid = int(binnedy/2)
     scifits_c = combine_fits(al_scifits,sciheaders,crscifiles,scisavefile)
     arcfits_c = combine_fits(al_arcfits,archeaders,arcfiles[matchinds],arcsavefile)
     flatfits_c = al_flatfits
+    pyfits.writeto(filename=flatsavefile,data=flatfits_c,header=fltheaders[0],clobber=True)
 else: 
     print('loading pre-prepared and combined cosmic ray filtered files...')
     scifi = pyfits.open(scisavefile)
@@ -441,17 +441,20 @@ else:
     arcfits_c = arcfi[0].data
     arccurheader = arcfi[0].header
     arcfi.close()
-
-
+    binnedy,binnedx = scifits_c.shape  # this is in binned pixels
+    binxpix_mid = int(binnedx/2)
+    binypix_mid = int(binnedy/2)
+    #Gal_dat.SLIT_X = Gal_dat.SLIT_X + dx
+    Gal_dat.SLIT_Y = Gal_dat.SLIT_Y + 1
 
 
 
 d.set('frame 1')
-d.set_np2arr(arcfits_c)
+d.set_np2arr(arcfits_c.astype(np.float32))
 d.set('single')
 d.set('zscale bias 0.055')
 d.set('zscale contrast 0.25')
-d.set('zoom 0.40')
+d.set('zoom 0.80')
 
 
 
@@ -464,7 +467,10 @@ d.set('zoom 0.40')
 
 low = 10
 high = 240
-flat_edges = normalized_Canny(flatfits_c,low,high)
+flatlogfits_c = flatfits_c.copy()
+flatlogfits_c[flatlogfits_c <=0.] = 1e-8
+flat_edges = normalized_Canny(flatlogfits_c,low,high)
+#flat_edges = normalized_Canny(flatfits_c,low,high)
 
 ##################################################################
 #Loop through regions and shift regions for maximum effectiveness#
