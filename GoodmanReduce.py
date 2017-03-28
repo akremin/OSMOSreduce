@@ -36,9 +36,6 @@ from scipy.signal import argrelextrema
 from zestipy.z_est import z_est
 from zestipy.plotting_tools import summary_plot
 
-#from gal_trace import gal_trace
-#import zestipy.io as zpio
-#import zestipy.workflow_funcs as zwf
 
 
 '''
@@ -50,10 +47,11 @@ Please list the calibration lamp(s) used during your observations here
 '''
 cal_lamp = ['HgNe','Argon','Neon']  #['Xenon','Argon'] #'Xenon','Argon','HgNe','Neon'
 #hack
+skip_biassubtraction = 'y'
 skip_cr_remov = 'y'
 skip_combinefits = 'y'
-skip_slitpositioning = 'n'
-skip_wavelengthcalib = 'n'
+skip_slitpositioning = 'y'
+skip_wavelengthcalib = 'y'
 
 
 pixscale = 0.15 #arcsec/pixel  #pixel scale at for Goodman
@@ -73,7 +71,7 @@ instrument = "GOODMAN"
 
 #hack
 if os.environ['HOSTNAME'] == 'umdes7.physics.lsa.umich.edu':
-    datadir = '/u/home/kremin/value_storage/goodman_jan17/'
+    datadir = '/u/home/kremin/value_storage/Data/goodman_jan17/'
 else:
     datadir = '/home/kremin/SOAR_data/'
 
@@ -153,6 +151,28 @@ for curfile in os.listdir(datadir+clus_id+'/maskfiles/'): #search and import all
 
 
 
+################################################################
+# Create master bias file and subtract from all science images #
+###########################################append###############
+if not skip_biassubtraction:
+    if instrument == 'GOODMAN':
+        from procGoodman import procGoodman
+        procGoodman(path_to_raw_data = datadir+clus_id+'/mask'+masknumber+'/data', basepath_to_save_data = datadir+clus_id+'/mask'+masknumber+'/data_products',overwrite = True)
+    
+elif instrument == 'OSMOS':
+    #create reduced files if they don't exist
+    def reduce_files(filetype):
+        for file in os.listdir('./'+clus_id+'/'+filetype+'/'):
+            if fnmatch.fnmatch(file, '*.????.fits'):
+                if not os.path.isfile(clus_id+'/'+filetype+'/'+file[:-5]+'b.fits'):
+                    print 'Creating '+clus_id+'/'+filetype+'/'+file[:-5]+'b.fits'
+                    p = subprocess.Popen('python proc4k.py '+clus_id+'/'+filetype+'/'+file,shell=True)
+                    p.wait()
+                else:
+                    print 'Reduced '+filetype+' files exist'
+    filetypes = ['science','arcs','flats']
+    for filetype in filetypes:
+        reduce_files(filetype)
 
 
 
@@ -283,16 +303,16 @@ Gal_dat = pd.DataFrame({'RA':RA,'DEC':DEC,'SLIT_WIDTH':SLIT_WIDTH,'SLIT_LENGTH':
 ############################
 #Query SDSS for galaxy data#
 ############################
-#if os.path.isfile(datadir+clus_id+'/mask'+masknumber+'/'+clus_id+'_sdssinfo.csv'):
-#    redshift_dat = pd.read_csv(datadir+clus_id+'/mask'+masknumber+'/'+clus_id+'_sdssinfo.csv')
-#else:
-#    #returns a Pandas dataframe with columns
-#    #objID','SpecObjID','ra','dec','umag','gmag','rmag','imag','zmag','redshift','photo_z','extra'
-#    redshift_dat = query_galaxies(Gal_dat.RA,Gal_dat.DEC)
-#    redshift_dat.to_csv(datadir+clus_id+'/mask'+masknumber+'/data_products/'+clus_id+'_sdssinfo.csv',index=False)
-#
-##merge into Gal_dat
-#Gal_dat = Gal_dat.join(redshift_dat)
+if os.path.isfile(datadir+clus_id+'/mask'+masknumber+'/'+clus_id+'_sdssinfo.csv'):
+    redshift_dat = pd.read_csv(datadir+clus_id+'/mask'+masknumber+'/'+clus_id+'_sdssinfo.csv')
+else:
+    #returns a Pandas dataframe with columns
+    #objID','SpecObjID','ra','dec','umag','gmag','rmag','imag','zmag','redshift','photo_z','extra'
+    redshift_dat = query_galaxies(Gal_dat.RA,Gal_dat.DEC)
+    redshift_dat.to_csv(datadir+clus_id+'/mask'+masknumber+'/data_products/'+clus_id+'_sdssinfo.csv',index=False)
+
+#merge into Gal_dat
+Gal_dat = Gal_dat.join(redshift_dat)
 
 
 #######################################
