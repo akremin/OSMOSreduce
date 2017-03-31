@@ -20,6 +20,8 @@ import pdb
 import copy
 import time
 import re
+from astropy.coordinates import SkyCoord
+import astropy.units as u
 import pandas as pd
 import datetime
 import fnmatch
@@ -50,7 +52,7 @@ cal_lamp = ['HgNe','Argon','Neon']  #['Xenon','Argon'] #'Xenon','Argon','HgNe','
 skip_biassubtraction = 'y'
 skip_assign = 'y'
 skip_cr_remov = 'y'
-skip_combinefits = 'n'
+skip_combinefits = 'y'
 skip_slitpositioning = 'n'
 skip_wavelengthcalib = 'n'
 
@@ -62,7 +64,7 @@ wavelength_dir = 1   # Goodman has wavelengths increasing as pixel val increases
 xbin = 2
 ybin = 2
 xshift = 0#0.0/xbin    # with division this is in binned pixels
-yshift = 6#10#740.0/ybin  # with division this is in binned pixels
+yshift = 7#10#740.0/ybin  # with division this is in binned pixels
 binnedx = 2070#2071   # this is in binned pixels
 binnedy = 1256#1257    # this is in binned pixels
 binxpix_mid = int(binnedx/2)
@@ -284,11 +286,23 @@ elif instrument.upper() == 'GOODMAN':
     with open(datadir+clus_id+'/maskfiles/'+clus_id+'_Mask'+masknumber+'.txt','r') as fil:
         throw_y = []
         throw_x = []
+        minx = 1000.
+        miny = 1000.
+        maxx = -1000
+        maxy = -1000
         for line in fil:
             if line[:2] == 'M7':
                 if len(throw_y)>0:
                     slit_WIDTH.append(np.max(throw_y)-np.min(throw_y))
                     slit_LENGTH.append(np.max(throw_x)-np.min(throw_x))
+                    if np.min(throw_y) < miny:
+                        miny = np.min(throw_y)
+                    if np.min(throw_x) < minx:
+                        minx = np.min(throw_x)
+                    if np.max(throw_y) > maxy:
+                        maxy = np.max(throw_y)
+                    if np.max(throw_x) > maxx:
+                        maxx = np.max(throw_x)
                     throw_y = []
                     throw_x = []
                 else:
@@ -307,6 +321,10 @@ elif instrument.upper() == 'GOODMAN':
     #########################################################
     with open(datadir+clus_id+'/maskfiles/'+clus_id+'_Mask'+masknumber+'.msk','r') as fil:
         for line in fil:
+            if line[:15] == 'MASK_CENTER_DEC':
+                centerdec = line.split('=')[1].strip('\n\r')
+            if line[:14] == 'MASK_CENTER_RA':
+                centerra = line.split('=')[1].strip('\n\r')
             if line[:3] == 'MM_':
                 mm_per_asec = float(line.split('=')[1].strip('\n\r'))
             if line[:4] == '[Obj':
@@ -322,12 +340,22 @@ elif instrument.upper() == 'GOODMAN':
                 else:
                     TYPE.append('Alignment')
     mm_per_asec = 0.32 #hack
+    slit_X = np.array(slit_X[1:-1])-np.mean([maxx,minx])
+    slit_Y = np.array(slit_Y[1:-1])-np.mean([miny,maxy])
+
     
 SLIT_NUM = np.asarray(slit_NUM)
 RA = np.asarray(RA)
 DEC = np.asarray(DEC)
 TYPE = np.asarray(TYPE)
+#coords = SkyCoord(RA,DEC,unit=(u.hourangle,u.deg))
+#cent_coord = SkyCoord(centerra,centerdec,unit=(u.hourangle,u.deg))
+#dx = ((coords.dec-cent_coord.dec) * mm_per_asec*u.mm/u.arcsec).to(u.mm)
+#dy = ((coords.ra-cent_coord.ra) * mm_per_asec*u.mm/u.arcsec).to(u.mm)
 
+#dxtrans = np.cos(np.deg2rad(5.56))*dx+np.sin(np.deg2rad(5.56))*dy
+#dytrans = np.sin(np.deg2rad(5.56))*dx+np.cos(np.deg2rad(5.56))*dy
+#pdb.set_trace()
 #hack
 if instrument.upper() == 'GOODMAN':
     ## hack
@@ -344,27 +372,27 @@ if instrument.upper() == 'GOODMAN':
     # All widths and locs are currently in mm's  -> want pixels
     # X,Y in mm for mask is Y,-X for pixels on ccd  
     #ie axes are flipped and one is inverted
-    SLIT_X = binxpix_mid - np.array(slit_Y[1:-1])*(1/(xbin*pixscale*mm_per_asec)) - xshift
-    SLIT_Y = binnedy + np.array(slit_X[1:-1])*(1/(ybin*pixscale*mm_per_asec)) - yshift
+    SLIT_X = binxpix_mid + slit_Y*(1/(xbin*pixscale*mm_per_asec)) #- xshift
+    SLIT_Y = binypix_mid + slit_X*(1/(ybin*pixscale*mm_per_asec)) #- yshift
     SLIT_WIDTH = np.array(slit_WIDTH[1:])*(1/(xbin*pixscale*mm_per_asec))
     SLIT_LENGTH = np.array(slit_LENGTH[1:])*(1/(ybin*pixscale*mm_per_asec))
     ## super duper major hack
-    SLIT_NUM = np.arange(SLIT_X.size)#SLIT_NUM[correct_order_idx]
-    RA = np.array([' ']*SLIT_X.size) #RA[correct_order_idx]
-    DEC = np.array([' ']*SLIT_X.size) #DEC[correct_order_idx]
-    TYPE = np.array([' ']*SLIT_X.size) #TYPE[correct_order_idx]
+    #SLIT_NUM = np.arange(SLIT_X.size)#SLIT_NUM[correct_order_idx]
+    #RA = np.array([' ']*SLIT_X.size) #RA[correct_order_idx]
+    #DEC = np.array([' ']*SLIT_X.size) #DEC[correct_order_idx]
+    #TYPE = np.array([' ']*SLIT_X.size) #TYPE[correct_order_idx]
 
 
+
+pdb.set_trace()
+#pdb.set_trace()
 
 
 #pdb.set_trace()
 
-
-
-
 #remove throw away rows and dump into Gal_dat dataframe
 Gal_dat = pd.DataFrame({'RA':RA,'DEC':DEC,'SLIT_WIDTH':SLIT_WIDTH,'SLIT_LENGTH':SLIT_LENGTH,'SLIT_X':SLIT_X,'SLIT_Y':SLIT_Y,'TYPE':TYPE,'NAME':SLIT_NUM})
-
+Gal_dat.sort('NAME')
 ###############################################################
 
 ############################
@@ -443,8 +471,8 @@ if skip_combinefits == 'n':
     unmatched_arcfits_crs,unmatched_archeaders = openfits(arcfiles)
     arcfits_crs,archeaders,scitimes,matched_arctimes,matchinds = pair_images_bytime(unmatched_arcfits_crs,sciheaders,unmatched_archeaders)
     al_scifits,al_flatfits,al_arcfits,dx,dy = align_images(scifits_crs,unaligned_flatfits_c,arcfits_crs,d)       
-    Gal_dat.SLIT_X = Gal_dat.SLIT_X + dx
-    Gal_dat.SLIT_Y = Gal_dat.SLIT_Y + dy
+    Gal_dat.SLIT_X = Gal_dat.SLIT_X# + dx
+    Gal_dat.SLIT_Y = Gal_dat.SLIT_Y# + dy
     binnedy,binnedx = al_scifits[0].shape  # this is in binned pixels
     binxpix_mid = int(binnedx/2)
     binypix_mid = int(binnedy/2)
@@ -470,7 +498,7 @@ else:
     binxpix_mid = int(binnedx/2)
     binypix_mid = int(binnedy/2)
     #Gal_dat.SLIT_X = Gal_dat.SLIT_X + dx
-    Gal_dat.SLIT_Y = Gal_dat.SLIT_Y + 1
+    #Gal_dat.SLIT_Y = Gal_dat.SLIT_Y + 1
 
 
 
@@ -518,6 +546,7 @@ if skip_slitpositioning == 'n':
         #d.set('regions command {box(2000 '+str(Gal_dat.SLIT_Y[i])+' 4500 85) #color=green highlite=1}')
         # box(x,y,width,height)
         d.set('regions command {box('+str(Gal_dat.SLIT_X[i])+' '+str(Gal_dat.SLIT_Y[i])+' '+str(binnedx)+' '+str(Gal_dat.SLIT_LENGTH[i]+4*n_emptypixs)+') #color=green highlite=1}')
+        #pdb.set_trace()
         #raw_input('Once done: hit ENTER')
         if Gal_dat.slit_type[i] == 'g':
             if sdss_check:
