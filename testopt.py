@@ -460,54 +460,6 @@ class LineBrowser:
 
 
 
-if __name__ == '__main__':
-    from astropy.io import fits as pyfits
-    wm,fm = np.loadtxt('osmos_Xenon.dat',usecols=(0,2),unpack=True)
-    wm = air_to_vacuum(wm)
-    arcfits = pyfits.open('C4_0199/arcs/arc590813.0001b.fits')
-    data = arcfits[0].data
-    xpos = 500.0
-    xpos2 = 1500.0
-    p_x = np.arange(0,binnedx,1)
-    f_x = np.sum(data[1670:1705,:],axis=0)
-    stretch_est,shift_est,quad_est = interactive_plot(p_x,f_x,0.70,0.0,0.0,0.0,0.0,0.0,2000)
-    line_matches = {'lines':[],'peaks':[]}
-    fig,ax = plt.subplots(1)
-    plt.subplots_adjust(right=0.8)
-    for j in range(wm.size):
-        ax.axvline(wm[j],color='r')
-    line, = ax.plot(wm,fm/2.0,'ro',picker=5)# 5 points tolerance
-    fline, = plt.plot(quad_est*(p_x-binxpix_mid-16)**2 + stretch_est*(p_x-binxpix_mid-16) + shift_est,(f_x-f_x.min())/10.0,'b',picker=5)
-    closeax = plt.axes([0.83, 0.3, 0.15, 0.1])
-    button = Button(closeax, 'Add Line', hovercolor='0.975')
-    #rax = plt.axes([0.85, 0.5, 0.1, 0.2])
-    #radio = RadioButtons(rax, ('Select Line', 'Select Peak'))
-    browser = LineBrowser(fig,ax,line,wm,p_x,fline,line_matches)
-    fig.canvas.mpl_connect('pick_event', browser.onpick)
-    fig.canvas.mpl_connect('key_press_event',browser.onpress)
-    button.on_clicked(browser.add_line)
-    #radio.on_clicked(browser.radioset)
-    plt.show()
-    params,pcov = curve_fit(polyfour,np.sort(browser.line_matches['peaks']),np.sort(browser.line_matches['lines']),p0=[shift_est,stretch_est,quad_est,1e-8,1e-12,1e-12])
-    print params
-    wave,Flux,fifth,fourth,cube,quad,stretch,shift = wavecalibrate(p_x,f_x,1679.1503,0.7122818,2778.431)
-    #p_x2 = np.arange(0,4064,1) + 1000.0
-    #wave2,Flux2,cube2,quad2,stretch2,shift2 = wavecalibrate(p_x2,f_x,stretch,shift-(xpos2*stretch-xpos*stretch),quad)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -608,7 +560,6 @@ def openfits(fitlist = []):
     return np.asarray(fits_crs), fits_heads
 
 
-import numpy as np
 import astropy.io.fits as pyfits
 def correlate(img1,img2):
     corr = signal.correlate2d(img1,img2, boundary='fill', mode='same',fillvalue=0.)
@@ -814,4 +765,39 @@ def pair_images_bytime(arcimgs,sciheaders,archeaders):
         matched_arctime.append(arctimes[best])
         bests.append(best)
     return np.asarray(matched_arcimgs),matched_archeads,np.asarray(scitimes),np.asarray(matched_arctime),np.asarray(bests)
-    
+
+
+if __name__ == '__main__':
+    #from astropy.io import fits as pyfits
+    wm,fm = np.loadtxt('osmos_Xenon.dat',usecols=(0,2),unpack=True)
+    wm = air_to_vacuum(wm)
+    arcfits = pyfits.open('C4_0199/arcs/arc590813.0001b.fits')
+    data = arcfits[0].data
+    xpos = 500.0
+    xpos2 = 1500.0
+    p_x = np.arange(0,binnedx,1)
+    f_x = np.sum(data[1670:1705,:],axis=0)
+    stretch_est,shift_est,quad_est = interactive_plot(p_x,f_x,0.70,0.0,0.0,0.0,0.0,0.0,2000)
+    line_matches = {'lines':[],'peaks':[]}
+    fig,ax = plt.subplots(1)
+    plt.subplots_adjust(right=0.8)
+    for j in range(wm.size):
+        ax.axvline(wm[j],color='r')
+    line, = ax.plot(wm,fm/2.0,'ro',picker=5)# 5 points tolerance
+    fline, = plt.plot(quad_est*(p_x-binxpix_mid-16)**2 + stretch_est*(p_x-binxpix_mid-16) + shift_est,(f_x-f_x.min())/10.0,'b',picker=5)
+    closeax = plt.axes([0.83, 0.3, 0.15, 0.1])
+    button = Button(closeax, 'Add Line', hovercolor='0.975')
+    #rax = plt.axes([0.85, 0.5, 0.1, 0.2])
+    #radio = RadioButtons(rax, ('Select Line', 'Select Peak'))
+    browser = LineBrowser(fig,ax,line,wm,p_x,fline,line_matches)
+    fig.canvas.mpl_connect('pick_event', browser.onpick)
+    fig.canvas.mpl_connect('key_press_event',browser.onpress)
+    button.on_clicked(browser.add_line)
+    #radio.on_clicked(browser.radioset)
+    plt.show()
+    params,pcov = curve_fit(polyfour,np.sort(browser.line_matches['peaks']),np.sort(browser.line_matches['lines']),p0=[shift_est,stretch_est,quad_est,1e-8,1e-12,1e-12])
+    print params
+    wave,Flux,fifth,fourth,cube,quad,stretch,shift = wavecalibrate(p_x,f_x,1679.1503,0.7122818,2778.431)
+    #p_x2 = np.arange(0,4064,1) + 1000.0
+    #wave2,Flux2,cube2,quad2,stretch2,shift2 = wavecalibrate(p_x2,f_x,stretch,shift-(xpos2*stretch-xpos*stretch),quad)
+

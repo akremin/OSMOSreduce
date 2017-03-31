@@ -125,7 +125,7 @@ def procGoodman(path_to_raw_data = './', basepath_to_save_data = './',overwrite 
     
             
     fileinfotable = getCleanFileList(path_to_raw_data)        
-    pdb.set_trace()
+    #pdb.set_trace()
     
     biasfiletable = fileinfotable[fileinfotable['type']=='bias']
     nonbiasfileinfotable = fileinfotable[fileinfotable['type']!='bias']
