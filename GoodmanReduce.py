@@ -162,6 +162,9 @@ if skip_biassubtraction.lower() != 'y':
     if instrument.upper() == 'GOODMAN':
         from procGoodman import procGoodman
         procGoodman(path_to_raw_data = datadir+clus_id+'/mask'+masknumber+'/data', basepath_to_save_data = datadir+clus_id+'/mask'+masknumber+'/data_products',overwrite = True)
+    if instrument.upper() == 'M2FS':
+        from procM2FS import procM2FS
+        procGoodman(path_to_raw_data = datadir+clus_id+'/mask'+masknumber+'/data', basepath_to_save_data = datadir+clus_id+'/mask'+masknumber+'/data_products',overwrite = True)
     elif instrument.upper() == 'OSMOS':
         #create reduced files if they don't exist
         def reduce_files(filetype):
