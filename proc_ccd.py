@@ -19,8 +19,8 @@ import pdb
 from astropy.table import Table
 # Version and Date
 
-versNum = "1.2"
-versDate = "2017-03-28"
+versNum = "1.3"
+versDate = "2017-10-08"
 
 
 
@@ -119,11 +119,22 @@ def getCleanM2FSFileList(datapath):
         elif filetype not in filetypes:
             print(fil+" is a fits file but didn't match any of the types object, flat, bias, or dark\n")
             continue
-        plate, platestp, obj = head['PLATE'], head['PLATESTP'], head['OBJECT'] 
-        if 'kremin' not in plate.lower() and 'kremin' not in platestp.lower() and 'kremin' not in obj.lower():
+        plate, platestp, obj = head['PLATE'].lower(), head['PLATESTP'].lower(), head['OBJECT'].lower()
+        if ('kremin' not in plate) and ('kremin' not in platestp) and ('kremin' not in obj):
             continue
-        else:
-            fileinfotable.add_row((os.path.join(datapath,fil),filetype,expnum,target,mask))
+        if filetype == 'bias':
+            true_filetype = 'bias'
+        elif ('hene' in obj) or ('near' in obj) or ('xenon' in obj) or ('helium' in obj) or ('neon' in obj)\
+            or ('arne' in obj) or ('arhe' in obj) or ('hear' in obj) or ('lamp' in obj) or ('arc' in obj):
+            true_filetype = 'comp'
+        elif 'flat' in obj:
+            true_filetype = 'flat'
+        elif ('science' in obj) or ('kremin' in obj) or ('kr' in obj):
+            true_filetype = 'object'
+        target = platestp.split('Rev:')[1]
+        mask = plate
+        expnum = head['FILENAME'].split('c')[0].strip('rb')
+        fileinfotable.add_row((os.path.join(datapath,fil),true_filetype,expnum,target,mask))
     fileinfotable.convert_bytestring_to_unicode()
     return fileinfotable
     
