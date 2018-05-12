@@ -39,5 +39,5 @@ for color in ['b','r']:
         ypixmaxss[dict_key] = argrelextrema(sumd, np.greater)
         ypixminss[dict_key] = argrelextrema(sumd, np.less)
         plt.figure()
-        plt.plot(range(len(sumd)),sumd)
+        plt.plot(list(range(len(sumd))),sumd)
         plt.title(dict_key)

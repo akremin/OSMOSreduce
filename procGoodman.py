@@ -73,7 +73,7 @@ def getCleanFileList(datapath):
         try:
             expnum, name = rootname.split('.')
         except ValueError:
-            print(fil+" is a fits file that doesn't match format of expnum.filename.fits")
+            print((fil+" is a fits file that doesn't match format of expnum.filename.fits"))
             continue
         try:
             possibletype, targetmask = name.split('_')
@@ -93,7 +93,7 @@ def getCleanFileList(datapath):
                 passed = True
                 break
         if not passed:
-            print(fil+" is a fits file but didn't match any of the types comp,flat,bias,science\n")
+            print((fil+" is a fits file but didn't match any of the types comp,flat,bias,science\n"))
         else:
             fileinfotable.add_row((os.path.join(datapath,fil),standardizedtype,expnum,target,mask))
     fileinfotable.convert_bytestring_to_unicode()
@@ -112,7 +112,7 @@ def procGoodman(path_to_raw_data = './', basepath_to_save_data = './',overwrite 
     if os.path.exists(basepath_to_save_data):
         if overwrite:
             remove_com = 'rm -rf {}'.format(basepath_to_save_data)
-            ans = str(input("Are you sure you want to execute {}".format(remove_com)))
+            ans = str(eval(input("Are you sure you want to execute {}".format(remove_com))))
             if ans.lower() == 'y':
                 os.system(remove_com)
         else:
@@ -123,7 +123,7 @@ def procGoodman(path_to_raw_data = './', basepath_to_save_data = './',overwrite 
     os.makedirs(basepath_to_save_data)
         
     for directory in ['flat','science','comp']:
-        print("Making {} directory\n".format(directory))
+        print(("Making {} directory\n".format(directory)))
         os.makedirs(os.path.join(basepath_to_save_data,directory))
     
             
@@ -170,7 +170,7 @@ def procGoodman(path_to_raw_data = './', basepath_to_save_data = './',overwrite 
             if row['type']=='science' and currentheader['OBSTYPE']=='OBJECT':
                 pass
             else:
-                print("File: "+row['filename']+"\nWas thought to be: "+row['type']+"\nBut the header claims it is: "+currentheader['OBSTYPE'].lower())
+                print(("File: "+row['filename']+"\nWas thought to be: "+row['type']+"\nBut the header claims it is: "+currentheader['OBSTYPE'].lower()))
         assert masterbias.shape == currentdata.shape, "Make sure that the shapes of arrays are consistent"
         try:
             bias_subd = currentdata - masterbias
@@ -179,7 +179,7 @@ def procGoodman(path_to_raw_data = './', basepath_to_save_data = './',overwrite 
         justname = os.path.basename(row['filename'])
         justname = justname.replace('.fits','_b.fits')
         currentheader.add_history("Bias Subtracted on "+time.ctime()+"    by procGoodman.py v"+versNum)
-        print("Making new file: "+justname+'\n')
+        print(("Making new file: "+justname+'\n'))
         pyfits.writeto(os.path.join(basepath_to_save_data,row['type'],justname),bias_subd,header=currentheader)
         row['date'],row['time'] = currentheader['DATE'],currentheader['TIME']
         row['exptime'] = currentheader['EXPTIME']

@@ -19,7 +19,7 @@ from scipy.signal import argrelextrema
 
 #fibermap.format(camera)
 imag = fits.getdata(example_flat)[0,10:,:].astype(np.float64)
-print imag.shape
+print(imag.shape)
 imgdata_0 = imag-np.min(imag)
 imgdata_0[imgdata_0 > 30000] = 30000.0
 imgo = (255.*(imgdata_0/np.max(imgdata_0))).astype(np.uint8)
@@ -37,7 +37,7 @@ img = cv2.medianBlur(imgo,5)
 # plt.show()
 # sobel(imgo)
 canny, laplacian, sobelx, sobely = edges(imgo)
-print(sobely.shape,type(sobely),type(sobely[0]))
+print((sobely.shape,type(sobely),type(sobely[0])))
 # plotcanny(img,(20,40,5),(200,400,20))
 #thresh(imgo, 101, 80,120)
 # sobx_abs = np.abs(sobelx)
@@ -126,7 +126,7 @@ plt.imshow(imgo,origin='lower')
 # plt.show()
 
 onecut = scut_locs[0]
-print(row_starts[onecut-1],row_starts[onecut],row_starts[onecut+1])
+print((row_starts[onecut-1],row_starts[onecut],row_starts[onecut+1]))
 
 rstarts = []
 cstarts = []
@@ -135,7 +135,7 @@ cstarts.append(col_starts[:scut_locs[0]+1])
 for i in range(len(scut_locs)-1):
     rstarts.append(row_starts[scut_locs[i]+1:scut_locs[i+1]+1])
     cstarts.append(col_starts[scut_locs[i]+1:scut_locs[i+1]+1])
-print(np.shape(rstarts))
+print((np.shape(rstarts)))
 
 
 rends = []

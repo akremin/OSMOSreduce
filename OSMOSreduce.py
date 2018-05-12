@@ -5,7 +5,7 @@ In the .oms file, the first and last RA/DEC represent a reference slit at the bo
 Please list the calibration lamp(s) used during your observations here
 '''
 cal_lamp = ['Xenon','Argon'] #'Xenon','Argon','HgNe','Neon'
-print 'Using calibration lamps: ', cal_lamp
+print('Using calibration lamps: ', cal_lamp)
 
 import numpy as np
 from astropy.io import fits as pyfits
@@ -95,12 +95,12 @@ try:
     id_import = str(sys.argv[1])
     clus_id = id_import
 except:
-    print "Cluster Name Error: You must enter a cluster name to perform reduction"
-    print ' '
-    idnew = str(raw_input("Cluster ID: "))
+    print("Cluster Name Error: You must enter a cluster name to perform reduction")
+    print(' ')
+    idnew = str(input("Cluster ID: "))
     clus_id = idnew
 
-print 'Reducing cluster: ',clus_id
+print('Reducing cluster: ',clus_id)
 ###############################################################
 
 #ask if you want to only reduce sdss galaxies with spectra
@@ -125,11 +125,11 @@ def reduce_files(filetype):
     for file in os.listdir('./'+clus_id+'/'+filetype+'/'):
         if fnmatch.fnmatch(file, '*.????.fits'):
             if not os.path.isfile(clus_id+'/'+filetype+'/'+file[:-5]+'b.fits'):
-                print 'Creating '+clus_id+'/'+filetype+'/'+file[:-5]+'b.fits'
+                print('Creating '+clus_id+'/'+filetype+'/'+file[:-5]+'b.fits')
                 p = subprocess.Popen('python proc4k.py '+clus_id+'/'+filetype+'/'+file,shell=True)
                 p.wait()
             else:
-                print 'Reduced '+filetype+' files exist'
+                print('Reduced '+filetype+' files exist')
 
 filetypes = ['science','arcs','flats']
 for filetype in filetypes:
@@ -238,12 +238,12 @@ gal_imag = Gal_dat['imag']
 p = subprocess.Popen('ds9 '+clus_id+'/'+image_file+' -geometry 1200x900 -scale sqrt -scale mode zscale -fits '+clus_id+'/arcs/'+arcfiles[0],shell=True)
 #p = subprocess.Popen('ds9 '+clus_id+'/'+image_file+' -geometry 1200x900 -scale sqrt -scale mode zscale -fits '+clus_id+'/arcs/'+arcfiles[0],shell=True)
 time.sleep(3)
-print "Have the images loaded? (y/n)"
+print("Have the images loaded? (y/n)")
 while True: #check to see if images have loaded correctly
     char = getch()
     if char.lower() in ("y", "n"):
         if char.lower() == "y":
-            print 'Image has been loaded'
+            print('Image has been loaded')
             break
         else:
             sys.exit('Check to make sure file '+image_file+' exists in '+clus_id+'/')
@@ -265,10 +265,10 @@ d.set('regions sky fk5')
 reassign = 'n'
 keys = np.arange(0,Gal_dat.SLIT_WIDTH.size,1).astype('string')
 if os.path.isfile(clus_id+'/'+clus_id+'_slittypes.pkl'):
-    reassign = raw_input('Detected slit types file in path. Do you wish to use this (y) or remove and re-assign slit types (n)? ')
+    reassign = input('Detected slit types file in path. Do you wish to use this (y) or remove and re-assign slit types (n)? ')
 if reassign == 'n':
     slit_type = {}
-    print 'Is this a galaxy (g), a reference star (r), or empty sky (s)?'
+    print('Is this a galaxy (g), a reference star (r), or empty sky (s)?')
     for i in range(len(Gal_dat)):
         d.set('pan to '+Gal_dat.RA[i]+' '+Gal_dat.DEC[i]+' wcs fk5')
         if Gal_dat.SLIT_WIDTH[i] == '1.0':
@@ -285,7 +285,7 @@ if reassign == 'n':
 else:
     slit_type = pickle.load(open(clus_id+'/'+clus_id+'_slittypes.pkl','rb'))
 
-stypes = pd.DataFrame(slit_type.values(),index=np.array(slit_type.keys()).astype('int'),columns=['slit_type'])
+stypes = pd.DataFrame(list(slit_type.values()),index=np.array(list(slit_type.keys())).astype('int'),columns=['slit_type'])
 Gal_dat = Gal_dat.join(stypes)
 ##################################################################
 
@@ -299,23 +299,23 @@ d.set('zoom 0.40')
 #######################################
 redo = 'n'
 if os.path.isfile(clus_id+'/science/'+clus_id+'_science.cr.fits'):
-    redo = raw_input('Detected cosmic ray filtered file exists. Do you wish to use this (y) or remove and re-calculate (n)? ')
+    redo = input('Detected cosmic ray filtered file exists. Do you wish to use this (y) or remove and re-calculate (n)? ')
 if redo == 'n':
     try:
         os.remove(clus_id+'/science/'+clus_id+'_science.cr.fits')
     except: pass
     scifits_c = copy.copy(hdulists_science[0]) #copy I will use to hold the smoothed and added results
     scifits_c.data *= 0.0
-    print 'SCIENCE REDUCTION'
+    print('SCIENCE REDUCTION')
     for scifits in hdulists_science:
         filt = filter_image(scifits.data)
         scifits_c.data += filt + np.abs(np.nanmin(filt))
     scifits_c.writeto(clus_id+'/science/'+clus_id+'_science.cr.fits')
 else: 
     scifits_c = pyfits.open(clus_id+'/science/'+clus_id+'_science.cr.fits')[0]
-    print 'loading pre-prepared cosmic ray filtered files...'
+    print('loading pre-prepared cosmic ray filtered files...')
 
-print 'FLAT REDUCTION'
+print('FLAT REDUCTION')
 if redo == 'n':
     try:
         os.remove(clus_id+'/flats/'+clus_id+'_flat.cr.fits')
@@ -331,7 +331,7 @@ if redo == 'n':
     flatfits_c.writeto(clus_id+'/flats/'+clus_id+'_flat.cr.fits')
 else: flatfits_c = pyfits.open(clus_id+'/flats/'+clus_id+'_flat.cr.fits')[0]
 
-print 'ARC REDUCTION'
+print('ARC REDUCTION')
 if redo == 'n':
     try:
         os.remove(clus_id+'/arcs/'+clus_id+'_arc.cr.fits')
@@ -350,7 +350,7 @@ else: arcfits_c = pyfits.open(clus_id+'/arcs/'+clus_id+'_arc.cr.fits')[0]
 ##################################################################
 reassign = 'n'
 if os.path.isfile(clus_id+'/'+clus_id+'_slit_pos_qual.tab'):
-    reassign = raw_input('Detected slit position and quality file in path. Do you wish to use this (y) or remove and re-adjust (n)? ')
+    reassign = input('Detected slit position and quality file in path. Do you wish to use this (y) or remove and re-adjust (n)? ')
 if reassign == 'n':
     good_spectra = np.array(['n']*len(Gal_dat))
     FINAL_SLIT_X = np.zeros(len(Gal_dat))
@@ -359,11 +359,11 @@ if reassign == 'n':
     lower_lim = 0.0
     upper_lim = 100.0
     spectra = {}
-    print 'If needed, move region box to desired location. To increase the size, drag on corners'
+    print('If needed, move region box to desired location. To increase the size, drag on corners')
     for i in range(SLIT_WIDTH.size):
-        print 'SLIT ',i
+        print('SLIT ',i)
         d.set('pan to 1150.0 '+str(Gal_dat.SLIT_Y[i])+' physical')
-        print 'Galaxy at ',Gal_dat.RA[i],Gal_dat.DEC[i]
+        print('Galaxy at ',Gal_dat.RA[i],Gal_dat.DEC[i])
         d.set('regions command {box(2000 '+str(Gal_dat.SLIT_Y[i])+' 4500 85) #color=green highlite=1}')
         #raw_input('Once done: hit ENTER')
         if Gal_dat.slit_type[i] == 'g':
@@ -376,7 +376,7 @@ if reassign == 'n':
                 loops = 1
                 while not good and loops <=3:
                     good = True
-                    print 'Move/stretch region box. Hit (y) when ready'
+                    print('Move/stretch region box. Hit (y) when ready')
                     while True:
                         char = getch()
                         if char.lower() in ("y"):
@@ -396,7 +396,7 @@ if reassign == 'n':
                                 science_spec,arc_spec,gal_spec,gal_cuts,lower_lim,upper_lim = slit_find(flatfits_c.data[FINAL_SLIT_Y[i]-SLIT_WIDTH[i]/2.0:FINAL_SLIT_Y[i]+SLIT_WIDTH[i]/2.0,:],scifits_c.data[FINAL_SLIT_Y[i]-SLIT_WIDTH[i]/2.0:FINAL_SLIT_Y[i]+SLIT_WIDTH[i]/2.0,:],arcfits_c.data[FINAL_SLIT_Y[i]-SLIT_WIDTH[i]/2.0:FINAL_SLIT_Y[i]+SLIT_WIDTH[i]/2.0,:],lower_lim,upper_lim)
                                 spectra[keys[i]] = {'science_spec':science_spec,'arc_spec':arc_spec,'gal_spec':gal_spec,'gal_cuts':gal_cuts}
 
-                                print 'Is this spectra good (y) or bad (n)?'
+                                print('Is this spectra good (y) or bad (n)?')
                                 while True:
                                     char = getch()
                                     if char.lower() in ("y","n"):
@@ -407,7 +407,7 @@ if reassign == 'n':
 
                                 break
                             except:
-                                print 'Fit did not fall within the chosen box. Please re-define the area of interest.'
+                                print('Fit did not fall within the chosen box. Please re-define the area of interest.')
                                 good = False
                     loops += 1
                 if loops == 4:
@@ -425,10 +425,10 @@ if reassign == 'n':
             FINAL_SLIT_X[i] = Gal_dat.SLIT_X[i]
             FINAL_SLIT_Y[i] = Gal_dat.SLIT_Y[i]
             SLIT_WIDTH[i] = 40
-        print FINAL_SLIT_X[i],FINAL_SLIT_Y[i],SLIT_WIDTH[i]
+        print(FINAL_SLIT_X[i],FINAL_SLIT_Y[i],SLIT_WIDTH[i])
         d.set('regions delete all')
-    print FINAL_SLIT_X
-    np.savetxt(clus_id+'/'+clus_id+'_slit_pos_qual.tab',np.array(zip(FINAL_SLIT_X,FINAL_SLIT_Y,SLIT_WIDTH,good_spectra),dtype=[('float',float),('float2',float),('int',int),('str','|S1')]),delimiter='\t',fmt='%10.2f %10.2f %3d %s')
+    print(FINAL_SLIT_X)
+    np.savetxt(clus_id+'/'+clus_id+'_slit_pos_qual.tab',np.array(list(zip(FINAL_SLIT_X,FINAL_SLIT_Y,SLIT_WIDTH,good_spectra)),dtype=[('float',float),('float2',float),('int',int),('str','|S1')]),delimiter='\t',fmt='%10.2f %10.2f %3d %s')
     pickle.dump(spectra,open(clus_id+'/'+clus_id+'_reduced_spectra.pkl','wb'))
 else:
     FINAL_SLIT_X,FINAL_SLIT_Y,SLIT_WIDTH = np.loadtxt(clus_id+'/'+clus_id+'_slit_pos_qual.tab',dtype='float',usecols=(0,1,2),unpack=True)
@@ -448,7 +448,7 @@ Gal_dat['FINAL_SLIT_X_FLIP'] = 4064 - Gal_dat.FINAL_SLIT_X
 reassign = 'n'
 #wave = np.zeros((len(Gal_dat),4064))
 if os.path.isfile(clus_id+'/'+clus_id+'_stretchshift.tab'):
-    reassign = raw_input('Detected file with stretch and shift parameters for each spectra. Do you wish to use this (y) or remove and re-adjust (n)? ')
+    reassign = input('Detected file with stretch and shift parameters for each spectra. Do you wish to use this (y) or remove and re-adjust (n)? ')
 if reassign == 'n':
     #create write file
     f = open(clus_id+'/'+clus_id+'_stretchshift.tab','w')
@@ -571,7 +571,7 @@ if reassign == 'n':
             f.write(str(fifth[ii])+'\t')
             f.write(str(Gal_dat.SLIT_WIDTH[ii])+'\t')
             f.write('\n')
-            print 'Wave calib',ii
+            print('Wave calib',ii)
             ii += 1
             break
             
@@ -589,7 +589,7 @@ if reassign == 'n':
 
     #estimate stretch,shift,quad terms with sliders for 2nd - all galaxies
     for i in range(ii,len(Gal_dat)):
-        print 'Calibrating',i,'of',stretch.size
+        print('Calibrating',i,'of',stretch.size)
         if Gal_dat.good_spectra[i] == 'y':
             if sdss_check:
                 if Gal_dat.spec_z[i] != 0.0: skipgal = False
@@ -755,7 +755,7 @@ sdss_red = Gal_dat[Gal_dat.spec_z > 0.0].spec_z
 qualityval = {'Clear':np.zeros(len(Gal_dat))}
 
 median_sdss_redshift = np.median(Gal_dat.spec_z[Gal_dat.spec_z > 0.0])
-print 'Median SDSS redshift',median_sdss_redshift
+print('Median SDSS redshift',median_sdss_redshift)
 
 R = z_est()
 
@@ -787,9 +787,9 @@ for k in range(len(Gal_dat)):
         cor[k] = 0.0
 
     if k in sdss_elem.astype('int') and redshift_est[k] > 0:
-        print 'Estimate: %.5f'%(redshift_est[k]), 'SDSS: %.5f'%(sdss_red.values[np.where(sdss_elem==k)][0])
-    print 'z found for galaxy '+str(k+1)+' of '+str(len(Gal_dat))
-    print ''
+        print('Estimate: %.5f'%(redshift_est[k]), 'SDSS: %.5f'%(sdss_red.values[np.where(sdss_elem==k)][0]))
+    print('z found for galaxy '+str(k+1)+' of '+str(len(Gal_dat)))
+    print('')
 
 #Add redshift estimates, SN, Corr, and qualityflag to the Dataframe
 Gal_dat['est_z'],Gal_dat['cor'],Gal_dat['HSN'],Gal_dat['KSN'],Gal_dat['GSN'],Gal_dat['quality_flag'] = redshift_est,cor,HSN,KSN,GSN,qualityval['Clear']

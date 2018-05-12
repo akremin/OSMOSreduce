@@ -11,9 +11,9 @@ import numpy as np
 
 
 def usage(scriptname, versNum, versDate):
-    print "\nUsage for %s v%s (%s):" % (scriptname, versNum, versDate)
-    print "	%s file.fits [or file*.fits or file1.fits file2.fits]" % (scriptname)
-    print "\nWhere: file.fits, file*.fits, etc. are fits files\n"
+    print("\nUsage for %s v%s (%s):" % (scriptname, versNum, versDate))
+    print("	%s file.fits [or file*.fits or file1.fits file2.fits]" % (scriptname))
+    print("\nWhere: file.fits, file*.fits, etc. are fits files\n")
 
 
 def parseinput():
@@ -28,7 +28,7 @@ def parseinput():
     # check that the input files exist
     for i in range(1, len(files)):
         if os.path.isfile(files[i]) == 0:
-            print "\n** ERROR: " + files[i] + " does not exist."
+            print("\n** ERROR: " + files[i] + " does not exist.")
             sys.exit(1)
     return files, flags
 
@@ -40,13 +40,13 @@ def filt(x, l):
     for a in range(0, len(x)):
         y[a] = l[x[a]]
     m = np.median(y)
-    print m
+    print(m)
     dv = [elm - m for elm in y]
     mad = np.median(np.fabs(dv) / c)  # Median-Asbolute-Deviation
 #    print m + mad / 2
     for b in range(0, len(y)):
         if y[b] > m + 20 * mad / 2 or y[b] < m - 20 * mad / 2:
-            print "reject: %d " % b
+            print("reject: %d " % b)
             y[b] = m
     return y
 

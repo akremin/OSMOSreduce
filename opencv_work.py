@@ -26,7 +26,7 @@ def plotcanny(img,minis,maxis):
                 thismax = maxi2
             edges = cv2.Canny(img,thismin,thismax)
             subval = xplots*100+yplots*10+i*xplots+j+1
-            print subval
+            print(subval)
             plt.subplot(subval),plt.imshow(edges,cmap = 'gray')
             plt.title('Edge Image'+str(thismin)+' '+str(thismax)), plt.xticks([]), plt.yticks([])
     plt.show()
@@ -39,7 +39,7 @@ def thresh(img,abscut,adapt1,adapt2):
     titles = ['Original Image', 'Global Thresholding (v = 127)',\
         'Adaptive Mean Thresholding', 'Adaptive Gaussian Thresholding']
     images = [img, th1, th2, th3]
-    for i in xrange(4):
+    for i in range(4):
         plt.subplot(2,2,i+1),plt.imshow(images[i],'gray')
         plt.title(titles[i])
         plt.xticks([]),plt.yticks([])
@@ -100,7 +100,7 @@ def edges(img):
     plt.show()
 
 def load_image(typeoffile):
-    if 'HOSTNAME' in os.environ.keys() and os.environ['HOSTNAME'] == 'umdes7.physics.lsa.umich.edu':
+    if 'HOSTNAME' in list(os.environ.keys()) and os.environ['HOSTNAME'] == 'umdes7.physics.lsa.umich.edu':
         data_dir =  'goodman_jan17'# 
     else:
         data_dir = 'SOAR_data'

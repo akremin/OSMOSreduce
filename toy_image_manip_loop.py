@@ -37,7 +37,7 @@ if version == 'v3':
         xbin,ybin = [int(x) for x in header['BINNING'].split('x')]
         xcent, ycent = header['CHOFFX']/(xbin*header['SCALE']),header['CHOFFY']/(ybin*header['SCALE'])
         (x1,x2),(y1,y2) = [[int(x) for x in va.split(':')] for va in header['DATASEC'].strip('[]').split(',')]
-        print(x1,x2,y1,y2)
+        print((x1,x2,y1,y2))
         xtrans = np.floor(x2 + xcent - np.abs(xcent))
         ytrans = np.floor(y2 + ycent - np.abs(ycent))
         if i==1:
@@ -59,8 +59,8 @@ if version == 'v3':
             iy2 = ytrans+y2-1
             ys = np.arange(iy1,iy2).astype(int)#[::-1].astype(int)
         y,x = np.meshgrid(ys,xs)
-        print(xtrans,ytrans)
-        print(x.shape,y.shape,hdu.data.shape,hdu.data[x1-1:x2,y1-1:y2].shape,final_image.shape)
+        print((xtrans,ytrans))
+        print((x.shape,y.shape,hdu.data.shape,hdu.data[x1-1:x2,y1-1:y2].shape,final_image.shape))
         #final_image[x,y] = hdu.data[x1-1:x2,y1-1:y2]
         #for i,iy in enumerate(ys):
         #    for j,jx in enumerate(xs):
@@ -84,7 +84,7 @@ elif version == 'v2':
         (x1, x2),(y1,y2) = [[int(x) for x in va.split(':')] for va in header['DATASEC'].strip('[]').split(',')]
         x1 -= 1
         y1 -= 1
-        print(x1,x2,y1,y2)
+        print((x1,x2,y1,y2))
         #xbin,ybin = [int(x) for x in header['BINNING'].split('x')]
         xbin, ybin = 1, 1
         xcent,ycent = xcent/xbin, ycent/ybin
@@ -94,7 +94,7 @@ elif version == 'v2':
             final_image = np.zeros(shape=(2*(y2-y1+1),2*(x2-x1+1)))
         pixtransform_x = int(0.5*(np.abs(xcent) - xcent))
         pixtransform_y = int(0.5*(np.abs(ycent) - ycent))
-        print(pixtransform_x,pixtransform_y)
+        print((pixtransform_x,pixtransform_y))
         #for x in np.arange(x1,x2)[::-1]:
         #    for y in np.arange(y1,y2)[::-1]:
         #        final_image[y+pixtransform_y,x+pixtransform_x] = ccd_dat[y,x]
@@ -114,7 +114,7 @@ elif version == 'v1':
        header = hdu.header
        xcent, ycent = header['CHOFFX'],header['CHOFFY']
        y1,y2,x1,x2 = 0, header['NAXIS2'], 0, header['NAXIS1']
-       print(x1,x2,y1,y2)
+       print((x1,x2,y1,y2))
        if i==1:
            final_image = np.ndarray(shape=(y2*2,x2*2))
        if xcent < 0:
@@ -161,7 +161,7 @@ for orient in ['ul']:
     else:
         print("That didn't work")
     final_image[xs,ys] = pic1
-    it2s = range(4)
+    it2s = list(range(4))
     it2s.remove(i)
 
     #for ii in it2s:
@@ -182,7 +182,7 @@ for orient in ['ul']:
         print("That didn't work")
     final_image[x2s,y2s] = pic2
 
-    it3s = range(4)
+    it3s = list(range(4))
     it3s.remove(i)
     it3s.remove(ii)
     iii = 2

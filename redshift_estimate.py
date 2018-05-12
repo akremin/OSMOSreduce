@@ -13,9 +13,9 @@ from types import *
 class Estimateline:
     '''Class to manually estimate where lines are located'''
     def __init__(self,pspec,ax5,uline):
-        print 'If redshift calibration appears correct, hit "Accept and Close". '\
+        print('If redshift calibration appears correct, hit "Accept and Close". '\
         'Otherwise, "right click" approx. where the '+uline+' line is in the plotted spectrum. '\
-        'The program will re-correlate based on this guess.'
+        'The program will re-correlate based on this guess.')
         self.ax5 = ax5
         self.cid3 = pspec.figure.canvas.mpl_connect('button_press_event',self.onclick)
 
@@ -30,7 +30,7 @@ class Estimateline:
     def onclick(self,event):
         if event.inaxes == self.ax5:
             if event.button == 3:
-                print 'xdata=%f, ydata%f'%(event.xdata, event.ydata)
+                print('xdata=%f, ydata%f'%(event.xdata, event.ydata))
                 self.lam = event.xdata
                 plt.close()
             '''
@@ -72,17 +72,17 @@ class z_est:
         self.corr_val_i = np.zeros(self.ztest.size)
 
         #set redshift prior flag
-        self.est_pre_z = raw_input('(1) Use a known prior [Examples: median of known redshifts. Galaxy photoz measurements] \n'\
+        self.est_pre_z = input('(1) Use a known prior [Examples: median of known redshifts. Galaxy photoz measurements] \n'\
                             '(2) View spectrum and specify a redshift prior \n'\
                             '(3) No prior\n')
 
         #catch and correct false entry
         _est_enter = False
-        self.uline_n = raw_input('What is the name of a spectral line you wish to use to identify redshift priors? '\
+        self.uline_n = input('What is the name of a spectral line you wish to use to identify redshift priors? '\
                                             '[Default: HK]: ')
         if not self.uline_n:
             self.uline_n = 'HK'
-        self.uline = raw_input('Please list the approx. rest wavelength (in angstroms) of that line you seek to identify in your spectra '\
+        self.uline = input('Please list the approx. rest wavelength (in angstroms) of that line you seek to identify in your spectra '\
                                             '[Default: HK lines are at about 3950]: ')
         if self.uline:
             self.uline = np.float(self.uline)
@@ -91,22 +91,22 @@ class z_est:
         while not _est_enter:
             if self.est_pre_z == '1':
                 self.z_prior_width = 0.06
-                print 'redshift prior width has been set to',self.z_prior_width
+                print('redshift prior width has been set to',self.z_prior_width)
                 _est_enter = True
             elif self.est_pre_z == '2':
                 self.z_prior_width = 0.06
-                print 'redshift prior width has been set to',self.z_prior_width
+                print('redshift prior width has been set to',self.z_prior_width)
                 _est_enter = True
             elif self.est_pre_z == '3':
                 self.z_prior_width = 0.06
                 _est_enter = True
             else:
-                self.est_pre_z = raw_input('Incorrect entry: Please enter either (1), (2), or (3).')
+                self.est_pre_z = input('Incorrect entry: Please enter either (1), (2), or (3).')
 
         #remind user to set the correct values in next step
         if self.est_pre_z == '1':
-            print 'Make sure to set the gal_prior argument to the value of the known redshift prior: '\
-                '[Example: z_est.redshift_estimate(gal_prior=0.1)]'
+            print('Make sure to set the gal_prior argument to the value of the known redshift prior: '\
+                '[Example: z_est.redshift_estimate(gal_prior=0.1)]')
 
         #postconditions
         assert self.est_pre_z, "Must define redshift prior flag"
@@ -130,7 +130,7 @@ class z_est:
             if self.gal_prior:
                 self.pre_z_est = self.gal_prior
             else:
-                nospec = raw_input('You said you are either using a spectroscopic or photometric redshift prior. '\
+                nospec = input('You said you are either using a spectroscopic or photometric redshift prior. '\
                                         'You need to specify a prior value! Either enter a number in now or type (q) to exit')
                 if nospec == 'q':
                     sys.exit()
@@ -142,12 +142,12 @@ class z_est:
 
         #handle user prior flag
         if self.est_pre_z == '2':
-            print 'Take a look at the plotted galaxy spectrum and note, approximately, at what wavelength do you see the '+self.uline_n+' line. '\
-                    'Then close the plot and enter that wavelength in angstroms.'
+            print('Take a look at the plotted galaxy spectrum and note, approximately, at what wavelength do you see the '+self.uline_n+' line. '\
+                    'Then close the plot and enter that wavelength in angstroms.')
             plt.plot(wave,Flux_science)
             plt.xlim(self.lower_w,self.upper_w)
             plt.show()
-            line_init = raw_input(self.uline_n+' approx. wavelength (A): ')
+            line_init = input(self.uline_n+' approx. wavelength (A): ')
             self.pre_z_est = np.float(line_init)/self.uline - 1
 
         #handle no prior flag
@@ -166,7 +166,7 @@ class z_est:
             self.pre_z_est = self.pre_lam_est/3950.0 - 1.0
             self.first_pass = False
             redshift_est,cor,ztest,corr_val = self._cross_cor(self.pre_z_est,self.z_prior_width,early_type_wave,early_type_flux_sc,wave,Flux_sc)
-            print 'redshift est:',redshift_est
+            print('redshift est:',redshift_est)
             self._GUI_display(redshift_est,ztest,corr_val,wave,Flux_science)
             total_new_shift = self.spectra2.dx_tot
             redshift_est = (self.uline*(1+redshift_est) - total_new_shift)/self.uline - 1
@@ -282,7 +282,7 @@ class DragSpectra:
         self.ax5 = ax5
         self.fig = fig
         self.tb = plt.get_current_fig_manager().toolbar
-        print 'begin shift'
+        print('begin shift')
         self.spectra = spectra
         self.ydata = ydata
         self.pressed = False

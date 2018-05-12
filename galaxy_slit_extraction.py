@@ -43,8 +43,8 @@ plt.plot(np.arange(0,slit_width,1),_gaus(np.arange(0,slit_width,1),*popt_g))
 plt.plot(np.arange(0,slit_width,1),np.median(d2_spectra_s.T/np.max(d2_spectra_s),axis=1))
 plt.show()
 
-print 'gal dim:',raw_gal.shape
-print 'sky dim:',sky.shape
+print('gal dim:',raw_gal.shape)
+print('sky dim:',sky.shape)
 plt.figure()
 plt.imshow(np.log(d2_spectra_s.T-sky_sub_tot),aspect=35,origin='lower')#aspect=35,
 plt.show()

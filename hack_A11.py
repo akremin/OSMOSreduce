@@ -19,6 +19,21 @@ comp_lamps = [1929,1930,1935,1936,1940,1941]
 sciences = [1931,1932,1933,1937,1938]
 fibermaps = np.arange(1612,1621)
 
+instrument = 'M2FS'
+path_to_data = '../../OneDrive/Research/M2FSReductions'
+mask_name = 'A11'
+shoe_dirnames = ['blue','red']
+cal_lamp = ['Xenon', 'Argon', 'HgNe']  # 'Xenon','Argon','Neon', 'HgNe'
+
+
+
+
+#############################################################
+############         Beginning of Code       ################
+#############################################################
+#data_dir = '/u/home/kremin/value_storage/m2fsdata_jun2016'
+data_dir = os.path.join(path_to_data,mask_name,shoe_dirnames[1])
+
 masterbias = '{}_masterbias_A11_c.fits'#.format(camera))
 
 thar = '{}_ThAr_A11_cb.fits'#.format(camera))
@@ -53,7 +68,7 @@ def plotcanny(img,minis,maxis):
                 thismax = maxi2
             edges = cv2.Canny(img,thismin,thismax)
             subval = xplots*100+yplots*10+i*xplots+j+1
-            print subval
+            print(subval)
             plt.subplot(subval),plt.imshow(edges,cmap = 'gray')
             plt.title('Edge Image'+str(thismin)+' '+str(thismax)), plt.xticks([]), plt.yticks([])
     plt.show()
@@ -66,7 +81,7 @@ def thresh(img,abscut,adapt1,adapt2):
     titles = ['Original Image', 'Global Thresholding (v = 127)',\
         'Adaptive Mean Thresholding', 'Adaptive Gaussian Thresholding']
     images = [img, th1, th2, th3]
-    for i in xrange(4):
+    for i in range(4):
         plt.subplot(2,2,i+1),plt.imshow(images[i],'gray')
         plt.title(titles[i])
         plt.xticks([]),plt.yticks([])
@@ -128,7 +143,7 @@ def edges(img):
     return canny,laplacian,sobelx,sobely
 
 def load_image(typeoffile):
-    if 'HOSTNAME' in os.environ.keys() and os.environ['HOSTNAME'] == 'umdes7.physics.lsa.umich.edu':
+    if 'HOSTNAME' in list(os.environ.keys()) and os.environ['HOSTNAME'] == 'umdes7.physics.lsa.umich.edu':
         data_dir =  'goodman_jan17'#
     else:
         data_dir = 'SOAR_data'
@@ -201,7 +216,7 @@ for camera in ['b']:#,'r']:
     #bool_x = (sobx_abs > med_sobx)
     #imgo[bool_x] = img[bool_x]
     #canny, laplacian, sobelx, sobely = edges(imgo)
-    print(imag.shape)
+    print((imag.shape))
     stepsize = 10
     all_starts,all_ends = [], []
     ncol_start,ncol_end = [],[]
@@ -233,12 +248,12 @@ for camera in ['b']:#,'r']:
         starts_np[row,:len(rowstarts)] = rowstarts
         rowends = all_ends[row]
         ends_np[row,:len(rowends)] = rowends
-        plt.plot(range(len(rowstarts)),rowstarts,'b-')
-        plt.plot(range(len(rowends)),rowends,'r-')
+        plt.plot(list(range(len(rowstarts))),rowstarts,'b-')
+        plt.plot(list(range(len(rowends))),rowends,'r-')
     plt.show()
     plt.close('all')
 
-    print(starts_np.shape,ends_np.shape)
+    print((starts_np.shape,ends_np.shape))
     #print(all_starts)
     #imag.clip(0.0001,44000)
     #img[img < 15] = 0

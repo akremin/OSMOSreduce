@@ -128,11 +128,11 @@ def interactive_plot(px,fx,stretch_0,shift_0,quad_0,cube_0,fourth_0,fifth_0,slit
     fn_axshift = plt.axes([0.15,0.12,0.75,0.03])
     close_ax = plt.axes([0.05,0.5,0.06,0.05])
 
-    slide_stretch = Slider(axstretch, 'Stretch',0.8,2.6,valinit=stretch_0,valfmt=u'%1.2f')
-    slide_shift = Slider(axshift,'Shift',-2000.0,10000.0,valinit=shift_0,valfmt=u'%1.2f')
-    fn_slide_stretch = Slider(fn_axstretch, 'Fine Stretch',-0.05,0.05,valinit=fn_stretch_0,valfmt=u'%1.4f')
-    fn_slide_shift = Slider(fn_axshift,'Fine Shift',-200.0,200.0,valinit=fn_shift_0,valfmt=u'%1.2f')
-    fn_slide_quad = Slider(fn_axquad,'Fine Quad',-4e-5,4e-5,valinit=fn_quad_0,valfmt=u'%1.6f')
+    slide_stretch = Slider(axstretch, 'Stretch',0.8,2.6,valinit=stretch_0,valfmt='%1.2f')
+    slide_shift = Slider(axshift,'Shift',-2000.0,10000.0,valinit=shift_0,valfmt='%1.2f')
+    fn_slide_stretch = Slider(fn_axstretch, 'Fine Stretch',-0.05,0.05,valinit=fn_stretch_0,valfmt='%1.4f')
+    fn_slide_shift = Slider(fn_axshift,'Fine Shift',-200.0,200.0,valinit=fn_shift_0,valfmt='%1.2f')
+    fn_slide_quad = Slider(fn_axquad,'Fine Quad',-4e-5,4e-5,valinit=fn_quad_0,valfmt='%1.6f')
     close_button = Button(close_ax,'Close Plot', hovercolor='0.80')
 
     def set_calib_lines(label):
@@ -188,7 +188,7 @@ def interactive_plot(px,fx,stretch_0,shift_0,quad_0,cube_0,fourth_0,fifth_0,slit
     shift_est = slide_shift.val+fn_slide_shift.val
     stretch_est = slide_stretch.val+fn_slide_stretch.val
     quad_est = quad_0 + fn_slide_quad.val
-    print 'quad_est:',quad_est, 'stretch est:',stretch_est, 'shift est:',shift_est
+    print('quad_est:',quad_est, 'stretch est:',stretch_est, 'shift est:',shift_est)
     return stretch_est,shift_est,quad_est
 
 def interactive_plot_plus(px,fx,wm,fm,stretch_0,shift_0,quad_0):
@@ -209,10 +209,10 @@ def interactive_plot_plus(px,fx,wm,fm,stretch_0,shift_0,quad_0):
     fn_axshift = plt.axes([0.25,0.12,0.65,0.03])
     close_ax = plt.axes([0.05,0.5,0.13,0.1])
 
-    slide_stretch = Slider(axstretch, 'Stretch',0.4,1.3,valinit=stretch_0,valfmt=u'%1.2f')
-    slide_shift = Slider(axshift,'Shift',-4000.0,4000.0,valinit=shift_0,valfmt=u'%1.2f')
-    fn_slide_stretch = Slider(fn_axstretch, 'Fine Stretch',-0.05,0.05,valinit=fn_stretch_0,valfmt=u'%1.6f')
-    fn_slide_shift = Slider(fn_axshift,'Fine Shift',-200.0,200.0,valinit=fn_shift_0,valfmt=u'%1.2f')
+    slide_stretch = Slider(axstretch, 'Stretch',0.4,1.3,valinit=stretch_0,valfmt='%1.2f')
+    slide_shift = Slider(axshift,'Shift',-4000.0,4000.0,valinit=shift_0,valfmt='%1.2f')
+    fn_slide_stretch = Slider(fn_axstretch, 'Fine Stretch',-0.05,0.05,valinit=fn_stretch_0,valfmt='%1.6f')
+    fn_slide_shift = Slider(fn_axshift,'Fine Shift',-200.0,200.0,valinit=fn_shift_0,valfmt='%1.2f')
     close_button = Button(close_ax,'Close Plots', hovercolor='0.80')
 
     #secondary 'zoom' plots
@@ -255,7 +255,7 @@ def interactive_plot_plus(px,fx,wm,fm,stretch_0,shift_0,quad_0):
     plt.show()
     shift_est = slide_shift.val+fn_slide_shift.val
     stretch_est = slide_stretch.val+fn_slide_stretch.val
-    print 'quad_0:',quad_0,'stretch_0:',stretch_est,'shift_0:',shift_est
+    print('quad_0:',quad_0,'stretch_0:',stretch_est,'shift_0:',shift_est)
     return (quad_0*(px-binxpix_mid)**2+px*stretch_est+shift_est,fx,stretch_est,shift_est)
 
 class LineBrowser:
@@ -274,9 +274,9 @@ class LineBrowser:
         fn_axquad = plt.axes([0.25,0.03,0.65,0.03])
         fn_axstretch = plt.axes([0.25,0.07,0.65,0.03])
         fn_axshift = plt.axes([0.25,0.12,0.65,0.03])
-        self.fn_slide_stretch = Slider(fn_axstretch, 'Fine Stretch',-0.05,0.05,valinit=0.0,valfmt=u'%1.4f')
-        self.fn_slide_shift = Slider(fn_axshift,'Fine Shift',-200.0,200.0,valinit=0.0,valfmt=u'%1.3f')
-        self.fn_slide_quad = Slider(fn_axquad,'Fine Quad',-4e-5,4e-5,valinit=0.0,valfmt=u'%1.6f')
+        self.fn_slide_stretch = Slider(fn_axstretch, 'Fine Stretch',-0.05,0.05,valinit=0.0,valfmt='%1.4f')
+        self.fn_slide_shift = Slider(fn_axshift,'Fine Shift',-200.0,200.0,valinit=0.0,valfmt='%1.3f')
+        self.fn_slide_quad = Slider(fn_axquad,'Fine Quad',-4e-5,4e-5,valinit=0.0,valfmt='%1.6f')
         self.fn_slide_stretch.on_changed(self.slider_update)
         self.fn_slide_shift.on_changed(self.slider_update)
         self.fn_slide_quad.on_changed(self.slider_update)
@@ -326,7 +326,7 @@ class LineBrowser:
 
     def update_current(self):
         if self.j >= len(self.line_matches['peaks_w']):
-            print 'done with plot'
+            print('done with plot')
             plt.close()
             return
         self.selected_peak.set_xdata(self.line_matches['peaks_w'][self.j])
@@ -403,7 +403,7 @@ class LineBrowser:
         self.line_matches['peaks_w'] = self.line_matches['peaks_w'][:self.j]
         self.line_matches['peaks_h'] = self.line_matches['peaks_h'][:self.j]
         self.line_matches['lines'] = self.line_matches['lines'][:self.j]
-        print 'FINISHED GALAXY CALIBRATION'
+        print('FINISHED GALAXY CALIBRATION')
         plt.close()
         return
 
@@ -480,7 +480,7 @@ def getch(maxchars=1):
             outch = outch+ch
     finally:
         termios.tcsetattr(fd,termios.TCSADRAIN,old_settings)
-        print "\n"
+        print("\n")
     return outch
 
 def prompt_user(question,yesnoq = True,maxchars=1):   
@@ -564,7 +564,7 @@ import astropy.io.fits as pyfits
 def correlate(img1,img2):
     corr = signal.correlate2d(img1,img2, boundary='fill', mode='same',fillvalue=0.)
     y, x = np.unravel_index(np.argmax(corr), corr.shape)
-    print x,y
+    print(x,y)
     plt.figure(); plt.imshow(corr); plt.plot([x],[y],'c*'); plt.show()
         
 
@@ -695,14 +695,14 @@ def find_image_offsets(arcfits,flatfit,d):
                     try:
                         offsety[i] = float(yshift)
                     except:
-                        print "That wasn't a valid float, setting the shift to 0"
+                        print("That wasn't a valid float, setting the shift to 0")
                 if horshift:
                     xshift = prompt_user("What is the observed horizontal shift?",yesnoq=False,maxchars=5)
                     try:
                         offsetx[i] = float(xshift)
                     except:
-                        print xshift
-                        print "That wasn't a valid float, setting the shift to 0"
+                        print(xshift)
+                        print("That wasn't a valid float, setting the shift to 0")
     return offsetx,offsety
     
    
@@ -796,7 +796,7 @@ if __name__ == '__main__':
     #radio.on_clicked(browser.radioset)
     plt.show()
     params,pcov = curve_fit(polyfour,np.sort(browser.line_matches['peaks']),np.sort(browser.line_matches['lines']),p0=[shift_est,stretch_est,quad_est,1e-8,1e-12,1e-12])
-    print params
+    print(params)
     wave,Flux,fifth,fourth,cube,quad,stretch,shift = wavecalibrate(p_x,f_x,1679.1503,0.7122818,2778.431)
     #p_x2 = np.arange(0,4064,1) + 1000.0
     #wave2,Flux2,cube2,quad2,stretch2,shift2 = wavecalibrate(p_x2,f_x,stretch,shift-(xpos2*stretch-xpos*stretch),quad)

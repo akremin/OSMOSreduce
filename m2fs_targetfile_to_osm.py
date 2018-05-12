@@ -36,8 +36,8 @@ with open('Kremin_02_07_08_11_Plate2.plate','r') as plate:
             plate_file[current_field][current_key].append(stripped_split)
         
             
-for field,fielddict in plate_file.iteritems():
-    sectionkeys = fielddict.keys()
+for field,fielddict in list(plate_file.items()):
+    sectionkeys = list(fielddict.keys())
     if 'header' in sectionkeys:
             if 'Standards' in sectionkeys and len(fielddict['Standards'])>1:
                 if 'Drilled' in sectionkeys:
@@ -47,14 +47,14 @@ for field,fielddict in plate_file.iteritems():
                     fielddict['Drilled'] = fielddict['Standards']
             else:
                 pass
-            if 'Drilled' in fielddict.keys():
+            if 'Drilled' in list(fielddict.keys()):
                 current_table = Table(rows=fielddict['Drilled'][1:],names = fielddict['Drilled'][0])
                 #for cur_row in fielddict['Drilled'][1:]:
                 #    current_table.add_row(Table.Row(cur_row))
                 outtab = current_table['id','ra','dec','epoch','type','x','y','z']
                 outname = fielddict['header']['name']+'_targeted_id_ra_decs'
                 if os.path.isfile('./'+outname+'.fits'):
-                    yorn = raw_input("Overwrite file?")
+                    yorn = eval(input("Overwrite file?"))
                     if yorn.lower() == 'y':
                         os.remove('./'+outname+'.fits')
                         os.remove('./'+outname+'.csv')

@@ -96,7 +96,7 @@ if __name__ == '__main__':
         y = np.median(cutout[:,(100*i)-50:(100*i)+50],axis=1)
         ymg = 25.0
         popt,pcov = curve_fit(gaus,x,y,p0=[1.0,ymg])
-        print np.sqrt(np.diag(pcov))
+        print(np.sqrt(np.diag(pcov)))
         if i % 1.0 == 0:
             plt.plot(np.arange(0,len(cutout),1),np.median(cutout[:,100*i-50:100*i+50],axis=1),'ko',markersize=4)
             plt.plot(x,gaus(x,*popt),'r',ls='--',alpha=0.6)

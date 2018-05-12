@@ -111,8 +111,8 @@ try:
 except:
     print("Cluster Name Error: You must enter a cluster name to perform reduction")
     print(' ')
-    clus_id = str((raw_input("Cluster ID: ")))
-    masknumber = str(raw_input('What mask was it?'))  
+    clus_id = str((input("Cluster ID: ")))
+    masknumber = str(input('What mask was it?'))  
 
 print(('Reducing cluster: ',clus_id))
 ###############################################################
@@ -158,7 +158,7 @@ for curfile in os.listdir(datadir+clus_id+'/maskfiles/'): #search and import all
 # Create master bias file and subtract from all science images #
 ###########################################append###############
 if skip_biassubtraction.lower() != 'y':
-    print "doing bias subtraction"
+    print("doing bias subtraction")
     if instrument.upper() == 'GOODMAN':
         from procGoodman import procGoodman
         procGoodman(path_to_raw_data = datadir+clus_id+'/mask'+masknumber+'/data', basepath_to_save_data = datadir+clus_id+'/mask'+masknumber+'/data_products',overwrite = True)
@@ -171,11 +171,11 @@ if skip_biassubtraction.lower() != 'y':
             for file in os.listdir('./'+clus_id+'/'+filetype+'/'):
                 if fnmatch.fnmatch(file, '*.????.fits'):
                     if not os.path.isfile(clus_id+'/'+filetype+'/'+file[:-5]+'b.fits'):
-                        print 'Creating '+clus_id+'/'+filetype+'/'+file[:-5]+'b.fits'
+                        print('Creating '+clus_id+'/'+filetype+'/'+file[:-5]+'b.fits')
                         p = subprocess.Popen('python proc4k.py '+clus_id+'/'+filetype+'/'+file,shell=True)
                         p.wait()
                     else:
-                        print 'Reduced '+filetype+' files exist'
+                        print('Reduced '+filetype+' files exist')
         filetypes = ['science','arcs','flats']
         for filetype in filetypes:
             reduce_files(filetype)
@@ -567,7 +567,7 @@ if skip_slitpositioning == 'n':
                         if char.lower() in ("y"):
                             break
                     newpos_str = d.get('regions').split('\n')
-                    print newpos_str
+                    print(newpos_str)
                     for n_string in newpos_str:
                         if n_string[:3] == 'box':
                             newpos = re.search('box\(.*,(.*),.*,(.*),.*\)',n_string)
@@ -579,7 +579,7 @@ if skip_slitpositioning == 'n':
                             #Sky subtract code
                             ##
                             try:
-                                print "Trying to find the slit location from that information"
+                                print("Trying to find the slit location from that information")
                                 lowerbound = int(FINAL_SLIT_Y[i]-(BOX_WIDTH[i]/2.0))
                                 upperbound = int(FINAL_SLIT_Y[i]+(BOX_WIDTH[i]/2.0))
                                 cutflatdat = flatfits_c[lowerbound:upperbound,:]
@@ -587,7 +587,7 @@ if skip_slitpositioning == 'n':
                                 cutarcdat = arcfits_c[lowerbound:upperbound,:]
                                 cutedges = flat_edges[lowerbound:upperbound,:]
                                 #pdb.set_trace()
-                                print "About to enter slit_find"
+                                print("About to enter slit_find")
                                 science_spec,arc_spec,gal_spec,spec_mask,gal_cuts,BOX_WIDTH[i] = slit_find(cutflatdat,cutscidat,cutarcdat,cutedges,lower_lim,upper_lim,int(Gal_dat.SLIT_LENGTH[i]),n_emptypixs,int(Gal_dat.SLIT_Y[i]),figure_save_loc+str(i))
                                 spectra[keys[i]] = {'science_spec':science_spec,'arc_spec':arc_spec,'gal_spec':gal_spec,'spec_mask':spec_mask,'gal_cuts':gal_cuts}
                                 print('Is this spectra good (y) or bad (n)?')
@@ -645,9 +645,9 @@ Gal_dat['FINAL_SLIT_X_FLIP'] = binnedx - Gal_dat.FINAL_SLIT_X#
 
 #wave = np.zeros((len(Gal_dat),4064))
 if os.path.isfile(datadir+clus_id+'/mask'+masknumber+'/'+clus_id+'_'+masknumber+'stretchshift.tab'):
-    skip_wavelengthcalib =  (raw_input('Detected file with stretch and shift parameters for each spectra. Do you wish to use this (y), or to redo (n)? ')).lower()
+    skip_wavelengthcalib =  (input('Detected file with stretch and shift parameters for each spectra. Do you wish to use this (y), or to redo (n)? ')).lower()
 if os.path.isfile(datadir+clus_id+'/mask'+masknumber+'/'+clus_id+'_'+masknumber+'stretchshift.tab') and skip_wavelengthcalib == 'n':
-    use_previous_calib = (raw_input('Detected file with stretch and shift parameters for each spectra. Do you wish to use this as a starting point? ')).lower()
+    use_previous_calib = (input('Detected file with stretch and shift parameters for each spectra. Do you wish to use this as a starting point? ')).lower()
 else:
     use_previous_calib = False
 if skip_wavelengthcalib == 'n':   
@@ -1037,7 +1037,7 @@ for k in range(len(Gal_dat)):
             ztest = redshift_outputs.ztest_vals
             corr_val = redshift_outputs.corr_vals
             template[k] = redshift_outputs.template.name
-            print (redshift_outputs.best_zest,redshift_outputs.max_cor,redshift_outputs.template.name)
+            print((redshift_outputs.best_zest,redshift_outputs.max_cor,redshift_outputs.template.name))
             if not run_auto:
                 qualityval['Clear'][k] = redshift_outputs.qualityval
             try:
@@ -1099,8 +1099,8 @@ with open(datadir+clus_id+'/mask'+masknumber+'/estimated_redshifts.tab','w') as 
 
 plt.figure()
 plt.hist(Gal_dat['est_z'],bins = 50)
-true_name = (raw_input('Whats the standard name of this object?'))
-true_redshift = (raw_input('What was its redshift?')) #0.376
+true_name = (input('Whats the standard name of this object?'))
+true_redshift = (input('What was its redshift?')) #0.376
 plt.title('Redshift Histogram for Cluster '+true_name+'  z~'+true_redshift+'\nMask '+masknumber+', all qualities',size=18)
 plt.ylabel('Number of Galaxies',size=16)
 plt.xlabel('Estimated Redshift',size=16)

@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 class DragSpectra:
     def __init__(self,spectra,ydata,ax5):
         self.ax5 = ax5
-        print 'begin shift'
+        print('begin shift')
         self.spectra = spectra
         self.ydata = ydata
         self.pressed = False
@@ -34,6 +34,6 @@ class DragSpectra:
             self.pressed = False
             #print evt.xdata - self.mouse_x
             self.dx_tot += evt.xdata - self.mouse_x
-            print self.dx_tot
+            print(self.dx_tot)
             #print 'release event'
         else: return

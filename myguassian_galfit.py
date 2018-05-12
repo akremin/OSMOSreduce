@@ -13,7 +13,7 @@ if start_up:
     import matplotlib.pyplot as plt
     from scipy.optimize import curve_fit
     import os
-    if 'HOSTNAME' in os.environ.keys() and os.environ['HOSTNAME'] == 'umdes7.physics.lsa.umich.edu':
+    if 'HOSTNAME' in list(os.environ.keys()) and os.environ['HOSTNAME'] == 'umdes7.physics.lsa.umich.edu':
         data_dir =  'goodman_jan17'# 
     else:
         data_dir = 'SOAR_data'
@@ -87,7 +87,7 @@ for i,col in enumerate(cut_xvals):
         # else use value from previous index
     except:
         # if something breaks, implicitly use the previous iterations fit values for this index
-        print i
+        print(i)
     #print popt_g
     galamps[i],galwids[i],galposs[i],skyvals[i] = gal_amp,gal_wid,gal_pos,sky_val
 
@@ -125,8 +125,8 @@ for i in xvals:
         gal_amp,sky_val = popt_cg
     except:
         # if something breaks, implicitly use the previous iterations fit values for this index
-        print i
-    print popt_cg
+        print(i)
+    print(popt_cg)
     fitgalamps[i] = gal_amp
     fitskyamps[i] = sky_val
     naiveskyflux[i] = slit_width*sky_val

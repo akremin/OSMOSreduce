@@ -106,9 +106,9 @@ for fil in files:
 
 
         #print file, naxis1, naxis2, overscanx, overscany, detector
-        print "Processing %s[%d:%d] OVERSCANX=%d:%d OVERSCANY=%d:%d from %s \
+        print("Processing %s[%d:%d] OVERSCANX=%d:%d OVERSCANY=%d:%d from %s \
         obtained at the %s" \
-        % (fil, naxis1, naxis2, overscanx[0],overscanx[1], overscany[0],overscany[1], detector, telescope)
+        % (fil, naxis1, naxis2, overscanx[0],overscanx[1], overscany[0],overscany[1], detector, telescope))
 
 
         if 'R4K' in detector:
@@ -144,11 +144,11 @@ for fil in files:
     #    q4    q3
       #      #    #
         if Debug:
-            print "Quadrants in IRAF pixels: "
-            print " q1: [%d : %d, %d : %d] " % (c1 + 1, c2 + 1, r1 + 1, r2 + 1)
-            print " q2: [%d : %d, %d : %d] " % (c1 + 1, c2 + 1, r3 + 1, r4 + 1)
-            print " q3: [%d : %d, %d : %d] " % (c3 + 1, c4 + 1, r1 + 1, r2 + 1)
-            print " q4: [%d : %d, %d : %d] " % (c3 + 1, c4 + 1, r3 + 1, r4 + 1)
+            print("Quadrants in IRAF pixels: ")
+            print(" q1: [%d : %d, %d : %d] " % (c1 + 1, c2 + 1, r1 + 1, r2 + 1))
+            print(" q2: [%d : %d, %d : %d] " % (c1 + 1, c2 + 1, r3 + 1, r4 + 1))
+            print(" q3: [%d : %d, %d : %d] " % (c3 + 1, c4 + 1, r1 + 1, r2 + 1))
+            print(" q4: [%d : %d, %d : %d] " % (c3 + 1, c4 + 1, r3 + 1, r4 + 1))
         ## Calculate the bias level for each amplifier
         data = fitsfile[0].data
         # identify the columns to use to calculate the bias level
@@ -212,17 +212,17 @@ for fil in files:
                 cols_q3 = np.arange(c3,c4+1,1)
                 cols_q4 = cols_q3
         if Debug:
-            print "Overscan columns: "
-            print "Q1/Q2 overscan even first and last columns:", cols_over_q1e[0], cols_over_q1e[-1], len(cols_over_q1e)
-            print "Q1/Q2 overscan odd first and last columns:", cols_over_q1o[0], cols_over_q1o[-1], len(cols_over_q1o)
-            print "Q3/Q4 overscan even first and last columns:", cols_over_q3e[0], cols_over_q3e[-1], len(cols_over_q3e)
-            print "Q3/Q4 overscan odd first and last columns:", cols_over_q3o[0], cols_over_q3o[-1], len(cols_over_q3o)
+            print("Overscan columns: ")
+            print("Q1/Q2 overscan even first and last columns:", cols_over_q1e[0], cols_over_q1e[-1], len(cols_over_q1e))
+            print("Q1/Q2 overscan odd first and last columns:", cols_over_q1o[0], cols_over_q1o[-1], len(cols_over_q1o))
+            print("Q3/Q4 overscan even first and last columns:", cols_over_q3e[0], cols_over_q3e[-1], len(cols_over_q3e))
+            print("Q3/Q4 overscan odd first and last columns:", cols_over_q3o[0], cols_over_q3o[-1], len(cols_over_q3o))
         if Debug:
-            print "Image columns: "
-            print "Q1/Q2 even first and last columns:", cols_q1e[0], cols_q1e[-1], len(cols_q1e), r1, r2, len(cols_q1e)
-            print "Q1/Q2 odd first and last columns:", cols_q1o[0], cols_q1o[-1], len(cols_q1o), r1+rowlen, r2+rowlen, len(cols_q1o)
-            print "Q3/Q4 even first and last columns:", cols_q3e[0], cols_q3e[-1], len(cols_q3e), r1, r2, len(cols_q3e)
-            print "Q3/Q4 odd first and last columns:", cols_q3o[0], cols_q3o[-1], len(cols_q3o), r1+rowlen, r2+rowlen, len(cols_q3o)
+            print("Image columns: ")
+            print("Q1/Q2 even first and last columns:", cols_q1e[0], cols_q1e[-1], len(cols_q1e), r1, r2, len(cols_q1e))
+            print("Q1/Q2 odd first and last columns:", cols_q1o[0], cols_q1o[-1], len(cols_q1o), r1+rowlen, r2+rowlen, len(cols_q1o))
+            print("Q3/Q4 even first and last columns:", cols_q3e[0], cols_q3e[-1], len(cols_q3e), r1, r2, len(cols_q3e))
+            print("Q3/Q4 odd first and last columns:", cols_q3o[0], cols_q3o[-1], len(cols_q3o), r1+rowlen, r2+rowlen, len(cols_q3o))
         # create arrays with the median overscan vs. row for each amplifier
         if R4K:
             bias_q1e = np.zeros(rowlen, dtype=float)
@@ -321,7 +321,7 @@ for fil in files:
                     data[r3:r4+1,cols_q4] -= bq4
         elif BiasType == BiasRow:
             # not implemented on Hiltner, for MDM4K, etc.
-            print "Warning: This mode has not been fully tested"
+            print("Warning: This mode has not been fully tested")
             OverscanKeyValue = 'BiasRow'
       # subtract a bias value for each row of each amplifier
       #print r1, r2, len(bias_q1e)
@@ -340,7 +340,7 @@ for fil in files:
    #         print "Error: Have not implemented a fit to the bias yet. Please use BiasSingle"
             suffix = 'bf'
 
-            xl = range(r1, r2 + 1, 1)
+            xl = list(range(r1, r2 + 1, 1))
             d = 4
 
             f_q1e = filt(xl, bias_q1e)
@@ -375,7 +375,7 @@ for fil in files:
     #pyplot.ylim(ymin=1e-1)
             pyplot.show()
         else:
-            print "Error: Bias subtraction type not parsed correctly"
+            print("Error: Bias subtraction type not parsed correctly")
             sys.exit(1)
 
     ##########################################################################
@@ -446,11 +446,11 @@ for fil in files:
         fitsfile[0].header['SECPIX'] = 0.273*ccdxbin
         outfile = fil[:string.find(fil, '.fits')]+suffix+'.fits'
         if os.path.isfile(outfile):
-            print "  Warning: Overwriting pre-existing file %s" % (outfile)
+            print("  Warning: Overwriting pre-existing file %s" % (outfile))
             os.remove(outfile)
         fitsfile.writeto(outfile)
         fitsfile.close()
 
 # print "%s Done" % (sys.argv[0])
-print "%s Done" % (scriptname)
+print("%s Done" % (scriptname))
 

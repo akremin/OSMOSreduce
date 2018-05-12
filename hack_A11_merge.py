@@ -18,6 +18,8 @@ comp_lamps = [1929,1930,1935,1936,1940,1941]
 sciences = [1931,1932,1933,1937,1938]
 fibermaps = np.arange(1612,1621)
 
+
+
 for camera in ['b','r']:
     all_biass = []
     for bias in biass:
@@ -26,7 +28,7 @@ for camera in ['b','r']:
     #master_bias = np.zeros(shape=(cur_bias.shape[0],cur_bias.shape[1],len(all_biass)))
     all_biass_np = np.asarray(all_biass)
     master_bias = np.median(all_biass_np,axis=0)
-    print(master_bias.shape,all_biass_np.shape)
+    print((master_bias.shape,all_biass_np.shape))
     del all_biass_np
     plt.figure()
     plt.imshow(master_bias)

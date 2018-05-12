@@ -43,10 +43,10 @@ scriptname = argv[0][str.rfind(argv[0], "/") + 1::]
 
 
 def usage():
-    print "\nUsage for %s v%s (%s):" % (scriptname, versNum, versDate)
-    print "	%s file.fits [or file*.fits or file1.fits file2.fits\
-    ]" % (scriptname)
-    print "\nWhere: file.fits, file*.fits, etc. are fits files\n"
+    print("\nUsage for %s v%s (%s):" % (scriptname, versNum, versDate))
+    print("	%s file.fits [or file*.fits or file1.fits file2.fits\
+    ]" % (scriptname))
+    print("\nWhere: file.fits, file*.fits, etc. are fits files\n")
 
 
 def parseinput():
@@ -61,7 +61,7 @@ def parseinput():
     # check that the input files exist
     for i in range(1, len(files)):
         if os.path.isfile(files[i]) == 0:
-            print "\n** ERROR: " + files[i] + " does not exist."
+            print("\n** ERROR: " + files[i] + " does not exist.")
             exit(1)
     return files, flags
 
@@ -73,13 +73,13 @@ def filt(x, l):
     for a in range(0, len(x)):
         y[a] = l[x[a]]
     m = np.median(y)
-    print m
+    print(m)
     dv = [elm - m for elm in y]
     mad = np.median(np.fabs(dv) / c)  # Median-Asbolute-Deviation
 #    print m + mad / 2
     for b in range(0, len(y)):
         if y[b] > m + 20 * mad / 2 or y[b] < m - 20 * mad / 2:
-            print "reject: %d " % b
+            print("reject: %d " % b)
             y[b] = m
     return y
 
@@ -108,9 +108,9 @@ for file in files:
         overscany /= ccdybin
 
         #print file, naxis1, naxis2, overscanx, overscany, detector
-        print "Processing %s[%d:%d] OVERSCANX=%d OVERSCANY=%d from %s \
+        print("Processing %s[%d:%d] OVERSCANX=%d OVERSCANY=%d from %s \
         obtained at the %s" \
-        % (file, naxis1, naxis2, overscanx, overscany, detector, telescope)
+        % (file, naxis1, naxis2, overscanx, overscany, detector, telescope))
         c1 = overscanx        # 32   first image column counting from *zero*
         c2 = int(0.5 * naxis1) - 1    # 555  last image column on first half
         c3 = c2 + 1        # 556  first image column on second half
@@ -135,11 +135,11 @@ for file in files:
     #
 
     if Debug:
-        print "Quadrants in IRAF pixels: "
-        print " q1: [%d : %d, %d : %d] " % (c1 + 1, c2 + 1, r1 + 1, r2 + 1)
-        print " q2: [%d : %d, %d : %d] " % (c1 + 1, c2 + 1, r3 + 1, r4 + 1)
-        print " q3: [%d : %d, %d : %d] " % (c3 + 1, c4 + 1, r1 + 1, r2 + 1)
-        print " q4: [%d : %d, %d : %d] " % (c3 + 1, c4 + 1, r3 + 1, r4 + 1)
+        print("Quadrants in IRAF pixels: ")
+        print(" q1: [%d : %d, %d : %d] " % (c1 + 1, c2 + 1, r1 + 1, r2 + 1))
+        print(" q2: [%d : %d, %d : %d] " % (c1 + 1, c2 + 1, r3 + 1, r4 + 1))
+        print(" q3: [%d : %d, %d : %d] " % (c3 + 1, c4 + 1, r1 + 1, r2 + 1))
+        print(" q4: [%d : %d, %d : %d] " % (c3 + 1, c4 + 1, r3 + 1, r4 + 1))
 
     ## Calculate the bias level for each amplifier
     data = fitsfile[0].data
@@ -214,11 +214,11 @@ for file in files:
     fitsfile[0].header['SECPIX'] = 0.273*ccdxbin
     outfile = file[:str.find(file, '.fits')]+suffix+'.fits'
     if os.path.isfile(outfile):
-        print "  Warning: Overwriting pre-existing file %s" % (outfile)
+        print("  Warning: Overwriting pre-existing file %s" % (outfile))
         os.remove(outfile)
     fitsfile.writeto(outfile)
     fitsfile.close()
 
 # print "%s Done" % (argv[0])
-print "%s Done" % (scriptname)
+print("%s Done" % (scriptname))
 

@@ -245,9 +245,9 @@ def slit_find(flux,science_flux,arc_flux,edges,lower_lim,upper_lim,slitsize = 40
 
         def onselect(self,eclick, erelease):
             'eclick and erelease are matplotlib events at press and release'
-            print ' startposition : (%f, %f)' % (eclick.xdata, eclick.ydata)
-            print ' endposition   : (%f, %f)' % (erelease.xdata, erelease.ydata)
-            print ' used button   : ', eclick.button
+            print(' startposition : (%f, %f)' % (eclick.xdata, eclick.ydata))
+            print(' endposition   : (%f, %f)' % (erelease.xdata, erelease.ydata))
+            print(' used button   : ', eclick.button)
             #if eclick.button >1:
             self.startx,self.endx=eclick.xdata,erelease.xdata
             startpx = np.where(xpix>self.startx)[0][0]
@@ -332,8 +332,8 @@ def slit_find(flux,science_flux,arc_flux,edges,lower_lim,upper_lim,slitsize = 40
     plt.savefig(figure_save_loc+'_xsumd_gausfit.png')
     #plt.show()
     
-    print 'gal dim:',raw_gal.shape
-    print 'sky dim:',sky.shape
+    print('gal dim:',raw_gal.shape)
+    print('sky dim:',sky.shape)
 
     skysubd = d2_spectra_s-sky_sub_tot
     skysubd[skysubd <=0] = 1e-6
@@ -386,7 +386,7 @@ def slit_find(flux,science_flux,arc_flux,edges,lower_lim,upper_lim,slitsize = 40
             # else use value from previous index
         except:
             # if something breaks, implicitly use the previous iterations fit values for this index
-            print i
+            print(i)
         #print popt_g
         galwids[i],galposs[i] = gal_wid,gal_pos
     
@@ -447,7 +447,7 @@ def slit_find(flux,science_flux,arc_flux,edges,lower_lim,upper_lim,slitsize = 40
             errs = np.sqrt(np.diag(pcov_cg))
         except:
             # if something breaks, implicitly use the previous iterations fit values for this index
-            print i
+            print(i)
         fitgalamps[i] = gal_amp
         fitskyamps[i] = sky_val
         fitgalamperrs[i] = errs[0]
@@ -574,7 +574,7 @@ def slit_find(flux,science_flux,arc_flux,edges,lower_lim,upper_lim,slitsize = 40
     plt.show()    
     
     #pdb.set_trace()
-    dorf = str((raw_input("Which should we save, Dans or the Fitted? (d or f)"))).lower()
+    dorf = str((input("Which should we save, Dans or the Fitted? (d or f)"))).lower()
     if dorf != 'd':
         return d2_spectra_s,d2_spectra_a,fitgalflux,maskthebaderrs,[lower_gal,upper_gal],slit_width
     else:

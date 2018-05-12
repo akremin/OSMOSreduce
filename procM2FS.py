@@ -35,8 +35,8 @@ spectags = ['r','b']
 ############################
 #### Script starts here ####
 ############################
-bias_range = range(biasl,biash+1)
-tosubtract_range = range(filsl,biasl) + range(biash+1,filsh+1)
+bias_range = list(range(biasl,biash+1))
+tosubtract_range = list(range(filsl,biasl)) + list(range(biash+1,filsh+1))
 os.chdir(directory_path)
 for spectrograph in spectags:
     for ccd in np.arange(nccds)+1:
@@ -53,7 +53,7 @@ for spectrograph in spectags:
                 biasfile = pyfits.open(biasfilename)
                 bias += np.array(biasfile[0].data)
             else:
-                print "Error, the bias number specified didn't exist"
+                print("Error, the bias number specified didn't exist")
                 exit
         master_bias = bias/float(len(bias_range))
         # Do the bias calculation
@@ -66,7 +66,7 @@ for spectrograph in spectags:
                 naxis2 = fitsfile[0].header['NAXIS2']
                 assert naxis1 == testnaxis1, "Make sure that the lengths of arrays are consistent"
                 assert naxis2 == testnaxis2, "Make sure that the lengths of arrays are consistent"
-                overscan_ranges = fitsfile[0].header['BIASSEC'].strip('[').strip(']').split(',')
+                overscan_ranges = fitsfile[0].header['BIASSEC'].strip('[]').split(',')
                 overscanx,overscany = [rng.split(':') for rng in overscan_ranges]
                 ccdxbin,ccdybin = fitsfile[0].header['BINNING'].split('x')
                 detector = fitsfile[0].header['INSTRUME']
@@ -83,9 +83,9 @@ for spectrograph in spectags:
                 fitsfile[0].header['STATE'] = 'BIAS SUBD'
                 if os.path.isfile(tsubfilename+'_b.fits'):
                     if overwrite:
-                        print "Overwriting file: "+tsubfilename+'_b.fits'
+                        print("Overwriting file: "+tsubfilename+'_b.fits')
                         os.remove(tsubfilename+'_b.fits')
                         fitsfile.writeto(tsubfilename+'_b.fits')
                 else:
-                    print "Making new file: "+tsubfilename+'_b.fits'
+                    print("Making new file: "+tsubfilename+'_b.fits')
                     fitsfile.writeto(tsubfilename+'_b.fits')

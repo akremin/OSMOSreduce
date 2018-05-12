@@ -44,7 +44,7 @@ for fil in os.listdir(datadir ):
             wcs = WCS(hdu.header)
             header = hdu.header
             (y1, y2), (x1, x2) = [[int(x) for x in va.split(':')] for va in header['DATASEC'].strip('[]').split(',')]
-            print(x1,x2,y1,y2)
+            print((x1,x2,y1,y2))
             curtrans = transforms[i]
             curloc = camloc[i]
             curccd = hdu.data[x1 - 1:x2, y1 - 1:y2]
@@ -83,14 +83,14 @@ for fil in os.listdir(datadir ):
                 outheader = header
 
             y,x = np.meshgrid(ys,xs)
-            print(x.shape,y.shape,hdu.data.shape,pic.shape,final_image.shape)
+            print((x.shape,y.shape,hdu.data.shape,pic.shape,final_image.shape))
             final_image[x,y] = pic
 
         outheader.add_history('Cropped and merged by proc_ccd, version {}'.format(version))
         outfile = fits.HDUList(fits.PrimaryHDU(data=final_image,header=outheader))
         outfile.writeto(os.path.join(datadir,"{}{}_c.fits".format(camera,filenumber)),overwrite=True)
     except:
-        print("Something went wrong with {}. Continuing".format(filename))
+        print(("Something went wrong with {}. Continuing".format(filename)))
 
     #fig = plt.figure()
     #plt.imshow(final_image, animated=True)
