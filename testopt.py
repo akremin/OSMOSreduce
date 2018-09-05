@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib
-matplotlib.use('Qt4Agg')
+matplotlib.use('Qt5Agg')
 import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
 from matplotlib.widgets import Slider, Button
@@ -111,7 +111,8 @@ def interactive_plot(px,fx,stretch_0,shift_0,quad_0,cube_0,fourth_0,fifth_0,slit
         pdb.set_trace()
     l, = ax.plot(polyfour(np.asarray(px)-slit_x,fifth_0,fourth_0,cube_0,quad_0,stretch_0,shift_0),fx/10.0,'b')
     plt.plot(wm,fm/2.0,'ro')
-    for i in range(wm.size): ax.axvline(wm[i],color='r')
+    for i in range(wm.size):
+        ax.axvline(wm[i],color='r')
     ax.set_xlim(3500,7500)
     ax.set_ylim(0,1e6)
 
@@ -259,15 +260,16 @@ def interactive_plot_plus(px,fx,wm,fm,stretch_0,shift_0,quad_0):
     return (quad_0*(px-binxpix_mid)**2+px*stretch_est+shift_est,fx,stretch_est,shift_est)
 
 class LineBrowser:
-    def __init__(self,fig,ax,est_f,wm,fm,px,xslit,vlines,fline,xspectra,yspectra,peaks,peaks_w,peaks_p,peaks_h,line_matches,cal_states):
+    def __init__(self,fig,ax,est_f,wm,fm,px,xslit,vlines,fline,xspectra,yspectra,\
+                 peaks,peaks_w,peaks_p,peaks_h,line_matches,cal_states):
         #load calibration files
-        self.wm_Xe,self.fm_Xe = np.loadtxt('osmos_Xenon.dat',usecols=(0,2),unpack=True)
+        self.wm_Xe,self.fm_Xe = np.loadtxt('./lamp_linelists/osmos_Xenon.dat',usecols=(0,2),unpack=True)
         self.wm_Xe = air_to_vacuum(self.wm_Xe)
-        self.wm_Ar,self.fm_Ar = np.loadtxt('osmos_Argon.dat',usecols=(0,2),unpack=True)
+        self.wm_Ar,self.fm_Ar = np.loadtxt('./lamp_linelists/osmos_Argon.dat',usecols=(0,2),unpack=True)
         self.wm_Ar = air_to_vacuum(self.wm_Ar)
-        self.wm_HgNe,self.fm_HgNe = np.loadtxt('osmos_HgNe.dat',usecols=(0,2),unpack=True)
+        self.wm_HgNe,self.fm_HgNe = np.loadtxt('./lamp_linelists/osmos_HgNe.dat',usecols=(0,2),unpack=True)
         self.wm_HgNe = air_to_vacuum(self.wm_HgNe)
-        self.wm_Ne,self.fm_Ne = np.loadtxt('osmos_Ne.dat',usecols=(0,2),unpack=True)
+        self.wm_Ne,self.fm_Ne = np.loadtxt('./lamp_linelists/osmos_Neon.dat',usecols=(0,2),unpack=True)
         self.wm_Ne = air_to_vacuum(self.wm_Ne)
         
         #slider objects
@@ -499,12 +501,13 @@ def prompt_user(question,yesnoq = True,maxchars=1):
 
 
     
-import os
-if os.environ['HOSTNAME'] == 'umdes7.physics.lsa.umich.edu':
-    from ds9 import ds9 as DS9
-else:
-    from pyds9 import DS9
-def get_slit_types(Gal_dat = {}, keys={}, d=DS9()):
+
+def get_slit_types(Gal_dat = {}, keys={}, d=None):
+    import os
+    if 'HOSTNAME' in os.environ and os.environ['HOSTNAME'] == 'umdes7.physics.lsa.umich.edu':
+        from ds9 import ds9 as DS9
+    else:
+        from pyds9 import DS9
     slit_type = {}
     print('Is this a galaxy (g), a reference star (r), or empty sky (s)?')
     for i in range(len(Gal_dat)):
@@ -568,7 +571,7 @@ def correlate(img1,img2):
     plt.figure(); plt.imshow(corr); plt.plot([x],[y],'c*'); plt.show()
         
 
-def align_images(scifits,flatfit,arcfits,d=DS9()):
+def align_images(scifits,flatfit,arcfits,d=None):
     offsetx,offsety = find_image_offsets(arcfits,flatfit,d)
     # Offsets are a relative thing. So normalize to positive shifts
     offsetx = offsetx - np.min(offsetx)
@@ -630,6 +633,7 @@ def align_images(scifits,flatfit,arcfits,d=DS9()):
     
       
 def find_image_offsets(arcfits,flatfit,d):
+
     d.set('frame 1')
     d.set('frame clear')
     d.set_np2arr(arcfits[0])

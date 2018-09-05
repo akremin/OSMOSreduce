@@ -3,12 +3,8 @@ import os
 os_slash = os.path.sep
 
 from testopt import *
-from zpy import *
+#rom zestipy.zpy import *
 from slit_find import *
-from helper_func import *
-
-
-
 
 def getch():
     import tty, termios

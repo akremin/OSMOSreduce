@@ -31,6 +31,6 @@ for i in range(2):
 
 ani = animation.ArtistAnimation(fig, ims, interval=1000, blit=True)#,repeat_delay=1000)
 
-# ani.save('dynamic_images.mp4')
+ani.save('dynamic_images.mp4')
 
 plt.show()
