@@ -3,9 +3,12 @@
 
 class InstrumentState:
     def __init__(self,cameras=['r','b'],opamps=[1,2,3,4],deadfibers=None,binning='2x2',\
-                 readout='Slow',resolution='LoRes',filter=None,configuration=None):
+                 readout='Slow',resolution='LowRes',filter=None,configuration=None):
         self.cameras = cameras
-        self.opamps = opamps
+        if opamps is None:
+            self.opamps = [None]
+        else:
+            self.opamps = opamps
         self.deadfibers = deadfibers
         self.binning = binning
         self.readout = readout

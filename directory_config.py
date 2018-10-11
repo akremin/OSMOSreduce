@@ -6,205 +6,78 @@ from astropy.table import Table
 
 from io import FileManager
 from instrument import InstrumentState
+from calibrations_class import Calibrations
+from collections import OrderedDict
+from scipy.interpolate import CubicSpline
 
-
-
-from wavelength_calibration import wavelength_fitting_by_line_selection, run_interactive_slider_calibration
-
-class Calibrations:
-    def __init__(self, camera, lamptypes1, lamptypes2, first_calibrations, filemanager, config, \
-                 second_calibrations=None, pairings=None, load_history=True, trust_after_first=False):
-        from calibrations import load_calibration_lines_salt_dict as load_calibration
-        self.imtype = 'comp'
-
-        self.camera = camera
-        self.filemanager = filemanager
-        self.config = config
-        self.lamptypes1 = lamptypes1
-        self.lamptypes2 = lamptypes2
-        self.trust_after_first = trust_after_first
-
-        self.linelist1 = load_calibration(lamptypes1)
-        self.selected_lines1 = self.linelist1.copy()
-        self.calib1_filnums = np.array(list(first_calibrations.keys())).astype(int)
-        self.calib1_hdus = np.array(list(first_calibrations.values())).astype(int)
-
-        self.ncalibs = len(self.calib1_filnums)
-        self.do_secondary_calib = (second_calibrations is not None)
-
-        self.lampstr_1 = ''
-        self.lampstr_2 = ''
-        for lamp in lamptypes1:
-            self.lampstr_1 += '-'+str(lamp)
-
-        if self.do_secondary_calib:
-            self.linelist2 = load_calibration(lamptypes2)
-            self.selected_lines2 = self.linelist2.copy()
-            self.calib2_filnums = np.array(list(second_calibrations.keys())).astype(int)
-            self.calib2_hdus = np.array(list(second_calibrations.keys())).astype(int)
-            for lamp in lamptypes2:
-                self.lampstr_2 += '-' + str(lamp)
+class Observations:
+    def __init__(self,filenumbers):
+        self.calib1s = filenumbers['first_calib']
+        if filenumbers['second_calib'] is None:
+            self.calib2s = np.array([None]*len(self.calib1s))
+        elif len(filenumbers['second_calib']) == 1 and filenumbers['second_calib'][0] is None:
+            self.calib2s = np.array([None] * len(self.calib1s))
         else:
-            self.calib2_filnums = np.array([None]*self.ncalibs)
-            self.calib2_hdus = self.calib2_filnums
+            self.calib2s = filenumbers['second_calib']
 
-        self.calib1_pairlookup = {}
-        self.calib2_pairlookup = {}
-        from collections import OrderedDict
-        if pairings is None:
-            self.pairings = OrderedDict()
-            for ii, c1_filnum, c2_filnum in enumerate(zip(self.calib1_filenums,self.calib2_filenums)):
-                self.pairings[ii] = (c1_filnum, c2_filnum)
-                self.calib1_pairlookup[c1_filnum] = ii
-                self.calib2_pairlookup[c2_filnum] = ii
+        self.flats = filenumbers['flat']
+        self.scis = filenumbers['science']
+
+        self.two_step_calib = (self.calib2s[0] is not None)
+
+        self.observations = OrderedDict()
+        self.calibration_pairs = OrderedDict()
+
+        self.assign_observational_sets()
+
+    def assign_observational_sets(self):
+        """
+        # 'nearest' chooses closest filenumber to sci
+        # 'unique' pairs comps with science as uniquely as possible
+        #             while it's second priority is to pair closest
+        # 'user'  pairs in the exact order given in the filenum list
+        :return: None
+        """
+        calib1s = self.calib1s.astype(int)
+        if self.two_step_calib:
+            calib2s = self.calib2s.astype(int)
         else:
-            self.pairings = pairings
-            for pairnum,c1_filnum,c2_filnum in pairings.items():
-                self.calib1_pairlookup[c1_filnum] = pairnum
-                self.calib2_pairlookup[c2_filnum] = pairnum
+            calib2s = self.calibs2s
 
-        self.pairnums = np.sort(list(self.pairings.keys()))
+        flats = self.flats
+        scis = self.scis
 
-        self.history_calibration_coefs = {}
-        self.default_calibration_coefs = None
-        self.first_calibration_coefs = {}
-        self.second_calibration_coefs = {}
+        calibration_pairs = OrderedDict()
+        observation_sets = OrderedDict()
 
-        self.load_default_coefs()
-        if load_history:
-            self.load_most_recent_coefs()
+        if self.obs_pairing_strategy == 'unique':
+            print("Unique observation pairing isn't yet implemented, defaulting to 'closest'")
+            self.obs_pairing_strategy = 'closest'
 
-    def load_default_coefs(self):
-        from wavelength_calibration import aperature_number_pixoffset
-        self.default_calibration_coefs = self.filemanager.self.load_calib_dict('default', self.camera, self.config)
-        if self.default_calibration_coefs is None:
-            outdict = {}
-            fibernames = self.calib1_hdus[0].data.colnames
-            adef, bdef, cdef = (4523.4, 1.0007, -1.6e-6)
-            for fibname in fibernames:
-                adef += aperature_number_pixoffset(fibname,self.camera)
-                outdict[fibname] = (adef, bdef, cdef)
-            self.default_calibration_coefs = outdict
+        if self.obs_pairing_strategy == 'user':
+            for ii,sci,flat,calib1,calib2 in enumerate(zip(scis,flats,calib1s,calib2s)):
+                calibration_pairs[ii] = (calib1,calib2)
+                observation_sets[ii] = (sci,flat,calib1,calib2)
 
-    def load_most_recent_coefs(self):
-        couldntfind = False
-        if self.do_secondary_calib:
-            for pairnum, c1_filnum, c2_filnum in self.pairings.items():
-                name = self.imtype+self.lampstr_2
-                calibs = self.filemanager.locate_calib_dict(name, self.camera, self.config,c2_filnum)
-                if calibs is None:
-                    couldntfind = True
-                    break
+        if self.obs_pairing_strategy == 'closest':
+            for ii,sci in enumerate(scis):
+                nearest_flat = flats[np.argmin(np.abs(flats-sci))]
+                nearest_calib1 = calib1s[np.argmin(np.abs(calib1s - sci))]
+                if self.two_step_calib:
+                    nearest_calib2 = calib2s[np.argmin(np.abs(calib2s - sci))]
                 else:
-                    self.history_calibration_coefs[pairnum] = calibs
-        if couldntfind or not self.do_secondary_calib:
-            for pairnum, c1_filnum, c2_filnum in self.pairings.items():
-                name = self.imtype+self.lampstr_1
-                calibs = self.filemanager.locate_calib_dict(name, self.camera, self.config,c1_filnum)
-                self.history_calibration_coefs[pairnum] = calibs
+                    nearest_calib2 = None
+                calibration_pairs[ii] = (nearest_calib1,nearest_calib2)
+                observation_sets[ii] = (sci,nearest_flat,nearest_calib1,nearest_calib2)
 
-    def run_initial_calibrations(self):
-        trust = False
-        defaults = self.default_calibration_coefs
+        self.observations = observation_sets
+        self.calibration_pairs = calibration_pairs
 
-        for pairnum,c1_filnum, throwaway in self.pairings.items():
-            histories = self.history_calibration_coefs[pairnum]
-            comp_data = self.calib1_hdus[c1_filnum].data
-            out_calib = self.run_interactive_slider_calibration(comp_data, self.linelist1, default=defaults, \
-                                                                histories=histories, trust_initial=trust)#, \
-                                               #  steps=None, default_key=None)
-            defaults = out_calib
-            trust = self.trust_after_first
-            self.first_calibration_coefs[pairnum] = out_calib.copy()
+    def return_calibration_pairs(self):
+        return self.calibration_pairs
 
-    def run_final_calibrations(self):
-        if not self.do_secondary_calib:
-            print("There doesn't seem to be a second calibration defined. Using the supplied calib1's")
-        select_lines = True
-        for pairnum,c1_filnum,c2_filnum in self.pairings.items():
-            if self.do_secondary_calib:
-                data = self.calib2_hdus[c2_filnum].data
-                linelist = self.selected_lines2
-            else:
-                data = self.calib1_hdus[c1_filnum].data
-                linelist = self.selected_lines1
-
-            initial_coef_table = self.first_calibration_coefs[pairnum]
-
-            out_calib, covariances, out_linelist = self.wavelength_fitting_by_line_selection(data, linelist, initial_coef_table,select_lines=select_lines)#bounds=None)
-            if select_lines:
-                if self.do_secondary_calib:
-                    self.selected_lines2 = out_linelist
-                else:
-                    self.selected_lines1 = out_linelist
-                select_lines = False
-
-            self.second_calibration_coefs[pairnum] = out_calib
-
-    def create_calibration_default(self):
-        npairs = len(self.pairnums)
-        default_outtable = self.second_calibration_coefs[self.pairnums[0]]
-        if npairs > 1:
-            for pairnum in self.pairnums[1:]:
-                curtable = self.second_calibration_coefs[pairnum]
-                for fiber in curtable.colnames:
-                    default_outtable[fiber] += curtable[fiber]
-
-            for fiber in curtable.colnames:
-                default_outtable[fiber] /= npairs
-
-        self.filemanager.self.save_calib_dict(default_outtable, 'default', self.camera, self.config)
-
-    def save_initial_calibrations(self):
-        for pairnum,table in self.first_calibration_coefs.items():
-            filenum = self.pairings[pairnum][0]
-            self.filemanager.save_calib_dict(table, self.lampstr_1, self.camera, self.config, filenum=filenum)
-
-    def save_final_calibrations(self):
-        for pairnum,table in self.second_calibration_coefs.items():
-            if self.do_secondary_calib:
-                filenum = self.pairings[pairnum][1]
-            else:
-                filenum = self.pairings[pairnum][0]
-            self.filemanager.save_calib_dict(table, self.lampstr_1, self.camera, self.config, filenum=filenum)
-
-
-class Observation:
-    def __init__(self,sciences,flats, first_calibrations, second_calibrations=None):
-        from calibrations import load_calibration_lines_salt_dict as load_calibration
-
-        self.camera = camera
-        self.calib1_lamplist = lamplist1
-        self.calib2_lamplist = lamplist2
-
-        self.science = science_hdus
-        self.first_calibs = first_calibration_hdu
-        self.second_calibs = second_calibration_hdu
-        self.flats = flat_hdus
-        self.first_calibration_coefs = None
-        self.second_calibration_coefs = None
-
-    def load_default_coefs(self):
-
-    def load_most_recent_coefs(self):
-
-    def run_first_calibration(self):
-
-    def run_second_calibration(self):
-        if self.second_calibs is None:
-            print("There doesn't seem to be a second calibration defined. Skipping this step and returning")
-        else:
-    def wavelength_calibrate_science(self):
-        if self.first_calibration_coefs is None:
-            print("You must run a calibration or load saved coefs before calibrating science data. Skipping and returning")
-        else:
-
-        first_wavelength_calibration()
-        if self.second_calibs is not None:
-            second_wavelength_calibrations()
-
-    def flatten_science(self):
-
+    def return_observation_sets(self):
+        return self.observations
 
 
 
@@ -215,27 +88,10 @@ class FieldData:
                  obs_pairing_strategy='nearest',calib_lamps1=list(),calib_lamps2=None,\
                  twod_to_oned_strategy='simple',debias_strategy='median'):
 
-        if obs_pairing_strategy not in ['nearest','user']: # 'unique',
-            # 'nearest' chooses closest filenumber to sci
-            # 'unique' pairs comps with science as uniquely as possible
-            #             while it's second priority is to pair closest
-            #             NOTE YET IMPLEMENTED
-            # 'user'  pairs in the exact order given in the filenum lists
-            self.obs_pairing_strategy = 'nearest'
-        else:
-            self.obs_pairing_strategy = obs_pairing_strategy
-
-        if twod_to_oned_strategy != 'simple':
-            print("The only implemented 2D to 1D strategy is the simple summation. Defaulting to that.")
-            self.twod_to_oned = twod_to_oned_strategy
-        else:
-            self.twod_to_oned = twod_to_oned_strategy
-
-        if debias_strategy != 'median':
-            print("Only median debias strategy is currently implemented. Defaulting to that.")
-            self.debias_strategy = 'median'
-        else:
-            self.debias_strategy = debias_strategy
+        self.obs_pairing_strategy = obs_pairing_strategy
+        self.twod_to_oned = twod_to_oned_strategy
+        self.debias_strategy = debias_strategy
+        self.check_parameter_flags()
 
         self.twostep_wavecalib = (second_comp_filenums is not None)
         self.filemanager=filemanager
@@ -250,7 +106,6 @@ class FieldData:
         }
 
         self.master_types = []
-        self.observations = []
 
         self.data_stitched = False
         self.fibersplit = False
@@ -278,6 +133,26 @@ class FieldData:
         else:
             self.all_hdus = self.read_all_filedata()
 
+        self.observations = Observations(self.filenumbers)
+        self.calibrations = {}
+
+
+    def check_parameter_flags(self):
+        if self.obs_pairing_strategy not in ['nearest','user']: # 'unique',
+            # 'nearest' chooses closest filenumber to sci
+            # 'unique' pairs comps with science as uniquely as possible
+            #             while it's second priority is to pair closest
+            #             NOTE YET IMPLEMENTED
+            # 'user'  pairs in the exact order given in the filenum lists
+            self.obs_pairing_strategy = 'nearest'
+
+        if self.twod_to_oned_strategy != 'simple':
+            print("The only implemented 2D to 1D strategy is the simple summation. Defaulting to that.")
+            self.twod_to_oned = twod_to_oned_strategy
+
+        if self.debias_strategy != 'median':
+            print("Only median debias strategy is currently implemented. Defaulting to that.")
+            self.debias_strategy = 'median'
 
     def update_step(self,step):
         self.step = step
@@ -310,11 +185,7 @@ class FieldData:
             self.update(step)
 
     def read_crashed_filedata(self,returndata=False):
-        import pickle as pkl
-        data_product_loc = self.filemanager.directory.data_product_loc
-        infile = os.path.join(data_product_loc, '_precrashdata.pkl')
-        with open(infile,'rb') as crashdata:
-            self.all_hdus = pkl.load(crashdata)
+        self.all_hdus = self.filemanager.read_crashed_filedata()
         if returndata:
             return self.all_hdus
 
@@ -327,25 +198,8 @@ class FieldData:
             self.step = step
             self.update_step(step)
 
-        if self.data_stitched:
-            opamps = [None]
-        else:
-            opamps = self.instrument.opamps
-
-        cameras = self.instrument.cameras
-        all_hdus = {}
-        for imtype, filenums in self.filenumbers.items():
-            for camera in cameras:
-                for filnum in filenums:
-                    for opamp in opamps:
-                        all_hdus[(camera,filnum,imtype,opamp)] = self.filemanager.read_hdu(camera=camera, filenum=filnum, imtype=imtype, amp=opamp, fibersplit=self.fibersplit)
-
-
-        for imtype in self.master_types:
-            for camera in cameras:
-                all_hdus[(camera, 'master', imtype, None)] = self.filemanager.read_hdu(camera=camera, filenum='master', imtype=imtype, fibersplit=self.fibersplit)
-
-        self.all_hdus = all_hdus
+        self.all_hdus = self.filemanager.read_all_filedata(self.filenumbers,self.master_types,self.instrument,\
+                                                           self.data_stitched,self.fibersplit)
 
         self.assign_observational_sets()
 
@@ -353,27 +207,11 @@ class FieldData:
         self.current_data_from_disk = True
 
         if return_data:
-            return all_hdus
+            return self.all_hdus
 
     def write_all_filedata(self):
-        if self.data_stitched:
-            opamps = [None]
-        else:
-            opamps = self.instrument.opamps
-
-        cameras = self.instrument.cameras
-
-        for imtype, filenums in self.filenumbers.items():
-            for camera in cameras:
-                for filnum in filenums:
-                    for opamp in opamps:
-                        outhdu = self.all_hdus[(camera,filnum,imtype,opamp)]
-                        self.filemanager.write_hdu(outhdu=outhdu,camera=camera, filenum=filnum, imtype=imtype, amp=opamp)
-
-        for imtype in self.master_types:
-            for camera in cameras:
-                outhdu = self.all_hdus[(camera, 'master', imtype, None)]
-                self.filemanager.write_hdu(outhdu=outhdu,camera=camera, filenum='master', imtype=imtype)
+        self.filemanager.write_all_filedata(self, self.all_hdus, self.filenumbers, self.master_types,\
+                                            self.instrument, self.data_stitched)
 
         self.current_data_saved = True
 
@@ -403,45 +241,6 @@ class FieldData:
                 return False
 
         return True
-
-    def assign_observational_sets(self):
-        """
-        # 'nearest' chooses closest filenumber to sci
-        # 'unique' pairs comps with science as uniquely as possible
-        #             while it's second priority is to pair closest
-        # 'user'  pairs in the exact order given in the filenum list
-        :return: None
-        """
-        if self.twostep_wavecalib:
-            calib1s = self.filenumbers['first_calib'].astype(int)
-            calib2s = self.filenumbers['second_calib'].astype(int)
-        else:
-            calib1s = self.filenumbers['first_calib'].astype(int)
-            calib2s = np.array([None]*len(calib1s))
-
-        flats = self.filenumbers['flat'].astype(int)
-        scis = self.filenumbers['science'].astype(int)
-
-        if self.obs_pairing_strategy == 'unique':
-            print("Unique observation pairing isn't yet implemented, defaulting to 'closest'")
-            self.obs_pairing_strategy = 'closest'
-
-        if self.obs_pairing_strategy == 'user':
-            for sci,flat,calib1,calib2 in zip(scis,flats,calib1s,calib2s):
-                self.observations.append(Observation(sciences=sci,flats=flat,\
-                                                     first_calibrations=calib1,\
-                                                     second_calibrations=calib2))
-        if self.obs_pairing_strategy == 'closest':
-            for sci in scis:
-                nearest_flat = flats[np.argmin(np.abs(flats-sci))]
-                nearest_calib1 = calib1s[np.argmin(np.abs(calib1s - sci))]
-                if self.twostep_wavecalib:
-                    nearest_calib1 = calib2s[np.argmin(np.abs(calib2s - sci))]
-                else:
-                    nearest_calib2 = None
-                self.observations.append(Observation(sciences=sci,flats=nearest_flat,\
-                                                     first_calibrations=nearest_calib1,\
-                                                     second_calibrations=nearest_calib2))
 
 
     def run_step(self,step=None):
@@ -475,19 +274,15 @@ class FieldData:
             self.all_hdus = cutout_all_apperatures(self.all_hdus,self.instrument.cameras,\
                                                    deadfibers=self.instrument.deadfibers,summation_preference=self.twod_to_oned)
         elif step == 'wavecalib':
-            for ii in range(self.calibrations.ncalibs):
-                self.calibrations.calibrate_interactive('first',ii)
-                self.calibrations.calibrate_line_selection('second',ii)
-            default_vals = self.observations.get_default_calib()
-            for observation in self.observations:
-                observation.update_default(default_vals)
-                observation.calibrate_interactive('first',returndata=False)
-                default_vals = observation.calibrate_line_selection('second',returndata=True)
-                observation.calibrate_flats()
-                observation.calibrate_sciences()
+            for camera in self.instrument.cameras:
+                self.calibrations[camera].run_initial_calibrations()
+
+            for camera in self.instrument.cameras:
+                self.calibrations[camera].run_final_calibrations()
+
         elif step == 'flat':
-            for observation in self.observations:
-                observation.flatten_sciences()
+            for camera in self.instrument.cameras:
+                self.flatten_sciences(cam=camera)
         elif step == 'skysub':
             for observation in self.observations:
                 observation.subtract_skies()
@@ -504,14 +299,98 @@ class FieldData:
             self.current_data_from_disk = False
 
 
+    def populate_calibrations(self):
+        calibration_pairs = self.observations.return_calibration_pairs()
+        self.calibrations = {}
+        for camera in self.instrument.cameras:
+            calib1s = {filnum:self.all_hdus[(camera,filnum,'comp',None)] for filnum in self.observations.calib1s}
+            if self.observations.two_step_calib:
+                calib2s = {filnum: self.all_hdus[(camera, filnum, 'comp', None)] for filnum in self.observations.calib2s}
+            else:
+                calib2s = None
+            calib = Calibrations(camera, self.calib_lamps1, self.calib_lamps2, calib1s, self.filemanager, \
+                                 config=self.instrument.configuration, second_calibrations=calib2s,
+                                 pairings=calibration_pairs, load_history=True, trust_after_first=False)
 
-    def wavelength_calibrate_all_science(self):
+            self.calibrations[camera] = calib
 
-    def flatten_all_science(self):
+    def run_initial_calibrations(self):
+        for camera in self.instrument.cameras:
+            self.calibrations[camera].run_initial_calibrations()
 
-    def combine_science_observations(self):
+    def run_final_calibrations(self):
+        for camera in self.instrument.cameras:
+            self.calibrations[camera].run_final_calibrations()
+
+    def combine_flats(self,camera,return_table=False):
+        filnums = self.filenumbers['flat']
+        all_flats = []
+        flat_header = None
+        for filnum in filnums:
+            hdu = self.all_hdus.pop([(camera, filnum, 'flat', None)])
+            if filnum == filnums[0]:
+                flat_header = hdu.header
+            all_flats.append(hdu.data)
+        flat_table_one = all_flats[0]
+        for key in flat_table_one.colnames:
+            for flat in all_flats[1:]:
+                flat_table_one[key].data += flat[key].data
+
+        self.all_hdus[(camera,'master','flat',None)] = fits.BinTableHDU(data=flat_table_one,header=flat_header)
+        if return_table:
+            return flat_table_one
+
+    def flatten_sciences(self,cam):
+        from flatten import flatten_data
+        fiber_fluxes = self.combine_flats(camera = cam, return_table=True)
+        calib_table = self.calibrations[cam].create_calibration_default(save=False)
+        final_table, final_flux_array = flatten_data(fiber_fluxes=fiber_fluxes,waves=calib_table)
+
+        for filnum in self.filenumbers['science']:
+            hdu = self.all_hdus[(cam,filnum,'science',None)]
+            for col in final_table.colnames:
+                hdu.data[col] /= final_table[col]
+            self.all_hdus[(cam,filnum,'science',None)] = hdu
+
+    def combine_science_observations(self, cam):
+        observation_keys = list(self.observations.observations.keys())
+        nobs = len(observation_keys)
+        middle_obs = observation_keys[nobs//2]
+
+        ref_science_filnum,throw,throw1,throw2 = self.observations.observations[middle_obs]
+        ref_sci_hdu = self.all_hdus.pop((cam,ref_science_filnum,'science',None))
+        ref_sci_data = ref_sci_hdu.data
+        ref_calibs = self.calibrations[cam].second_calibration_coefs[middle_obs]
+        ref_wavearrays = {}
+        pixels = np.arange(len(ref_sci_data.columns[0]))
+
+        combined_data = ref_sci_data.copy()
+        for col in ref_calibs.colnames:
+            a,b,c,d,e,f = ref_calibs[col]
+            lams = a + b+pixels + c*np.power(pixels,2) + d*np.power(pixels,3) + \
+                   e * np.power(pixels, 4) + f * np.power(pixels, 5)
+            ref_wavearrays[col] = lams
+        for obs in observation_keys:
+            if obs == middle_obs:
+                continue
+            sci_filnum, throw, throw1, throw2 = self.observations.observations[obs]
+            sci_hdu = self.all_hdus.pop((cam, sci_filnum, 'science', None))
+            sci_data = sci_hdu.data
+            sci_calibs = self.calibrations[cam].second_calibration_coefs[obs]
+            for col in sci_calibs.colnames:
+                a, b, c, d, e, f = sci_calibs[col]
+                lams = a + b + pixels + c * np.power(pixels, 2) + d * np.power(pixels, 3) + \
+                       e * np.power(pixels, 4) + f * np.power(pixels, 5)
+                flux = sci_data[col]
+                scifit = CubicSpline(x=lams,y=flux)
+                outwave = ref_wavearrays[col]
+                outflux = scifit(outwave)
+                combined_data[col] += outflux
+
+        self.all_hdus[(cam,'master','science',None)] = fits.BinTableHDU(data=combined_data,header=ref_sci_hdu.header)
 
     def fit_redshfits(self):
+
 
 
 class ReductionController:

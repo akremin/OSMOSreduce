@@ -10,26 +10,26 @@ def stitch_all_images(all_hdus,date):
         if (camera, filenum, imtype) not in hdu_opamp_dict.keys():
             hdu_opamp_dict[(camera, filenum, imtype)] = {}
         hdu_opamp_dict[(camera, filenum, imtype)][opamp] = hdu
-    del all_hdus
+
     for (camera, filenum, imtype),opampdict in hdu_opamp_dict.items():
-        outhdu = stitch_these_camera_data(opampdict ,filenum ,camera ,imtype, date)
+        outhdu = stitch_these_camera_data(opampdict , date)
         stitched_hdu_dict[(camera, filenum, imtype, None)] = outhdu
 
     return stitched_hdu_dict
 
 
-def stitch_these_camera_data(hdudict,filenum,camera,imtype,date):
-    xorients = {-1: 'l', 1: 'r'}
-    yorients = {-1: 'b', 1: 'u'}
+def stitch_these_camera_data(hdudict,date):
+    xorients = {1: 'l', -1: 'r'}
+    yorients = {1: 'b', -1: 'u'}
 
     img = {}
-    for opamp,hdu in hdudict.keys():
+    for opamp,hdu in hdudict.items():
         header = hdu.header
         xsign = np.sign(header['CHOFFX'])
         ysign = np.sign(header['CHOFFY'])
         location = yorients[ysign] + xorients[xsign]
-        print("Imtype: {}  In filenum: {} Camera: {} Opamp: {} located at {}".format(imtype, filenum, camera, opamp,
-                                                                                     location))
+        #print("Imtype: {}  In filenum: {} Camera: {} Opamp: {} located at {}".format(imtype, filenum, camera, opamp,
+        #                                                                            location))
         img[location] = hdu.data
 
     trans = {}
@@ -38,7 +38,6 @@ def stitch_these_camera_data(hdudict,filenum,camera,imtype,date):
     trans['br'] = np.fliplr(img['br'])
     trans['ul'] = np.flipud(img['ul'])
     trans['ur'] = np.fliplr(np.flipud(img['ur']))
-    del img
 
     y_bl, x_bl = trans['bl'].shape
     y_ul, x_ul = trans['ul'].shape
@@ -66,7 +65,7 @@ def stitch_these_camera_data(hdudict,filenum,camera,imtype,date):
 
     ## Update header
     opamp = 1
-    header = hdu[opamp].header.copy()
+    header = hdudict[opamp].header.copy()
     header['NAXIS1'] = int(y_bl + y_ul)
     header['NAXIS2'] = int(x_bl + x_br)
     header['DATASEC'] = '[1:{},1:{}]'.format(header['NAXIS1'],header['NAXIS2'])

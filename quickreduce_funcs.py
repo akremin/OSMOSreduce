@@ -66,33 +66,6 @@ def plot_cr_images(pycosmask,outdat,maskfile,filename):
     plt.close()
 
 
-def remove_bias_lines(cur_dat,cut_bias_cols=False,convert_adu_to_e=False):
-    cur_dat_header = cur_dat.header
-    cur_dat_data = cur_dat.data
-    if cut_bias_cols:
-        datasec = cur_dat.header['DATASEC'].strip('[]')
-        (x1, x2), (y1, y2) = [[int(x) - 1 for x in va.split(':')] for va in datasec.split(',')]
-        cur_dat_data = cur_dat.data[y1:y2 + 1, x1:x2 + 1]
-        cur_dat_header = scrub_header(cur_dat_header, cur_dat_data.shape)
-
-    if convert_adu_to_e:
-        cur_dat_data = (cur_dat_data * cur_dat_header['EGAIN'])  # - cur_dat_header['ENOISE']
-        cur_dat_header['EGAIN'] = 1.0
-        # cur_dat_header['ENOISE'] = 0.0
-
-    outhdu = fits.PrimaryHDU(data=cur_dat_data, header=cur_dat_header)
-    return outhdu
-
-def scrub_header(header,array_shape):
-    header.remove('NOVERSCN')
-    header.remove('NBIASLNS')
-    header.remove('BIASSEC')
-    header.remove('TRIMSEC')
-    header.remove('DATASEC')
-    header['NAXIS1'] = int(array_shape[0])
-    header['NAXIS2'] = int(array_shape[1])
-    return header
-
 # def remove_cosmic_rays(filelist = [],readnoise='ENOISE',sigmadet=8,crgain='EGAIN',crverbose=True,crreturndata=False):
 #     import PyCosmic
 #     if crreturndata:

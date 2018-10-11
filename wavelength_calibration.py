@@ -152,10 +152,12 @@ def aperature_number_pixoffset(fibnum,camera='r'):
         fib = fibnum % 16
 
     if camera.lower() != 'r':
-        tet = 8-tet
+        orientation = 1.
+    else:
+        orientation = -1.
     c1, c2, c3, c4, c5 = 1.023, 54.058, -6.962, 1.985, -0.5560
-    return (c1) + (c2 * tet) + (c3 * tet * tet) + (c4 * fib) + (c5 * tet * fib)
-
+    outval_mag = (c1) + (c2 * tet) + (c3 * tet * tet) + (c4 * fib) + (c5 * tet * fib)
+    return orientation * outval_mag
 
 def aperature_pixoffset_between2(fibnum,camera='r'):
     if type(fibnum) is str:
@@ -193,7 +195,7 @@ def top_peak_pixels(pixels,spectra):
 
 def get_highestflux_waves(complinelistdict):
     fms, wms = [], []
-    for cwm, cfm in complinelistdict.values():
+    for (cwm, cfm) in complinelistdict.values():
         fms.extend(cfm)
         wms.extend(cwm)
     fms, wms = np.asarray(fms), np.asarray(wms)
@@ -217,7 +219,7 @@ def update_default_dict(default_dict,fiber_identifier,default_vals, history_vals
         default_dict['from history'] = history_vals[fiber_identifier]
 
     ## Change offset of the basic default
-    adef,bdef,cdef = default_vals[fiber_identifier]
+    adef,bdef,cdef,ddef,edef,fdef = default_vals[fiber_identifier]
     default_dict['default'] = (adef,bdef,cdef)
 
     ## Guess next position from the previous one and predictive offset function
@@ -255,7 +257,7 @@ def update_default_dict(default_dict,fiber_identifier,default_vals, history_vals
     return default_dict
 
 
-def run_interactive_slider_calibration(first_comp,complinelistdict,default_vals = None,history_vals=None,\
+def run_interactive_slider_calibration(self,first_comp, complinelistdict, default_vals=None,history_vals=None,\
                                    steps = None, default_key = None, trust_initial = False):
 
     init_default = (4523.4,1.0007,-1.6e-6)
@@ -290,7 +292,8 @@ def run_interactive_slider_calibration(first_comp,complinelistdict,default_vals 
     all_flags = {}
 
     ## Loop over fiber names (strings e.g. 'r101')
-    for fiber_identifier in first_comp.colnames:
+    ##hack!
+    for fiber_identifier in ['r101','r201','r301','r401','r501','r601','r701','r801']:#first_comp.colnames:
         counter += 1
         print(fiber_identifier)
 
@@ -358,12 +361,10 @@ def run_interactive_slider_calibration(first_comp,complinelistdict,default_vals 
 
 
 
-def wavelength_fitting_by_line_selection(comp, linelistdict, coef_table, select_lines = False, bounds=None):
-
+def wavelength_fitting_by_line_selection(self,comp, selectedlistdict, fulllinelist, coef_table, select_lines = False, bounds=None):
     if select_lines:
-        app_specific_linelists = {}
         wm, fm = [], []
-        for key,(keys_wm,keys_fm) in linelistdict.items():
+        for key,(keys_wm,keys_fm) in selectedlistdict.items():
             if key in['ThAr','Th']:
                 # wm_thar,fm_thar = np.asarray(keys_wm), np.asarray(keys_fm)
                 # sorted = np.argsort(fm_thar)
@@ -384,17 +385,16 @@ def wavelength_fitting_by_line_selection(comp, linelistdict, coef_table, select_
         wm = wm[ordered]
         fm = fm[ordered]
 
-        all_wm,all_fm = wm.copy(),fm.copy()
-        app_specific_linelists['all'] = (all_wm,all_fm)
-    else:
-        all_wm, all_fm = linelistdict['all']
-
     comp = Table(comp)
     counter = 0
-    all_coefs = {}
-    all_covs = {}
+    app_specific_linelists = {}
 
-    for fiber in comp.colnames:
+    all_coefs = {}
+    variances = {}
+    app_fit_pix = {}
+    app_fit_lambs = {}
+    ##hack!
+    for fiber in ['r101','r201','r301','r401','r501','r601','r701','r801']:#comp.colnames:
         counter += 1
         f_x = comp[fiber].data
         coefs = coef_table[fiber]
@@ -402,19 +402,21 @@ def wavelength_fitting_by_line_selection(comp, linelistdict, coef_table, select_
         if select_lines:
             iteration_wm,iteration_fm = wm.copy(),fm.copy()
         else:
-            iteration_wm,iteration_fm = linelistdict[fiber]
+            iteration_wm,iteration_fm = selectedlistdict[fiber]
 
-        browser = LineBrowser(iteration_wm,iteration_fm, f_x, coefs,all_wm, bounds=bounds)
+        browser = LineBrowser(iteration_wm,iteration_fm, f_x, coefs, fulllinelist, bounds=bounds)
         browser.plot()
         params,covs = browser.fit()
 
         print(fiber,*params)
         all_coefs[fiber] = params
-        all_covs[fiber] = covs
+        variances[fiber] = covs.diagonal()
 
-        savename = '{}'.format(fiber)
-        browser.create_saveplot(params,covs, savename)
+        #savename = '{}'.format(fiber)
+        #browser.create_saveplot(params,covs, savename)
 
+        app_fit_pix[fiber] = browser.line_matches['peaks_p']
+        app_fit_lambs[fiber] = browser.line_matches['lines']
         if select_lines:
             app_specific_linelists[fiber] = (browser.wm, browser.fm)
             init_deleted_wm = np.asarray(browser.last['wm'])
@@ -440,10 +442,10 @@ def wavelength_fitting_by_line_selection(comp, linelistdict, coef_table, select_
             counter = 0
             if select_lines:
                 with open('_temp_fine_wavecalib.pkl','wb') as temp_pkl:
-                    pkl.dump([all_coefs,all_covs,app_specific_linelists],temp_pkl)
+                    pkl.dump([all_coefs,variances,app_specific_linelists],temp_pkl)
             else:
                 with open('_temp_fine_wavecalib.pkl', 'wb') as temp_pkl:
-                    pkl.dump([all_coefs, all_covs], temp_pkl)
+                    pkl.dump([all_coefs, variances], temp_pkl)
             print("Saving an incremental backup to _temp_fine_wavecalib.pkl")
             cont = str(input("\n\n\tDo you want to continue? (y or n)\t\t"))
             if cont.lower() == 'n':
@@ -451,5 +453,4 @@ def wavelength_fitting_by_line_selection(comp, linelistdict, coef_table, select_
 
     if not select_lines:
         app_specific_linelists = None
-
-    return Table(all_coefs), all_covs, app_specific_linelists
+    return Table(all_coefs), app_specific_linelists, app_fit_lambs, app_fit_pix, variances

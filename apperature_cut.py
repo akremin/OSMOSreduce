@@ -18,12 +18,13 @@ def cutout_all_apperatures(all_hdus,cameras,deadfibers=[],summation_preference='
     apcut_hdus = {}
     apperatures = {}
     for camera in cameras:
-        fib_hdu = all_hdus.pop((camera,'master','fibmap',None))
+        #fib_hdu = all_hdus.pop((camera,'master','fibmap',None))
+        fib_hdu = all_hdus[(camera, 'master', 'fibmap', None)]
         sumd_fib_hdu = fib_hdu.data
         apperature = find_apperatures(sumd_fib_hdu ,camera=camera ,function_order=4, \
                                     deadfibers=deadfibers)
         apperatures[camera] = apperature
-        apcut_hdus[(camera,'master','fibmap',None)] = apperature
+        #apcut_hdus[(camera,'master','fibmap',None)] = apperature
 
     for (camera, filenum, imtype, opamp),hdu in all_hdus.items():
         oneds = cutout_1d_apperatures(hdu.data ,apperatures[camera],summation_preference)
@@ -34,9 +35,9 @@ def cutout_all_apperatures(all_hdus,cameras,deadfibers=[],summation_preference='
         outhead.remove('CHOFFY' ,ignore_missing=True)
         outhead.remove('NOPAMPS' ,ignore_missing=True)
 
-        outhdu = fits.BinTableHDU(data=Table(data=oneds) ,header=outhead)
-
+        outhdu = fits.BinTableHDU(data=Table(data=oneds) ,header=outhead, name='flux')
         apcut_hdus[(camera, filenum, imtype, opamp)] = outhdu
+        print("Completed Apperature Cutting of: cam={}, fil={}, type={}".format(camera,filenum,imtype))
 
     return apcut_hdus
 
@@ -237,7 +238,7 @@ def fitter_switch():
     return {2: quad, 4: fourthorder, 6: sixthorder, 8: eighthorder, 10: tenthorder}
 
 
-def find_apperatures(fibermap, camera='r', deadfibers=None, resol_factor=100., nvertslices=2 ** 6,
+def find_apperatures(fibermap, camera='r', deadfibers=None, resol_factor=100, nvertslices=2 ** 6,
                     function_order=4):
     mapping_image = imageset(fibermap)
 
@@ -250,6 +251,7 @@ def find_apperatures(fibermap, camera='r', deadfibers=None, resol_factor=100., n
                 fibernum = int(deadfiber[2:])
                 curtetfibs = tetris_iterator_dict[tetnum]
                 tetris_iterator_dict[tetnum] = curtetfibs[curtetfibs != fibernum]
+
 
     if type(function_order) is str:
         dopoly = False
@@ -279,7 +281,7 @@ def find_apperatures(fibermap, camera='r', deadfibers=None, resol_factor=100., n
 
     apperatures = {}
     apperatures['camera'] = camera
-    apperatures['resolution_factor'] = resol_factor
+    apperatures['resolution_factor'] = int(resol_factor)
     apperatures['tetri'] = {}
     for itti, start, end in zip(np.arange(len(starts)), starts, ends):
         tetnum = tetris_numbering[itti]
@@ -329,7 +331,7 @@ def find_apperatures(fibermap, camera='r', deadfibers=None, resol_factor=100., n
                 fllows = fit_min1(xpix.astype(float))
                 flhighs = fit_min2(xpix.astype(float))
 
-            lows, highs = resol_factor * np.asarray(fllows), resol_factor * np.asarray(flhighs)
+            lows, highs = float(resol_factor) * np.asarray(fllows), float(resol_factor) * np.asarray(flhighs)
             hr_lows = np.floor(lows).astype(int)
             hr_highs = np.ceil(highs).astype(int)
             maxwidth = np.max(np.abs(hr_highs - hr_lows)) + 1
@@ -385,7 +387,10 @@ def cutout_2d_apperatures(image, apperatures):
                     cutout_array[:, x] = hyperres[lowhr:highhr + 1, x]
                 else:
                     cutout_array[lowerbound:upperbound, x] = hyperres[lowhr:highhr + 1, x]
-            cutouts[j] = cutout_array
+            if camera == 'b':
+                cutouts[j] = np.fliplr(cutout_array)
+            else:
+                cutouts[j] = cutout_array
         all_cutouts[i] = cutouts
 
     flattened_cutouts = {}
@@ -399,13 +404,17 @@ def cutout_2d_apperatures(image, apperatures):
 def cutout_1d_apperatures(image, apperatures,summation_preference):
     twod_cutouts = cutout_2d_apperatures(image, apperatures)
     oned_cutouts = {}
-    for key, cutout in twod_cutouts.items():
-        if summation_preference == 'simple':
+    if summation_preference != 'simple':
+        print("Only simply equal weight summation of 2d to 1d implemented.\n")
+        summation_preference = 'simple'
+
+    if summation_preference == 'simple':
+        for key, cutout in twod_cutouts.items():
             oned_cutout = cutout.sum(axis=0)
-            oned_cutouts[key] = oned_cutout[::-1]
-        else:
-            print("Only simply equal weight summation of 2d to 1d implemented.\n")
-            oned_cutout = cutout.sum(axis=0)
-            oned_cutouts[key] = oned_cutout[::-1]
+            oned_cutouts[key] = oned_cutout
+    else:
+        pass
+        ## Not yet implemented
+
 
     return oned_cutouts
