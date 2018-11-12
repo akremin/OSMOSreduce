@@ -11,19 +11,16 @@ def flatten_data(fiber_fluxes,waves):
     waves_arr = []
     orig_fluxs_arr = []
     names = []
-    for tet in range(1,9):
-        for fib in range(1,17):
-            name = 'r{}{:02d}'.format(tet,fib)
-            a,b,c,d,e,f = waves[name]
+    pixels = np.arange(len(fiber_fluxes[fiber_fluxes.colnames[0]])).astype(np.float64)
+    for name in waves.columns:
+        a,b,c,d,e,f = waves[name]
+        lams = a + b*pixels+ c*np.power(pixels,2)+ d*np.power(pixels,3) +\
+               e*np.power(pixels, 4)+ f*np.power(pixels,5)
+        waves_arr.append(lams)
 
-            pixels = np.arange(len(fiberfluxes['r101']))
-            lams = a + b*pixels+ c*np.power(pixels,2)+ d*np.power(pixels,3) +\
-                   e*np.power(pixels, 4)+ f*np.power(pixels,5)
-            waves_arr.append(lams)
-
-            flux = fiberfluxes[name]
-            orig_fluxs_arr.append(flux)
-            names.append(name)
+        flux = fiber_fluxes[name]
+        orig_fluxs_arr.append(flux)
+        names.append(name)
 
     waves_array = np.array(waves_arr)
     orig_flux_array = np.array(orig_fluxs_arr)
@@ -39,10 +36,10 @@ def flatten_data(fiber_fluxes,waves):
     adj_smth_flux_array = np.ndarray(shape=(orig_flux_array.shape[0],outwaves.shape[0]))
 
     ## Take in fibers row by row and interpolate them to the consistent wavelength grid
-    for ii in range(128):
+    for ii in range(len(names)):
         ## Get the original data to be interpolated
-        flux = orig_flux_array[ii,:]
-        wave = waves_array[ii,:]
+        flux = orig_flux_array[ii,:].astype(np.float64)
+        wave = waves_array[ii,:].astype(np.float64)
 
         ## Interpolate the data
         interpol = CubicSpline(x=wave,y=flux)

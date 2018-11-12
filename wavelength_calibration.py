@@ -214,13 +214,16 @@ def get_highestflux_waves(complinelistdict):
 def update_default_dict(default_dict,fiber_identifier,default_vals, history_vals, \
                         pixels, comp_spec,matched_peak_waves,\
                         do_history=False,first_iteration=True):
-    ## Update historical default
-    if do_history:
-        default_dict['from history'] = history_vals[fiber_identifier]
-
     ## Change offset of the basic default
     adef,bdef,cdef,ddef,edef,fdef = default_vals[fiber_identifier]
     default_dict['default'] = (adef,bdef,cdef)
+
+    ## Update historical default
+    if do_history:
+        if fiber_identifier in history_vals.colnames:
+            default_dict['from history'] = history_vals[fiber_identifier]
+        else:
+            default_dict['from history'] = default_dict['default']
 
     ## Guess next position from the previous one and predictive offset function
     apred, bpred, cpred = default_dict['predicted from prev spec']
@@ -293,7 +296,7 @@ def run_interactive_slider_calibration(self,first_comp, complinelistdict, defaul
 
     ## Loop over fiber names (strings e.g. 'r101')
     ##hack!
-    for fiber_identifier in ['r101','r201','r301','r401','r501','r601','r701','r801']:#first_comp.colnames:
+    for fiber_identifier in first_comp.colnames: #['r101','r401','r801']:
         counter += 1
         print(fiber_identifier)
 
@@ -394,7 +397,7 @@ def wavelength_fitting_by_line_selection(self,comp, selectedlistdict, fulllineli
     app_fit_pix = {}
     app_fit_lambs = {}
     ##hack!
-    for fiber in ['r101','r201','r301','r401','r501','r601','r701','r801']:#comp.colnames:
+    for fiber in comp.colnames: #['r101','r401','r801']:
         counter += 1
         f_x = comp[fiber].data
         coefs = coef_table[fiber]

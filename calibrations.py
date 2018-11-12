@@ -108,33 +108,69 @@ class Calibrations:
         couldntfind = False
         if self.do_secondary_calib:
             for pairnum, (c1_filnum, c2_filnum) in self.pairings.items():
-                name = self.imtype+self.lampstr_2
-                calibs = self.filemanager.locate_calib_dict(name, self.camera, self.config,c2_filnum)
-                if calibs is None:
+                name = self.lampstr_2
+                calib,thetype = self.filemanager.locate_calib_dict(name, self.camera, self.config,c2_filnum)
+                if thetype == 'full':
+                    calib_tab = Table(calib['calib coefs'].data)
+                else:
+                    calib_tab = calib
+                if calib_tab is None:
                     couldntfind = True
                     break
                 else:
-                    self.history_calibration_coefs[pairnum] = calibs
+                    self.history_calibration_coefs[pairnum] = calib_tab
         if couldntfind or not self.do_secondary_calib:
             for pairnum, (c1_filnum, c2_filnum) in self.pairings.items():
-                name = self.imtype+self.lampstr_1
-                calibs = self.filemanager.locate_calib_dict(name, self.camera, self.config,c1_filnum)
-                self.history_calibration_coefs[pairnum] = calibs
+                name = self.lampstr_1
+                calib,thetype = self.filemanager.locate_calib_dict(name, self.camera, self.config,c1_filnum)
+                if thetype == 'full':
+                    calib_tab = Table(calib['calib coefs'].data)
+                else:
+                    calib_tab = calib
+                self.history_calibration_coefs[pairnum] = calib_tab
 
+    def load_final_calib_hdus(self):
+        couldntfind = False
+        if self.do_secondary_calib:
+            filnum_ind = 1
+        else:
+            filnum_ind = 0
+        for pairnum, filnums in self.pairings.items():
+            filnum = filnums[filnum_ind]
+            name = self.lampstr_2
+            calib,thetype = self.filemanager.locate_calib_dict(name, self.camera, self.config,filnum,locate_type='full')
+            if calib is None:
+                couldntfind = True
+                break
+            elif thetype != 'full':
+                print("Something went wrong when loading calibrations")
+                print("Specified 'full' but got back {}".format(thetype))
+                couldntfind = True
+                break
+            else:
+                self.final_calibrated_hdulists[pairnum] = calib
+                self.second_calibration_coefs[pairnum] = Table(calib['calib coefs'].data)
+        if couldntfind:
+            raise(IOError,"Couldn't find matching calibrations. Please make sure the step has been run fully")
+
+    # def use_saved_calibrations(self):
+    #     if list(self.history_calibration_coefs.values())[0] is None:
+    #         self.load_most_recent_coefs()
+    #     self.final_calibrated_hdulists = self.history_calibration_coefs
     def run_initial_calibrations(self):
         import matplotlib.pyplot as plt
-        for fiber in ['r101', 'r201', 'r301', 'r401', 'r501', 'r601', 'r701', 'r801']:  # comp.colnames:
-            plt.figure()
-
-            for pairnum, (c1_filnum, throwaway) in self.pairings.items():
-                comp_data = self.first_calibrations[c1_filnum].data[fiber]
-                comp_data[comp_data<10] = 10
-                pix = np.arange(len(comp_data))
-                plt.semilogy(pix,comp_data,'-')
-            figManager = plt.get_current_fig_manager()
-            figManager.window.showMaximized()
-            plt.tight_layout()
-            plt.show()
+        # for fiber in ['r101', 'r201', 'r301', 'r401', 'r501', 'r601', 'r701', 'r801']:  # comp.colnames:
+        #     plt.figure()
+        #     for pairnum, (c1_filnum, throwaway) in self.pairings.items():
+        #         comp_data = self.first_calibrations[c1_filnum].data[fiber]
+        #         comp_data = comp_data - np.min(comp_data)
+        #         pix = np.arange(len(comp_data))
+        #         plt.plot(pix, comp_data, '-')
+        #         #plt.semilogy(pix,comp_data,'-')
+        #     figManager = plt.get_current_fig_manager()
+        #     figManager.window.showMaximized()
+        #     plt.tight_layout()
+        #     plt.show()
 
         defaults = self.default_calibration_coefs
         default_fit = self.default_fit_key
@@ -148,10 +184,12 @@ class Calibrations:
             self.first_calibration_coefs[pairnum] = out_calib.copy()
             out_evolution = OrderedDict()
             if pairnum == 0:
-                for fiber,colvals in out_calib:
+                for fiber in out_calib.columns:
+                    colvals = out_calib[fiber]
                     out_evolution[fiber] = 0.*colvals
             else:
-                for fiber,colvals in out_calib:
+                for fiber in out_calib.columns:
+                    colvals = out_calib[fiber]
                     out_evolution[fiber] = colvals-defaults[fiber]
             self.evolution_in_first_coefs[pairnum] = out_evolution
 
@@ -180,7 +218,8 @@ class Calibrations:
             else:
                 last_iteration_coefs = self.second_calibration_coefs[pairnum-1]
                 evolution = self.evolution_in_first_coefs[pairnum]
-                for fiber, colvals in last_iteration_coefs:
+                for fiber in last_iteration_coefs.columns:
+                    colvals = last_iteration_coefs[fiber]
                     initial_coef_table[fiber] = colvals + evolution[fiber]
 
             out_calib, out_linelist, lambdas, pixels, variances  = self.wavelength_fitting_by_line_selection(data, linelist, self.all_lines, initial_coef_table,select_lines=select_lines)#bounds=None)

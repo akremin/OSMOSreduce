@@ -79,9 +79,9 @@ cal_lamp_names = ['HgAr', 'NeAr' ,'Xe'] # ['Xe', 'Ar', 'HgNe', 'Hg', 'Ne'] # SAL
 # cal_lamp_names = ['Xe', 'Ar', 'HgNe', 'Hg', 'Ne']
 # thar_lamp_name = ['Th','ThAr']
 thar_lamp_name = ['ThAr']
-cameras = ['r']
+cameras = ['b']
 opamps = [1,2,3,4]
-deadfibers=None
+deadfibers=['r316','b113','b413','b105']
 binning='2x2'
 readout_speed='Slow'
 m2fs_res_mode='LowRes'
@@ -97,8 +97,9 @@ mask_subdir = mask_name
 raw_data_subdir =  'raw_data'
 raw_data_loc=os.path.join(path_to_masks,mask_subdir,raw_data_subdir)
 data_product_loc=os.path.join(path_to_masks,mask_subdir)
+catalog_loc = os.path.join(path_to_masks,'catalogs')
+mtlz_prefix = 'M2FS16'
 maskname=mask_name
-
 
 
 # In[483]:
@@ -115,10 +116,10 @@ convert_adu_to_e = True
 
 
 do_step = OrderedDict()
-do_step['bias'] = True #1
-do_step['stitch'] = True  #2
+do_step['bias'] = False #1
+do_step['stitch'] = False  #2
 do_step['remove_crs'] = False #3
-do_step['apcut'] = False  #4
+do_step['apcut'] = True  #4
 do_step['wavecalib'] = False  #5
 do_step['flat'] = False #6
 do_step['skysub'] = False #7
@@ -136,7 +137,7 @@ for key,val in do_step.items():
         break
 
 filemanager=FileManager( raw_data_loc=raw_data_loc, data_product_loc=data_product_loc,\
-                         maskname=mask_name)
+                         catalog_loc=catalog_loc, maskname=mask_name,mtlz_prefix=mtlz_prefix)
 
 instrument=InstrumentState(cameras=cameras,opamps=opamps,deadfibers=deadfibers,binning=binning,\
                  readout=readout_speed,resolution=m2fs_res_mode,filter=filter,configuration=config)

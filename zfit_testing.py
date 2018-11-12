@@ -17,7 +17,6 @@ from zestipy.plotting_tools import summary_plot
 
 
 def fit_redshifts(sky_subd_sciences,mask_name,run_auto=True,prior = None):
-    sky_subd_sciences = Table(sky_subd_sciences)
     savedir = os.path.join(os.curdir, 'zfits', mask_name)
 
     R = z_est(lower_w=4200.0, upper_w=6400.0, lower_z=0.05, upper_z=0.6, \
@@ -25,7 +24,7 @@ def fit_redshifts(sky_subd_sciences,mask_name,run_auto=True,prior = None):
               skip_initial_priors=True, \
               auto_pilot=True)
 
-    template_names = ['spDR2-023.fit', 'spDR2-024.fit', 'spDR2-028.fit']
+    template_names = ['spDR2-023.fit']#, 'spDR2-024.fit', 'spDR2-028.fit']
                         # ['spDR2-0'+str(x)+'.fit' for x in np.arange(23,31)]
     template_dir = 'sdss_templates'  # hack
 
@@ -33,43 +32,45 @@ def fit_redshifts(sky_subd_sciences,mask_name,run_auto=True,prior = None):
     # Import template spectrum (SDSS early type) and continuum subtract the flux
     R.add_sdsstemplates_fromfile(path_to_temps, template_names)
 
+    if run_auto:
+        outnames = ['apperature','redshift_est', 'cor', 'template', 'SNavg', 'SNHKmin', 'HSN', 'KSN', 'GSN']
+        types = [str,float,float,str,float,float,float,float,float]
+    else:
+        outnames = ['apperature','redshift_est', 'quality_val', 'cor', 'template', 'SNavg', 'SNHKmin', 'HSN', 'KSN', 'GSN']
+        types = [str,float,int,float,str,float,float,float,float,float]
+    outtable = Table(names=outnames,dtype=types)
+
     if not run_auto:
         quality_val = {}
-    redshift_est, cor, template = {}, {}, {}
-    SNavg, SNHKmin, HSN, KSN, GSN = {}, {}, {}, {}, {}
-    outtable = Table(names=np.append(['info'],sky_subd_sciences.colnames))
-    for ap in sky_subd_sciences.colnames:
+    for ap in sky_subd_sciences.keys():
         waves, flux, boolmask = sky_subd_sciences[ap]
         test_waveform = waveform(waves, flux, ap, boolmask)
 
         redshift_outputs = R.redshift_estimate(test_waveform)
-        redshift_est[ap] = redshift_outputs.best_zest
-        cor[ap] = redshift_outputs.max_cor
+        redshift_est = redshift_outputs.best_zest
+        cor = redshift_outputs.max_cor
         ztest = redshift_outputs.ztest_vals
         corr_val = redshift_outputs.corr_vals
-        template[ap] = redshift_outputs.template.name
+        template = redshift_outputs.template.name
         print((redshift_outputs.best_zest, redshift_outputs.max_cor, redshift_outputs.template.name))
         if not run_auto:
-            qualityval[ap] = redshift_outputs.qualityval
+            qualityval = redshift_outputs.qualityval
         try:
-            HSN[ap], KSN[ap], GSN[ap] = sncalc(redshift_est[ap], test_waveform.wave,
+            HSN, KSN, GSN = sncalc(redshift_est, test_waveform.wave,
                                                test_waveform.continuum_subtracted_flux)
         except ValueError:
-            HSN[ap], KSN[ap], GSN[ap] = 0.0, 0.0, 0.0
-        SNavg[ap] = np.average(np.array([HSN[ap], KSN[ap], GSN[ap]]))
-        SNHKmin[ap] = np.min(np.array([HSN[ap], KSN[ap]]))
+            HSN, KSN, GSN = 0.0, 0.0, 0.0
+        SNavg = np.average(np.array([HSN, KSN, GSN]))
+        SNHKmin = np.min(np.array([HSN, KSN]))
         # Create a summary plot of the best z-fit
         savestr = 'redEst_%s_Tmplt%s.png' % (test_waveform.name, redshift_outputs.template.name)
         plt_name = os.path.join(savedir, savestr)
         summary_plot(test_waveform.wave, test_waveform.flux, redshift_outputs.template.wave, \
                      redshift_outputs.template.flux, redshift_outputs.best_zest, redshift_outputs.ztest_vals, \
                  redshift_outputs.corr_vals, plt_name, test_waveform.name, None)
-        outtable.add_row([redshift_est, cor, template, SNavg, SNHKmin, HSN, KSN, GSN])
-
-    outinfo = [redshift_est, cor, template, SNavg, SNHKmin, HSN, KSN, GSN]
-    outnames = ['redshift_est', 'cor', 'template', 'SNavg', 'SNHKmin', 'HSN', 'KSN', 'GSN']
-    for name,info in zip(outnames,outinfo):
-        info['info'] = name
-        outtable.add_row(Table.Row(info))
+        if run_auto:
+            outtable.add_row([ap,redshift_est, cor, template, SNavg, SNHKmin, HSN, KSN, GSN])
+        else:
+            outtable.add_row([ap, redshift_est, quality_val, cor, template, SNavg, SNHKmin, HSN, KSN, GSN])
 
     return outtable

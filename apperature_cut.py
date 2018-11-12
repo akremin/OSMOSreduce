@@ -103,7 +103,7 @@ def get_all_tetris_edges(image):
     starts += start_changes
     ends -= end_changes
 
-    plt.figure(), plt.subplots(1, 1, figsize=(16, 16))
+    plt.subplots(1, 1, figsize=(16, 16))
     plt.imshow(image, origin='lower-left')
     plt.hlines(starts, xmin=0, xmax=image.shape[0], color='r')
     plt.hlines(ends, xmin=0, xmax=image.shape[0], color='r')

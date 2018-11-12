@@ -37,3 +37,50 @@ def reduce_files(filetype,cluster_dir):
     #            p.wait()
     #        else:
     #            print 'Reduced '+filetype+' files exist'
+
+
+import matplotlib.transforms as mtransforms
+
+fig, ax = plt.subplots()
+trans = mtransforms.blended_transform_factory(ax.transData, ax.transAxes)
+plt.title('Staight Plots' + skyfib)
+plt.plot(gallams, gal_contsubd, label='Galaxy')
+plt.plot(gallams, outsky, label='sky')
+plt.plot(gallams, master_interp, label='master')
+for fib, flux in zip(skyfibs, master_skies):
+    plt.plot(skyllams, flux, label=fib, alpha=0.5)
+ax.fill_between(gallams, 0, 1, where=corlog > upper, facecolor='green', alpha=0.5, transform=trans)
+ax.fill_between(gallams, 0, 1, where=corlog < lower, facecolor='red', alpha=0.5, transform=trans)
+figManager = plt.get_current_fig_manager()
+figManager.window.showMaximized()
+plt.tight_layout()
+plt.legend(loc='best')
+# raise()
+
+
+
+
+
+
+
+x = np.arange(0.0, 2, 0.01)
+y1 = np.sin(2*np.pi*x)
+y2 = 1.2*np.sin(4*np.pi*x)
+
+
+# show how to use transforms to create axes spans where a certain condition is satisfied
+fig, ax = plt.subplots()
+y = np.sin(4*np.pi*x)
+ax.plot(x, y, color='black')
+
+# use the data coordinates for the x-axis and the axes coordinates for the y-axis
+import matplotlib.transforms as mtransforms
+trans = mtransforms.blended_transform_factory(ax.transData, ax.transAxes)
+theta = 0.9
+ax.axhline(theta, color='green', lw=2, alpha=0.5)
+ax.axhline(-theta, color='red', lw=2, alpha=0.5)
+ax.fill_between(x, -1, 1, where=y > theta, facecolor='green', alpha=0.5, transform=trans)
+ax.fill_between(x, -1, 1, where=y < -theta, facecolor='red', alpha=0.5, transform=trans)
+
+
+plt.show()

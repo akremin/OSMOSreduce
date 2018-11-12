@@ -6,7 +6,7 @@ from astropy.table import Table
 
 
 class DirectoryManager:
-    def __init__(self,raw_data_loc,data_product_loc):
+    def __init__(self,raw_data_loc,data_product_loc,catalog_loc=os.path.abspath('./')):
         self.raw_data_loc = os.path.abspath(raw_data_loc)
         self.data_product_loc = os.path.abspath(data_product_loc)
 
@@ -21,15 +21,17 @@ class DirectoryManager:
         self.calibration_dir = os.path.join(data_product_loc,'calibrations')
         self.default_calibration_dir = os.path.abspath('./calibrations')
         self.lampline_dir = os.path.join(os.path.abspath('.'),'lamp_linelists','salt')
+        self.catalog_path = os.path.abspath(catalog_loc)
+        self.mtlz_path = os.path.join(catalog_loc,'merged_target_lists')
 
         self.dirname_dict = {
                                 'bias':        {'read':'raw_data','write':'debiased'},\
                                 'stitch':      {'read':'debiased','write':'stitched'},\
-                                'remove_crs':  {'read':'data_products','write':'data_products'},\
-                                'ffmerge':     {'read':'data_products','write':'data_products'},\
+                                'remove_crs':  {'read':'stitched','write':'data_products'},\
                                 'apcut':       {'read':'data_products','write':'oneds'}, \
                                 'wavecalib':   {'read':'oneds','write':'calibrated_oned'},\
-                                'flat':        {'read':'calibrated_oned','write':'calibrated_oned'},\
+                                'flat':        {'read':'calibrated_oned','write':'calibrated_oned'}, \
+                                'skysub':      {'read': 'calibrated_oned', 'write': 'calibrated_oned'}, \
                                 'combine':     {'read':'calibrated_oned','write':'final_oned'},\
                                 'zfit':        {'read':'final_oned','write':'zfits'}\
                             }
@@ -69,21 +71,21 @@ class DirectoryManager:
 
 
 class FileManager:
-    def __init__(self, raw_data_loc='./', data_product_loc='./', maskname='{maskname}'):
+    def __init__(self, raw_data_loc='./', data_product_loc='./', catalog_loc = './', maskname='{maskname}', mtlz_prefix='M2FS16'):
         self.date_timestamp = np.datetime_as_string(np.datetime64('today', 'D'))
-        self.numeric_timestamp = np.datetime64('now' ,'m').astype(int ) -np.datetime64('2018-06-01T00:00' ,'m').astype(int)
+        self.numeric_timestamp = np.datetime64('now' ,'m').astype(int )-np.datetime64('2018-06-01T00:00' ,'m').astype(int)
 
-        self.directory = DirectoryManager(raw_data_loc, data_product_loc)
+        self.directory = DirectoryManager(raw_data_loc, data_product_loc, catalog_loc)
         self.maskname = maskname
+        self.mtlz_name = 'mtlz_{}_{}_full.csv'.format(mtlz_prefix,maskname)
 
         ## Setup Defaults
         self.current_read_template = None
         self.current_write_template = None
-        self.calibration_template = '{cam}_calibration_{fittype}_{config}_{filenum:04d}_{timestamp}.fits'
+        self.calibration_template = '{cam}_calibration_{fittype}_{config}_{filenum}_{timestamp}.fits'
         self.default_calibration_template = '{cam}_calibration_default_{config}.fits'
         self.pickled_datadump_name = '_precrashdata.pkl'
         self.lampline_template = '{mod}{lamp}.csv'
-
 
         flnm_tmplt = {}
         flnm_tmplt['raw'] = '{cam}{filenum:04d}c{opamp}'
@@ -93,7 +95,6 @@ class FileManager:
         flnm_tmplt['twods'] = flnm_tmplt['base'] + '2d'
         flnm_tmplt['oneds'] = flnm_tmplt['base'] + '1d'
         flnm_tmplt['combined'] = flnm_tmplt['base'] + 'combined_1d'
-        flnm_tmplt['master'] = '{cam}_{imtype}_master_' + maskname
 
         self.filename_template = flnm_tmplt
 
@@ -101,10 +102,10 @@ class FileManager:
                                 'bias': {'read': flnm_tmplt['raw'], 'write': flnm_tmplt['debiased']},
                                 'stitch': {'read': flnm_tmplt['debiased'], 'write': flnm_tmplt['stitched']},\
                                 'remove_crs': {'read': flnm_tmplt['stitched'], 'write': flnm_tmplt['stitched']}, \
-                                'ffmerge': {'read': flnm_tmplt['stitched'], 'write': flnm_tmplt['stitched']}, \
                                 'apcut': {'read': flnm_tmplt['stitched'], 'write': flnm_tmplt['oneds']}, \
                                 'wavecalib': {'read': flnm_tmplt['oneds'], 'write': flnm_tmplt['oneds']}, \
                                 'flat': {'read': flnm_tmplt['oneds'], 'write': flnm_tmplt['oneds']}, \
+                                'skysub': {'read': flnm_tmplt['oneds'], 'write': flnm_tmplt['oneds']}, \
                                 'combine': {'read': flnm_tmplt['oneds'], 'write': flnm_tmplt['combined']}, \
                                 'zfit': {'read': flnm_tmplt['combined'], 'write': flnm_tmplt['combined']} \
                              }
@@ -113,12 +114,12 @@ class FileManager:
                                 'bias':        {'read': '', 'write': '_b'}, \
                                 'stitch':      {'read':'_b','write':'_b'},\
                                 'remove_crs':  {'read':'_b','write':'_bc'},\
-                                'ffmerge':     {'read':'_bc','write':'_bc'},\
                                 'apcut':       {'read':'_bc','write':'_bc'}, \
                                 'wavecalib':   {'read':'_bc','write':'_bcw'},\
-                                'flat':        {'read':'_bcw','write':'_bcwf'},\
-                                'combine':     {'read':'_bcwf','write':'_bcwf'},\
-                                'zfit':        {'read':'_bcwf','write':'_bcwf'}\
+                                'flat':        {'read':'_bcw','write':'_bcwf'}, \
+                                'skysub':      {'read': '_bcwf', 'write': '_bcwfs'}, \
+                                'combine':     {'read':'_bcwfs','write':'_bcwfs'},\
+                                 'zfit':       {'read':'_bcwfs','write':'_bcwfs'}\
                             }
 
         self.step = 'bias'
@@ -151,31 +152,14 @@ class FileManager:
                                                                              self.current_write_template))
 
     def get_read_filename(self,camera, imtype, filenum, amp):
-        if filenum=='master':
-            inname = self.filename_template['master'].format(cam=camera, imtype=imtype, maskname=self.maskname)
-            if imtype == 'bias':
-                tag = ''
-            else:
-                tag = '_b'
-            inname = inname + tag + '.fits'
-        else:
-            inname = self.current_read_template.format(cam=camera, imtype=imtype, filenum=filenum,\
+        inname = self.current_read_template.format(cam=camera, imtype=imtype, filenum=filenum,\
                                                        opamp=amp, maskname=self.maskname)
         filename = os.path.join(self.directory.current_read_dir, inname)
         return filename
 
     def get_write_filename(self,camera, imtype, filenum,amp):
-        if filenum=='master':
-            outname = self.filename_template['master'].format(cam=camera, imtype=imtype, maskname=self.maskname)
-            if imtype == 'bias':
-                tag = '.fits'
-            else:
-                tag = '_bc.fits'
-            outname = outname + tag
-        else:
-            outname = self.current_write_template.format(cam=camera, imtype=imtype, filenum=filenum,\
+        outname = self.current_write_template.format(cam=camera, imtype=imtype, filenum=filenum,\
                                                          opamp=amp, maskname=self.maskname)
-
         filename = os.path.join(self.directory.current_write_dir, outname)
         return filename
 
@@ -214,16 +198,21 @@ class FileManager:
             filename = self.default_calibration_template.format(cam=cam,config=config)
             fullpathname = os.path.join(self.directory.default_calibration_dir,filename)
             if os.path.exists(fullpathname):
-                calib_tab = Table.read(fullpathname,format='fits')
+                calib = Table.read(fullpathname,format='fits')
             else:
-                calib_tab = None
+                calib = None
+        elif fittype == 'basic':
+            filename = self.calibration_template.format(cam=cam, fittype=fittype, config=config, \
+                                                        filenum=filenum, timestamp=timestamp)
+            fullpathname = os.path.join(self.directory.calibration_dir, filename)
+            calib = Table.read(fullpathname)
         else:
             filename = self.calibration_template.format(cam=cam, fittype=fittype, config=config, \
                                                                 filenum=filenum, timestamp=timestamp)
             fullpathname = os.path.join(self.directory.calibration_dir,filename)
-            calib_tab = Table(fits.open(fullpathname)['calib coefs'].data)
+            calib = fits.open(fullpathname)
 
-        return calib_tab
+        return calib
 
     def save_basic_calib_dict(self, outtable, fittype, cam, config, filenum=None):
         if fittype == 'default':
@@ -246,15 +235,24 @@ class FileManager:
 
     def locate_calib_dict(self,fittype, camera, config, filenum,locate_type='any'):
         import re
+        if type(filenum) is not str:
+            filenum = "{:04d}".format(int(filenum))
+        if 'basic' in fittype:
+            ftype = fittype.replace('basic','')
+        elif 'full' in fittype:
+            ftype = fittype.replace('full','')
         if locate_type == 'basic':
-            match_str = self.calibration_template.format(cam=camera, fittype=r'(basic)-' + fittype, \
-                                                     timestamp=r'(\d{5})', filenum=filenum,config=config)
+            fittype = '(basic)' + ftype
+            match_str = self.calibration_template.format(cam=camera, fittype=fittype, \
+                                                     timestamp=r'(\d{6})', filenum=filenum,config=config)
         elif locate_type == 'full':
-            match_str = self.calibration_template.format(cam=camera, fittype=r'(full}-' + fittype, \
-                                                     timestamp=r'(\d{5})', filenum=filenum,config=config)
+            fittype =  '(full)' + ftype
+            match_str = self.calibration_template.format(cam=camera, fittype=fittype, \
+                                                     timestamp=r'(\d{6})', filenum=filenum,config=config)
         else:
-            match_str = self.calibration_template.format(cam=camera, fittype=r'(basic|full)-' + fittype, \
-                                                         timestamp=r'(\d{5})', filenum=filenum, config=config)
+            fittype = '(full|basic)' + ftype
+            match_str = self.calibration_template.format(cam=camera, fittype=fittype, \
+                                                         timestamp=r'(\d{6})', filenum=filenum, config=config)
         matches,types=[],[]
         files = os.listdir(self.directory.calibration_dir)
         for fil in files:
@@ -262,17 +260,16 @@ class FileManager:
             if srch_res:
                 matches.append(int(srch_res.group(2)))
                 types.append(str(srch_res.group(1)))
-            else:
-                continue
 
-        calib_coef_table = None
+
+        calib,thetype = None,''
         if len(matches) > 0:
             newest = np.argmax(matches)
-            newmatch = match_str[newest]
+            newmatch = matches[newest]
             thetype = types[newest]
-            calib_coef_table = self.load_calib_dict(thetype+'-'+fittype, camera, config, filenum, newmatch)
+            calib = self.load_calib_dict(thetype+ftype, camera, config, filenum, newmatch)
 
-        return calib_coef_table
+        return calib, thetype
 
     def read_crashed_filedata(self):
         import pickle as pkl
@@ -282,20 +279,15 @@ class FileManager:
             all_hdus = pkl.load(crashdata)
         return all_hdus
 
-    def read_all_filedata(self,filenumber_dict,master_type_dict,instrument,data_stitched=True,fibersplit=True):
+    def read_all_filedata(self,filenumber_dict,instrument,data_stitched=True,fibersplit=True):
         opamps = instrument.opamps
         cameras = instrument.cameras
         all_hdus = {}
         for imtype, filenums in filenumber_dict.items():
-            for camera in cameras:
-                for filnum in filenums:
+            for filnum in filenums:
+                for camera in cameras:
                     for opamp in opamps:
                         all_hdus[(camera,filnum,imtype,opamp)] = self.read_hdu(camera=camera, filenum=filnum, imtype=imtype, amp=opamp, fibersplit=fibersplit)
-
-
-        for imtype in master_type_dict:
-            for camera in cameras:
-                all_hdus[(camera, 'master', imtype, None)] = self.read_hdu(camera=camera, filenum='master', imtype=imtype, fibersplit=fibersplit)
 
         return all_hdus
 
@@ -337,4 +329,17 @@ class FileManager:
         #return linelistdict, selectedlinesdict, all_wms
         return selectedlinesdict, np.asarray(all_wms)
 
-
+    def get_matched_target_list(self):
+        full_name = os.path.join(self.directory.mtlz_path,self.mtlz_name)
+        if os.path.exists(full_name):
+            try:
+                mtlz = Table.read(full_name, format='ascii.csv', \
+                                  include_names=['ID', 'TARGETNAME', 'FIBNAME', 'sdss_SDSS12', \
+                                                 'RA', 'DEC', 'RA_drilled', 'DEC_drilled', 'sdss_zsp', 'sdss_zph'])
+                return mtlz
+            except:
+                print("Failed to open merged target list, but it did exist")
+                return None
+        else:
+            print("Could not find the merged target list file")
+            return None
