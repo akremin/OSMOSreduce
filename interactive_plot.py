@@ -320,3 +320,4 @@ if __name__ == '__main__':
     interactive_plot(pixels=np.arange(len(spectra)), spectra=spectra,\
                      linelistdict=linelistdict, gal_identifier=fiber_identifier, \
                      default_dict=default_dict, steps=steps, default_key=default_key)
+

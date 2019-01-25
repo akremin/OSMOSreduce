@@ -62,10 +62,10 @@ print(deltat)
 #             else:
 #                 calib_coef_table = coef_table
 #
-#         first_comp = (dict_of_hdus['comp'][camera][fil]).data
+#         coarse_comp = (dict_of_hdus['comp'][camera][fil]).data
 #
 #         if not load_fromfile_if_possible:
-#             calib_coef_table = interactive_wavelength_fitting(first_comp ,complinelistdict, \
+#             calib_coef_table = interactive_wavelength_fitting(coarse_comp ,complinelistdict, \
 #                                                               default = (4522.6 ,1.0007 ,-1.6e-6), \
 #                                                               trust_initial = True)
 #             calib_coefs['interactive'][camera] = calib_coef_table
@@ -82,7 +82,7 @@ print(deltat)
 #                 calib_coef_table = coef_table
 #
 #         if not load_fromfile_if_possible:
-#             calib_coef_table, covs, selected_complinelists = wavelength_fitting(first_comp, complinelistdict, \
+#             calib_coef_table, covs, selected_complinelists = wavelength_fitting(coarse_comp, complinelistdict, \
 #                                                                                 calib_coef_table ,select_lines = True, bounds=bounds)
 #             save_calib_dict(calib_coef_table, 'compfit', camera, config, comp_filenums[0], timestamp)
 #
@@ -260,7 +260,7 @@ def update_default_dict(default_dict,fiber_identifier,default_vals, history_vals
     return default_dict
 
 
-def run_interactive_slider_calibration(self,first_comp, complinelistdict, default_vals=None,history_vals=None,\
+def run_interactive_slider_calibration(self,coarse_comp, complinelistdict, default_vals=None,history_vals=None,\
                                    steps = None, default_key = None, trust_initial = False):
 
     init_default = (4523.4,1.0007,-1.6e-6)
@@ -283,7 +283,7 @@ def run_interactive_slider_calibration(self,first_comp, complinelistdict, defaul
     ## Find the highest flux wavelengths in the calibrations
     wsorted_top_wave, wsorted_top_flux = get_highestflux_waves(complinelistdict)
     ## Make sure the information is in astropy table format
-    first_comp = Table(first_comp)
+    coarse_comp = Table(coarse_comp)
     ## Define loop params
     counter = 0
     first_iteration = True
@@ -296,12 +296,12 @@ def run_interactive_slider_calibration(self,first_comp, complinelistdict, defaul
 
     ## Loop over fiber names (strings e.g. 'r101')
     ##hack!
-    for fiber_identifier in first_comp.colnames: #['r101','r401','r801']:
+    for fiber_identifier in coarse_comp.colnames: #['r101','r401','r801']:
         counter += 1
         print(fiber_identifier)
 
         ## Get the spectra (column with fiber name as column name)
-        comp_spec = np.asarray(first_comp[fiber_identifier])
+        comp_spec = np.asarray(coarse_comp[fiber_identifier])
 
         ## create pixel array for mapping to wavelength
         pixels = np.arange(len(comp_spec))
@@ -396,7 +396,6 @@ def wavelength_fitting_by_line_selection(self,comp, selectedlistdict, fulllineli
     variances = {}
     app_fit_pix = {}
     app_fit_lambs = {}
-    ##hack!
     for fiber in comp.colnames: #['r101','r401','r801']:
         counter += 1
         f_x = comp[fiber].data
@@ -408,12 +407,14 @@ def wavelength_fitting_by_line_selection(self,comp, selectedlistdict, fulllineli
             iteration_wm,iteration_fm = selectedlistdict[fiber]
 
         browser = LineBrowser(iteration_wm,iteration_fm, f_x, coefs, fulllinelist, bounds=bounds)
-        browser.plot()
+        if np.any((np.asarray(browser.line_matches['lines'])-np.asarray(browser.line_matches['peaks_w']))>0.5):
+            browser.plot()
         params,covs = browser.fit()
 
         print(fiber,*params)
         all_coefs[fiber] = params
         variances[fiber] = covs.diagonal()
+        print(np.dot(variances[fiber],variances[fiber]))
 
         #savename = '{}'.format(fiber)
         #browser.create_saveplot(params,covs, savename)
@@ -427,7 +428,7 @@ def wavelength_fitting_by_line_selection(self,comp, selectedlistdict, fulllineli
             wm_sorter = np.argsort(init_deleted_wm)
             deleted_wm_srt, deleted_fm_srt = init_deleted_wm[wm_sorter], init_deleted_fm[wm_sorter]
             del init_deleted_fm, init_deleted_wm, wm_sorter
-            mask_wm_nearedge = ((deleted_wm_srt>(browser.xspectra[0]+4)) & (deleted_wm_srt<(browser.xspectra[-1]-4)))
+            mask_wm_nearedge = ((deleted_wm_srt>(browser.xspectra[0]+10)) & (deleted_wm_srt<(browser.xspectra[-1]-10)))
             deleted_wm = deleted_wm_srt[mask_wm_nearedge]
             deleted_fm = deleted_fm_srt[mask_wm_nearedge]
             del deleted_fm_srt, deleted_wm_srt, mask_wm_nearedge
@@ -453,6 +454,39 @@ def wavelength_fitting_by_line_selection(self,comp, selectedlistdict, fulllineli
             cont = str(input("\n\n\tDo you want to continue? (y or n)\t\t"))
             if cont.lower() == 'n':
                 break
+
+    cont = input("\n\n\tDo you need to repeat any? (y or n)")
+    if cont.lower() == 'y':
+        fiber = input("\n\tName the fiber")
+        print(fiber)
+        cam = comp.colnames[0][0]
+        while fiber != '':
+            if cam not in fiber:
+                fiber = cam + fiber
+            f_x = comp[fiber].data
+            coefs = coef_table[fiber]
+            iteration_wm, iteration_fm = [], []
+            if select_lines:
+                iteration_wm, iteration_fm = wm.copy(), fm.copy()
+            else:
+                iteration_wm, iteration_fm = selectedlistdict[fiber]
+
+            browser = LineBrowser(iteration_wm, iteration_fm, f_x, coefs, fulllinelist, bounds=bounds)
+            browser.plot()
+            params, covs = browser.fit()
+
+            print(fiber, *params)
+            all_coefs[fiber] = params
+            variances[fiber] = covs.diagonal()
+            print(np.dot(variances[fiber], variances[fiber]))
+
+            if select_lines:
+                app_specific_linelists[fiber] = (browser.wm, browser.fm)
+
+            # wave, Flux, fifth, fourth, cube, quad, stretch, shift = wavecalibrate(p_x, f_x, 1679.1503, 0.7122818, 2778.431)
+            plt.close()
+            del browser
+            fiber = input("\n\tName the fiber")
 
     if not select_lines:
         app_specific_linelists = None

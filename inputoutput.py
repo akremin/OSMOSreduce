@@ -6,9 +6,11 @@ from astropy.table import Table
 
 
 class DirectoryManager:
-    def __init__(self,raw_data_loc,data_product_loc,catalog_loc=os.path.abspath('./')):
-        self.raw_data_loc = os.path.abspath(raw_data_loc)
-        self.data_product_loc = os.path.abspath(data_product_loc)
+    def __init__(self,conf):
+        self.dirnames = dict(conf['DIRS'])
+        PATHS = dict(conf['PATHS'])
+        self.raw_data_loc = os.path.abspath(PATHS['raw_data_loc'])
+        self.data_product_loc = os.path.abspath(PATHS['data_product_loc'])
 
         if not os.path.exists(self.raw_data_loc):
             raise(IOError,"The raw data directory doesn't exist")
@@ -18,22 +20,25 @@ class DirectoryManager:
         ## Setup Defaults
         self.current_read_dir = None
         self.current_write_dir = None
-        self.calibration_dir = os.path.join(data_product_loc,'calibrations')
-        self.default_calibration_dir = os.path.abspath('./calibrations')
-        self.lampline_dir = os.path.join(os.path.abspath('.'),'lamp_linelists','salt')
-        self.catalog_path = os.path.abspath(catalog_loc)
-        self.mtlz_path = os.path.join(catalog_loc,'merged_target_lists')
+
+        dirnms = self.dirnames
+
+        self.calibration_dir = os.path.abspath(os.path.join(PATHS['data_product_loc'],dirnms['calibration']))
+        self.default_calibration_dir = os.path.abspath(PATHS['default_calibration'])
+        self.lampline_dir    = os.path.abspath(PATHS['lampline'])
+        self.catalog_path    = os.path.abspath(PATHS['catalog_loc'])
+        self.mtlz_path       = os.path.abspath(PATHS['mtlz_path'])
 
         self.dirname_dict = {
-                                'bias':        {'read':'raw_data','write':'debiased'},\
-                                'stitch':      {'read':'debiased','write':'stitched'},\
-                                'remove_crs':  {'read':'stitched','write':'data_products'},\
-                                'apcut':       {'read':'data_products','write':'oneds'}, \
-                                'wavecalib':   {'read':'oneds','write':'calibrated_oned'},\
-                                'flat':        {'read':'calibrated_oned','write':'calibrated_oned'}, \
-                                'skysub':      {'read': 'calibrated_oned', 'write': 'calibrated_oned'}, \
-                                'combine':     {'read':'calibrated_oned','write':'final_oned'},\
-                                'zfit':        {'read':'final_oned','write':'zfits'}\
+                                'bias':        {'read':dirnms['raw'],      'write':dirnms['debiased']},\
+                                'stitch':      {'read':dirnms['debiased'], 'write':dirnms['stitched']},\
+                                'remove_crs':  {'read':dirnms['stitched'], 'write':dirnms['products']},\
+                                'apcut':       {'read':dirnms['products'], 'write':dirnms['oned']}, \
+                                'wavecalib':   {'read':dirnms['oned'],     'write':dirnms['calibd1d']},\
+                                'flat':        {'read':dirnms['calibd1d'], 'write':dirnms['calibd1d']}, \
+                                'skysub':      {'read':dirnms['calibd1d'], 'write':dirnms['calibd1d']}, \
+                                'combine':     {'read':dirnms['calibd1d'], 'write':dirnms['final1d']},\
+                                'zfit':        {'read':dirnms['final1d'],  'write':dirnms['zfit']}\
                             }
 
         self.step = 'bias'
@@ -56,7 +61,16 @@ class DirectoryManager:
         readdir = self.dirname_dict[step]['read']
         writedir = self.dirname_dict[step]['write']
 
-        self.current_read_dir =  os.path.join(self.data_product_loc, readdir)
+        if step == 'bias':
+            if os.path.exists(self.raw_data_loc):
+                self.current_read_dir = self.raw_data_loc
+            else:
+                print("Couldn't locate raw data directory: {},\nnow looking in: {}".format(
+                    self.raw_data_loc,
+                    os.path.join(self.data_product_loc, readdir)))
+                self.current_read_dir = os.path.join(self.data_product_loc, readdir)
+        else:
+            self.current_read_dir = os.path.join(self.data_product_loc, readdir)
         self.current_write_dir =  os.path.join(self.data_product_loc, writedir)
 
         if not os.path.exists(self.current_read_dir):
@@ -71,32 +85,27 @@ class DirectoryManager:
 
 
 class FileManager:
-    def __init__(self, raw_data_loc='./', data_product_loc='./', catalog_loc = './', maskname='{maskname}', mtlz_prefix='M2FS16'):
-        self.date_timestamp = np.datetime_as_string(np.datetime64('today', 'D'))
-        self.numeric_timestamp = np.datetime64('now' ,'m').astype(int )-np.datetime64('2018-06-01T00:00' ,'m').astype(int)
+    def __init__(self, conf):
+        ## TODO  get the configuration values propogated to here
+        GENERAL, NAMECONVENTIONS = conf['GENERAL'], conf['NAMECONVENTIONS']
+        flnm_tmplt = conf['FILETEMPLATES']
+        flnm_tags = conf['FILETAGS']
 
-        self.directory = DirectoryManager(raw_data_loc, data_product_loc, catalog_loc)
-        self.maskname = maskname
-        self.mtlz_name = 'mtlz_{}_{}_full.csv'.format(mtlz_prefix,maskname)
+        self.date_timestamp = np.datetime_as_string(np.datetime64('today', 'D'))
+        self.numeric_timestamp = np.datetime64('now' ,'m').astype(int )-np.datetime64('2018-08-01T00:00' ,'m').astype(int)
+
+        self.directory = DirectoryManager(conf)
+        self.maskname = GENERAL['mask_name']
+        self.mtlz_name = NAMECONVENTIONS['mtlz']
 
         ## Setup Defaults
         self.current_read_template = None
         self.current_write_template = None
-        self.calibration_template = '{cam}_calibration_{fittype}_{config}_{filenum}_{timestamp}.fits'
-        self.default_calibration_template = '{cam}_calibration_default_{config}.fits'
-        self.pickled_datadump_name = '_precrashdata.pkl'
-        self.lampline_template = '{mod}{lamp}.csv'
 
-        flnm_tmplt = {}
-        flnm_tmplt['raw'] = '{cam}{filenum:04d}c{opamp}'
-        flnm_tmplt['base'] = '{cam}_{imtype}_{filenum}_' + maskname + '_'
-        flnm_tmplt['debiased'] = flnm_tmplt['base'] + 'c{opamp}'
-        flnm_tmplt['stitched'] = flnm_tmplt['base'] + 'stitched'
-        flnm_tmplt['twods'] = flnm_tmplt['base'] + '2d'
-        flnm_tmplt['oneds'] = flnm_tmplt['base'] + '1d'
-        flnm_tmplt['combined'] = flnm_tmplt['base'] + 'combined_1d'
-
-        self.filename_template = flnm_tmplt
+        self.calibration_template = flnm_tmplt['calibration']
+        self.default_calibration_template = flnm_tmplt['default_calibration']
+        self.pickled_datadump_name =flnm_tmplt['pickled_datadump']
+        self.lampline_template = flnm_tmplt['lampline']
 
         self.tempname_dict = {
                                 'bias': {'read': flnm_tmplt['raw'], 'write': flnm_tmplt['debiased']},
@@ -110,16 +119,17 @@ class FileManager:
                                 'zfit': {'read': flnm_tmplt['combined'], 'write': flnm_tmplt['combined']} \
                              }
 
+
         self.tags_dict =  {
-                                'bias':        {'read': '', 'write': '_b'}, \
-                                'stitch':      {'read':'_b','write':'_b'},\
-                                'remove_crs':  {'read':'_b','write':'_bc'},\
-                                'apcut':       {'read':'_bc','write':'_bc'}, \
-                                'wavecalib':   {'read':'_bc','write':'_bcw'},\
-                                'flat':        {'read':'_bcw','write':'_bcwf'}, \
-                                'skysub':      {'read': '_bcwf', 'write': '_bcwfs'}, \
-                                'combine':     {'read':'_bcwfs','write':'_bcwfs'},\
-                                 'zfit':       {'read':'_bcwfs','write':'_bcwfs'}\
+                                'bias':        {'read': '', 'write': flnm_tags['debiased']}, \
+                                'stitch':      {'read':flnm_tags['debiased'], 'write': flnm_tags['debiased']},\
+                                'remove_crs':  {'read':flnm_tags['debiased'], 'write': flnm_tags['crrmvd']},\
+                                'apcut':       {'read':flnm_tags['crrmvd'],   'write': flnm_tags['crrmvd']}, \
+                                'wavecalib':   {'read':flnm_tags['crrmvd'],   'write': flnm_tags['wavecald']},\
+                                'flat':        {'read':flnm_tags['wavecald'], 'write': flnm_tags['flatnd']}, \
+                                'skysub':      {'read':flnm_tags['flatnd'],   'write': flnm_tags['skysubd']}, \
+                                'combine':     {'read':flnm_tags['skysubd'],  'write': flnm_tags['skysubd']},\
+                                 'zfit':       {'read':flnm_tags['skysubd'],  'write': flnm_tags['skysubd']}\
                             }
 
         self.step = 'bias'
@@ -201,7 +211,7 @@ class FileManager:
                 calib = Table.read(fullpathname,format='fits')
             else:
                 calib = None
-        elif fittype == 'basic':
+        elif 'basic' in fittype:
             filename = self.calibration_template.format(cam=cam, fittype=fittype, config=config, \
                                                         filenum=filenum, timestamp=timestamp)
             fullpathname = os.path.join(self.directory.calibration_dir, filename)
@@ -235,8 +245,8 @@ class FileManager:
 
     def locate_calib_dict(self,fittype, camera, config, filenum,locate_type='any'):
         import re
-        if type(filenum) is not str:
-            filenum = "{:04d}".format(int(filenum))
+        #if type(filenum) is not str:
+        #    filenum = "{:04d}".format(int(filenum))
         if 'basic' in fittype:
             ftype = fittype.replace('basic','')
         elif 'full' in fittype:
@@ -255,12 +265,12 @@ class FileManager:
                                                          timestamp=r'(\d{6})', filenum=filenum, config=config)
         matches,types=[],[]
         files = os.listdir(self.directory.calibration_dir)
+
         for fil in files:
             srch_res = re.search(match_str, fil)
             if srch_res:
                 matches.append(int(srch_res.group(2)))
                 types.append(str(srch_res.group(1)))
-
 
         calib,thetype = None,''
         if len(matches) > 0:

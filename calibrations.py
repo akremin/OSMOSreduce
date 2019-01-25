@@ -15,8 +15,8 @@ from astropy.table import Table
 class Calibrations:
     from wavelength_calibration import wavelength_fitting_by_line_selection, run_interactive_slider_calibration
 
-    def __init__(self, camera, lamptypes1, lamptypes2, first_calibrations, filemanager, config, \
-                 second_calibrations=None, pairings=None, load_history=True, trust_after_first=False,\
+    def __init__(self, camera, lamptypesc, lamptypesf, coarse_calibrations, filemanager, config, \
+                 fine_calibrations=None, pairings=None, load_history=True, trust_after_first=False,\
                  default_fit_key='cross correlation',use_selected_calib_lines=False):
 
         self.imtype = 'comp'
@@ -24,69 +24,69 @@ class Calibrations:
         self.camera = camera
         self.filemanager = filemanager
         self.config = config
-        self.lamptypes1 = lamptypes1
-        self.lamptypes2 = lamptypes2
+        self.lamptypesc = lamptypesc
+        self.lamptypesf = lamptypesf
         self.trust_after_first = trust_after_first
         self.default_fit_key = default_fit_key
 
-        #self.linelist1,selected_lines1,all_lines1 = filemanager.load_calibration_lines_dict(lamptypes1,use_selected=use_selected_calib_lines)
-        self.linelist1,all_lines1 = filemanager.load_calibration_lines_dict(lamptypes1,use_selected=use_selected_calib_lines)
+        #self.linelistc,selected_linesc,all_linesc = filemanager.load_calibration_lines_dict(lamptypesc,use_selected=use_selected_calib_lines)
+        self.linelistc,all_linesc = filemanager.load_calibration_lines_dict(lamptypesc,use_selected=use_selected_calib_lines)
 
         self.load_history = load_history
-        self.first_calibrations = first_calibrations
-        # self.calib1_filnums,self.calib1_hdus = [],[]
-        # for key,val in first_calibrations.items():
-        #     self.calib1_filnums.append(int(key))
-        #     self.calib1_hdus.append(Table(val.data))
+        self.coarse_calibrations = coarse_calibrations
+        # self.calibc_filnums,self.calibc_hdus = [],[]
+        # for key,val in coarse_calibrations.items():
+        #     self.calibc_filnums.append(int(key))
+        #     self.calibc_hdus.append(Table(val.data))
         #
-        # self.calib1_filnums = np.array(self.calib1_filnums)
-        # self.calib1_hdus = np.array(self.calib1_hdus)
+        # self.calibc_filnums = np.array(self.calibc_filnums)
+        # self.calibc_hdus = np.array(self.calibc_hdus)
 
-        self.ncalibs = len(first_calibrations.keys())
-        self.do_secondary_calib = (second_calibrations is not None)
+        self.ncalibs = len(coarse_calibrations.keys())
+        self.do_fineary_calib = (fine_calibrations is not None)
 
-        self.lampstr_1 = 'basic'
-        self.lampstr_2 = 'full'
+        self.lampstr_c = 'basic'
+        self.lampstr_f = 'full'
 
-        for lamp in lamptypes1:
-            self.lampstr_1 += '-'+str(lamp)
+        for lamp in lamptypesc:
+            self.lampstr_c += '-'+str(lamp)
 
-        if self.do_secondary_calib:
-            self.linelist2,self.all_lines = filemanager.load_calibration_lines_dict(lamptypes2,use_selected=use_selected_calib_lines)
-            #self.linelist2,self.selected_lines,self.all_lines = filemanager.load_calibration_lines_dict(lamptypes2,use_selected=use_selected_calib_lines)
-            self.second_calibrations = second_calibrations
-            for lamp in lamptypes2:
-                self.lampstr_2 += '-' + str(lamp)
+        if self.do_fineary_calib:
+            self.linelistf,self.all_lines = filemanager.load_calibration_lines_dict(lamptypesf,use_selected=use_selected_calib_lines)
+            #self.linelistf,self.selected_lines,self.all_lines = filemanager.load_calibration_lines_dict(lamptypesf,use_selected=use_selected_calib_lines)
+            self.fine_calibrations = fine_calibrations
+            for lamp in lamptypesf:
+                self.lampstr_f += '-' + str(lamp)
         else:
-            self.linelist2 = self.linelist1.copy()
-            #self.selected_lines = selected_lines1
-            self.all_lines = all_lines1
-            self.lampstr_2 = self.lamstr_1.replace('basic','full')
-            self.second_calibrations = first_calibrations
+            self.linelistf = self.linelistc.copy()
+            #self.selected_lines = selected_linesc
+            self.all_lines = all_linesc
+            self.lampstr_f = self.lamstr_c.replace('basic','full')
+            self.fine_calibrations = coarse_calibrations
 
-        self.selected_lines = self.linelist2.copy()
-        self.calib1_pairlookup = {}
-        self.calib2_pairlookup = {}
+        self.selected_lines = self.linelistf.copy()
+        self.calibc_pairlookup = {}
+        self.calibf_pairlookup = {}
         if pairings is None:
             self.pairings = OrderedDict()
-            for ii, c1_filnum, c2_filnum in enumerate(zip(self.calib1_filenums,self.calib2_filenums)):
-                self.pairings[ii] = (c1_filnum, c2_filnum)
-                self.calib1_pairlookup[c1_filnum] = ii
-                self.calib2_pairlookup[c2_filnum] = ii
+            for ii, cc_filnum, cf_filnum in enumerate(zip(self.calibc_filenums,self.calibf_filenums)):
+                self.pairings[ii] = (cc_filnum, cf_filnum)
+                self.calibc_pairlookup[cc_filnum] = ii
+                self.calibf_pairlookup[cf_filnum] = ii
         else:
             self.pairings = pairings
-            for pairnum,(c1_filnum,c2_filnum) in pairings.items():
-                self.calib1_pairlookup[c1_filnum] = pairnum
-                self.calib2_pairlookup[c2_filnum] = pairnum
+            for pairnum,(cc_filnum,cf_filnum) in pairings.items():
+                self.calibc_pairlookup[cc_filnum] = pairnum
+                self.calibf_pairlookup[cf_filnum] = pairnum
 
         self.pairnums = np.sort(list(self.pairings.keys()))
 
         self.history_calibration_coefs = {ii:None for ii in self.pairings.keys()}
         self.default_calibration_coefs = None
-        self.first_calibration_coefs = OrderedDict()
-        self.second_calibration_coefs = OrderedDict()
+        self.coarse_calibration_coefs = OrderedDict()
+        self.fine_calibration_coefs = OrderedDict()
         self.final_calibrated_hdulists = OrderedDict()
-        self.evolution_in_first_coefs = OrderedDict()
+        self.evolution_in_coarse_coefs = OrderedDict()
 
         self.load_default_coefs()
         if load_history:
@@ -97,7 +97,7 @@ class Calibrations:
         self.default_calibration_coefs = self.filemanager.load_calib_dict('default', self.camera, self.config)
         if self.default_calibration_coefs is None:
             outdict = {}
-            fibernames = Table(self.first_calibrations[self.pairings[0][0]].data).colnames
+            fibernames = Table(self.coarse_calibrations[self.pairings[0][0]].data).colnames
             adef, bdef, cdef, ddef, edef, fdef = (4465.4, 0.9896, 1.932e-05, 0., 0., 0.)
             for fibname in fibernames:
                 aoff = aperature_number_pixoffset(fibname,self.camera)
@@ -106,10 +106,10 @@ class Calibrations:
 
     def load_most_recent_coefs(self):
         couldntfind = False
-        if self.do_secondary_calib:
-            for pairnum, (c1_filnum, c2_filnum) in self.pairings.items():
-                name = self.lampstr_2
-                calib,thetype = self.filemanager.locate_calib_dict(name, self.camera, self.config,c2_filnum)
+        if self.do_fineary_calib:
+            for pairnum, (cc_filnum, cf_filnum) in self.pairings.items():
+                name = self.lampstr_f
+                calib,thetype = self.filemanager.locate_calib_dict(name, self.camera, self.config,cf_filnum)
                 if thetype == 'full':
                     calib_tab = Table(calib['calib coefs'].data)
                 else:
@@ -119,10 +119,10 @@ class Calibrations:
                     break
                 else:
                     self.history_calibration_coefs[pairnum] = calib_tab
-        if couldntfind or not self.do_secondary_calib:
-            for pairnum, (c1_filnum, c2_filnum) in self.pairings.items():
-                name = self.lampstr_1
-                calib,thetype = self.filemanager.locate_calib_dict(name, self.camera, self.config,c1_filnum)
+        if couldntfind or not self.do_fineary_calib:
+            for pairnum, (cc_filnum, cf_filnum) in self.pairings.items():
+                name = self.lampstr_c
+                calib,thetype = self.filemanager.locate_calib_dict(name, self.camera, self.config,cc_filnum)
                 if thetype == 'full':
                     calib_tab = Table(calib['calib coefs'].data)
                 else:
@@ -131,13 +131,13 @@ class Calibrations:
 
     def load_final_calib_hdus(self):
         couldntfind = False
-        if self.do_secondary_calib:
-            filnum_ind = 1
+        if self.do_fineary_calib:
+            filnum_ind = c
         else:
             filnum_ind = 0
         for pairnum, filnums in self.pairings.items():
             filnum = filnums[filnum_ind]
-            name = self.lampstr_2
+            name = self.lampstr_f
             calib,thetype = self.filemanager.locate_calib_dict(name, self.camera, self.config,filnum,locate_type='full')
             if calib is None:
                 couldntfind = True
@@ -149,7 +149,7 @@ class Calibrations:
                 break
             else:
                 self.final_calibrated_hdulists[pairnum] = calib
-                self.second_calibration_coefs[pairnum] = Table(calib['calib coefs'].data)
+                self.fine_calibration_coefs[pairnum] = Table(calib['calib coefs'].data)
         if couldntfind:
             raise(IOError,"Couldn't find matching calibrations. Please make sure the step has been run fully")
 
@@ -161,8 +161,8 @@ class Calibrations:
         import matplotlib.pyplot as plt
         # for fiber in ['r101', 'r201', 'r301', 'r401', 'r501', 'r601', 'r701', 'r801']:  # comp.colnames:
         #     plt.figure()
-        #     for pairnum, (c1_filnum, throwaway) in self.pairings.items():
-        #         comp_data = self.first_calibrations[c1_filnum].data[fiber]
+        #     for pairnum, (cc_filnum, throwaway) in self.pairings.items():
+        #         comp_data = self.coarse_calibrations[cc_filnum].data[fiber]
         #         comp_data = comp_data - np.min(comp_data)
         #         pix = np.arange(len(comp_data))
         #         plt.plot(pix, comp_data, '-')
@@ -174,14 +174,14 @@ class Calibrations:
 
         defaults = self.default_calibration_coefs
         default_fit = self.default_fit_key
-        for pairnum,(c1_filnum, throwaway) in self.pairings.items():
+        for pairnum,(cc_filnum, throwaway) in self.pairings.items():
             histories = self.history_calibration_coefs[pairnum]
 
-            comp_data = Table(self.first_calibrations[c1_filnum].data)
-            out_calib = self.run_interactive_slider_calibration(first_comp=comp_data, complinelistdict=self.linelist1, default_vals=defaults, \
+            comp_data = Table(self.coarse_calibrations[cc_filnum].data)
+            out_calib = self.run_interactive_slider_calibration(coarse_comp=comp_data, complinelistdict=self.linelistc, default_vals=defaults, \
                                                                 history_vals=histories, trust_initial=self.trust_after_first, default_key=default_fit)#,  steps=None
             trust = self.trust_after_first
-            self.first_calibration_coefs[pairnum] = out_calib.copy()
+            self.coarse_calibration_coefs[pairnum] = out_calib.copy()
             out_evolution = OrderedDict()
             if pairnum == 0:
                 for fiber in out_calib.columns:
@@ -191,33 +191,33 @@ class Calibrations:
                 for fiber in out_calib.columns:
                     colvals = out_calib[fiber]
                     out_evolution[fiber] = colvals-defaults[fiber]
-            self.evolution_in_first_coefs[pairnum] = out_evolution
+            self.evolution_in_coarse_coefs[pairnum] = out_evolution
 
-            self.filemanager.save_basic_calib_dict(out_calib, self.lampstr_1, self.camera, self.config, filenum=c1_filnum)
+            self.filemanager.save_basic_calib_dict(out_calib, self.lampstr_c, self.camera, self.config, filenum=cc_filnum)
             defaults = out_calib
             default_fit = 'default'
 
     def run_final_calibrations(self):
-        if not self.do_secondary_calib:
-            print("There doesn't seem to be a second calibration defined. Using the supplied calib1's")
+        if not self.do_fineary_calib:
+            print("There doesn't seem to be a fine calibration defined. Using the supplied calibc's")
         select_lines = True
-        if self.do_secondary_calib:
+        if self.do_fineary_calib:
             filenum_ind = 1
         else:
             filenum_ind = 0
         for pairnum,filnums in self.pairings.items():
             filenum = filnums[filenum_ind]
 
-            ## Note that if there isn't a secondary calibration, second_calibrations
-            ## has already been set equal to first_calibrations hdus
-            data = Table(self.second_calibrations[filenum].data)
+            ## Note that if there isn't a fineary calibration, fine_calibrations
+            ## has already been set equal to coarse_calibrations hdus
+            data = Table(self.fine_calibrations[filenum].data)
             linelist = self.selected_lines
             initial_coef_table = OrderedDict()
             if pairnum == 0:
-                initial_coef_table = self.first_calibration_coefs[pairnum]
+                initial_coef_table = self.coarse_calibration_coefs[pairnum]
             else:
-                last_iteration_coefs = self.second_calibration_coefs[pairnum-1]
-                evolution = self.evolution_in_first_coefs[pairnum]
+                last_iteration_coefs = self.fine_calibration_coefs[pairnum-1]
+                evolution = self.evolution_in_coarse_coefs[pairnum]
                 for fiber in last_iteration_coefs.columns:
                     colvals = last_iteration_coefs[fiber]
                     initial_coef_table[fiber] = colvals + evolution[fiber]
@@ -227,10 +227,10 @@ class Calibrations:
                 self.selected_lines = out_linelist
                 select_lines = False
 
-            self.second_calibration_coefs[pairnum] = out_calib
+            self.fine_calibration_coefs[pairnum] = out_calib
 
             ## Create hdulist to export
-            prim = fits.PrimaryHDU(header=self.second_calibrations[filenum].header)
+            prim = fits.PrimaryHDU(header=self.fine_calibrations[filenum].header)
             out_calib = Table(out_calib)
             calibs = fits.BinTableHDU(data=out_calib,name='calib coefs')
             variances = Table(variances)
@@ -261,15 +261,15 @@ class Calibrations:
 
             hdulist = fits.HDUList([prim,calibs,lambs,pix,varis])
             self.final_calibrated_hdulists[pairnum] = hdulist
-            self.filemanager.save_full_calib_dict(hdulist, self.lampstr_2, self.camera, self.config, filenum=filenum)
+            self.filemanager.save_full_calib_dict(hdulist, self.lampstr_f, self.camera, self.config, filenum=filenum)
 
 
     def create_calibration_default(self,save=True):
         npairs = len(self.pairnums)
-        default_outtable = self.second_calibration_coefs[self.pairnums[0]]
+        default_outtable = self.fine_calibration_coefs[self.pairnums[0]]
         if npairs > 1:
             for pairnum in self.pairnums[1:]:
-                curtable = self.second_calibration_coefs[pairnum]
+                curtable = self.fine_calibration_coefs[pairnum]
                 for fiber in curtable.colnames:
                     default_outtable[fiber] += curtable[fiber]
 
@@ -281,17 +281,17 @@ class Calibrations:
             return default_outtable
 
     def save_initial_calibrations(self):
-        for pairnum,table in self.first_calibration_coefs.items():
+        for pairnum,table in self.coarse_calibration_coefs.items():
             filenum = self.pairings[pairnum][0]
-            self.filemanager.save_basic_calib_dict(table, self.lampstr_1, self.camera, self.config, filenum=filenum)
+            self.filemanager.save_basic_calib_dict(table, self.lampstr_c, self.camera, self.config, filenum=filenum)
 
     def save_final_calibrations(self):
         for pairnum,outlist in self.final_calibrated_hdulists.items():
-            if self.do_secondary_calib:
+            if self.do_fineary_calib:
                 filenum = self.pairings[pairnum][1]
             else:
                 filenum = self.pairings[pairnum][0]
-            self.filemanager.save_full_calib_dict(outlist, self.lampstr_2, self.camera, self.config, filenum=filenum)
+            self.filemanager.save_full_calib_dict(outlist, self.lampstr_f, self.camera, self.config, filenum=filenum)
 
 
 def air_to_vacuum(airwl, nouvconv=True):

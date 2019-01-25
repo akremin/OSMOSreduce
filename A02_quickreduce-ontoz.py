@@ -36,145 +36,97 @@ from FieldData import FieldData
 from inputoutput import FileManager
 from instrument import InstrumentState
 
+import configparser
 
-# In[479]:
-
-
-
-# ### Define input file numbers and other required information
-# 
-# Ex:
-# 
-#     Bias 597-626
-#     ThAr 627,635
-#     NeHgArXe 628,629,636,637
-#     Science 631-634
-#     Fibermaps 573-577
-# 
-
-# In[480]:
+def pipeline(maskname=None,obs_config_name=None,io_config_name=None, pipe_config_name='pipeline_config.ini'):
+    if maskname is None and (obs_config_name is None or io_config_name is None):
+        raise(IOError,"I don't know the necessary configuration file information. Exiting")
+    if obs_config_name is None:
+        obs_config_name = 'obs_{}.ini'.format(maskname)
+    if io_config_name is None:
+        io_config_name = 'io_{}.ini'.format(maskname)
 
 
-biass = np.arange(597,626+1).astype(int)
-thar_lamps = np.asarray([627,635]).astype(int)
-comp_lamps = np.asarray([628,629,636,637]).astype(int)
-twiflats = np.arange(582,591+1).astype(int)
-sciences = np.arange(631,634+1).astype(int)
-fibermaps = np.arange(573,577+1).astype(int)
+    pipe_config = configparser.ConfigParser()
+    pipe_config.read(pipe_config_name)
 
+    obs_config = configparser.ConfigParser()
+    obs_config.read(obs_config_name)
 
-# In[505]:
+    io_config = configparser.ConfigParser(interpolation=configparser.ExtendedInterpolation())
+    io_config.read(io_config_name)
 
+    # ###         Beginning of Code
+    steps = OrderedDict(pipe_config['STEPS'])
+    pipe_config.remove_section('STEPS')
+    start = str(list(steps.keys())[0])
+    for key,val in steps.items():
+        if val.upper()=='TRUE':
+            start = key
+            break
 
-instrument = 'M2FS'
-mask_name = 'A02'
-config = '11C'
+    str_filenumbers = OrderedDict(obs_config['FILENUMBERS'])
+    obs_config.remove_section('FILENUMBERS')
+    filenumbers = digest_filenumbers(str_filenumbers)
 
+    filemanager = FileManager( io_config )
+    instrument = InstrumentState( obs_config )
+    pipe_options = dict(pipe_config['PIPE_OPTIONS'])
 
+    data = FieldData(filenumbers, filemanager=filemanager, instrument=instrument,
+                     startstep=start, pipeline_options=pipe_options)
 
-cal_lamp_names = ['HgAr', 'NeAr' ,'Xe'] # ['Xe', 'Ar', 'HgNe', 'Hg', 'Ne'] # SALT
-# cal_lamp_names = ['Hg','Ar','Ne','Xe'] #['Ar','He','Hg','Ne','ThAr','Th','Xe']  # NIST
-# cal_lamp_names = ['HgAr', 'NeAr', 'Ar', 'Xe']
-# cal_lamp_names = ['Xenon','Argon','Neon', 'HgNe']
-# cal_lamp_names = ['Xe', 'Ar', 'HgNe', 'Hg', 'Ne']
-# thar_lamp_name = ['Th','ThAr']
-thar_lamp_name = ['ThAr']
-cameras = ['b']
-opamps = [1,2,3,4]
-deadfibers=['r316','b113','b413','b105']
-binning='2x2'
-readout_speed='Slow'
-m2fs_res_mode='LowRes'
-filter=None
+    for step,do_this_step in steps.items():
+        if do_this_step.lower()=='false':
+            print("\nSkipping {}".format(step))
+            continue
 
-pairing_strategy = 'nearest'
-
-# In[482]:
-
-
-path_to_masks = os.path.abspath('../../OneDrive - umich.edu/Research/M2FSReductions')
-mask_subdir = mask_name
-raw_data_subdir =  'raw_data'
-raw_data_loc=os.path.join(path_to_masks,mask_subdir,raw_data_subdir)
-data_product_loc=os.path.join(path_to_masks,mask_subdir)
-catalog_loc = os.path.join(path_to_masks,'catalogs')
-mtlz_prefix = 'M2FS16'
-maskname=mask_name
-
-
-# In[483]:
-
-
-make_debug_plots = False
-print_headers = True
-cut_bias_cols = True
-convert_adu_to_e = True
-load_data_from_disk_each_step = False
-convert_adu_to_e = True
-
-# In[484]:
-
-
-do_step = OrderedDict()
-do_step['bias'] = False #1
-do_step['stitch'] = False  #2
-do_step['remove_crs'] = False #3
-do_step['apcut'] = True  #4
-do_step['wavecalib'] = False  #5
-do_step['flat'] = False #6
-do_step['skysub'] = False #7
-do_step['combine'] = False  #8
-do_step['zfit'] = False  #9
-
-
-# ###         Beginning of Code
-
-# In[485]:
-start = 'stitch'
-for key,val in do_step.items():
-    if val:
-        start = key
-        break
-
-filemanager=FileManager( raw_data_loc=raw_data_loc, data_product_loc=data_product_loc,\
-                         catalog_loc=catalog_loc, maskname=mask_name,mtlz_prefix=mtlz_prefix)
-
-instrument=InstrumentState(cameras=cameras,opamps=opamps,deadfibers=deadfibers,binning=binning,\
-                 readout=readout_speed,resolution=m2fs_res_mode,filter=filter,configuration=config)
-
-data = FieldData(sciences, biass, twiflats, fibermaps, \
-                 comp_lamps, second_comp_filenums=thar_lamps,
-                 filemanager=filemanager, instrument=instrument, startstep=start,\
-                 obs_pairing_strategy=pairing_strategy, \
-                 calib_lamps1=cal_lamp_names, calib_lamps2=thar_lamp_name, \
-                 convert_adu_to_e=convert_adu_to_e)
-
-
-for step,do_this_step in do_step.items():
-    if do_this_step:
         print("\nPerforming {}:".format(step))
         data.proceed_to(step=step)
         data.check_data_ready_for_current_step()#step=step)
-        try:
-            data.run_step()#step=step)
-        except:
-            outfile = os.path.join(data_product_loc, '_precrashdata.pkl')
-            print("Run step failed to complete. Dumping data to {}".format(outfile))
-            with open(outfile,'wb') as crashsave:
-                pkl.dump(data.all_hdus,crashsave)
-            raise
-        try:
-            if step == 'cr_remove':
-                pass
-            else:
+
+        data.run_step()#step=step)
+
+        if step != 'cr_remove':
+            try:
                 data.write_all_filedata()#step=step)
-        except:
-            outfile = os.path.join(data_product_loc, '_precrashdata.pkl')
-            print("Save data failed to complete. Dumping data to {}".format(outfile))
-            with open(outfile,'wb') as crashsave:
-                pkl.dump(data.all_hdus,crashsave)
-            raise
-    else:
-        print("\nSkipping {}".format(step))
+            except:
+                outfile = os.path.join(io_config['PATHS']['data_product_loc'], io_config['FILETEMPLATES']['pickled_datadump'])
+                print("Save data failed to complete. Dumping data to {}".format(outfile))
+                with open(outfile,'wb') as crashsave:
+                    pkl.dump(data.all_hdus,crashsave)
+                raise()
 
 
+
+
+def digest_filenumbers(str_filenumbers):
+    out_dict = {}
+    for key,strvals in str_filenumbers.items():
+        out_num_list = []
+        if ',' in strvals:
+            vallist = str(strvals).strip('[]() \t').split(',')
+
+            for strval in vallist:
+                if '-' in strval:
+                    start,end = strval.split('-')
+                    for ii in range(int(start),int(end)+1):
+                        out_num_list.append(int(ii))
+                else:
+                    out_num_list.append(int(strval))
+        elif '-' in strvals:
+            start,end = str(strvals).split('-')
+            for ii in range(int(start),int(end)+1):
+                out_num_list.append(int(ii))
+        elif strvals.isnumeric:
+            out_num_list.append(int(strvals))
+        out_dict[key] = np.sort(out_num_list)
+
+    return out_dict
+
+
+
+
+if __name__ == '__main__':
+    maskname = 'A02'
+    pipeline(maskname=maskname)

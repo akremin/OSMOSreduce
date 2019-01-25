@@ -106,9 +106,9 @@ class LineBrowser:
         # self.selected,  = ax.plot([xs[0]], [ys[0]], 'o', ms=12, alpha=0.4,color='yellow', visible=False)
         self.selected = self.ax.axvline(self.line_matches['lines'][self.j], lw=3, alpha=0.5, color='red', ymin=0.5)
         self.selected_peak, = self.ax.plot(self.line_matches['peaks_w'][self.j], self.line_matches['peaks_h'][self.j],
-                                           'o', mec='orange', markersize=8, alpha=0.7, mfc='None', mew=3, visible=True)
+                                           'o', mec='orange', markersize=12, alpha=0.8, mfc='None', mew=3, visible=True)
         self.selected_peak_line = self.ax.axvline(self.line_matches['lines'][self.j], color='cyan', lw=4, alpha=0.3,
-                                                  ymax=0.5, visible=True)
+                                                  ymax=0.6, visible=True)
         self.reset_lims()
         self.update_current()
 
@@ -126,7 +126,7 @@ class LineBrowser:
 
         xlim = self.ax.xaxis.get_view_interval()
         ylim = self.ax.yaxis.get_view_interval()
-        if self.line_matches['lines'][self.j] > xlim[1] or self.line_matches['lines'][self.j] < xlim[0]:
+        if self.line_matches['lines'][self.j] > (xlim[1]-100) or self.line_matches['lines'][self.j] < (xlim[0]+100):
             self.reset_lims()
         self.fig.canvas.draw()
 
