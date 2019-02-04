@@ -215,9 +215,11 @@ def update_default_dict(default_dict,fiber_identifier,default_vals, history_vals
                         pixels, comp_spec,matched_peak_waves,\
                         do_history=False,first_iteration=True):
     ## Change offset of the basic default
-    adef,bdef,cdef,ddef,edef,fdef = default_vals[fiber_identifier]
-    default_dict['default'] = (adef,bdef,cdef)
-
+    if default_vals is not None:
+        adef,bdef,cdef,ddef,edef,fdef = default_vals[fiber_identifier]
+        default_dict['default'] = (adef,bdef,cdef)
+    else:
+        adef, bdef, cdef, ddef, edef, fdef = 4523.4,1.0007,-1.6e-6,0.,0.,0.
     ## Update historical default
     if do_history:
         if fiber_identifier in history_vals.colnames:
@@ -260,7 +262,7 @@ def update_default_dict(default_dict,fiber_identifier,default_vals, history_vals
     return default_dict
 
 
-def run_interactive_slider_calibration(self,coarse_comp, complinelistdict, default_vals=None,history_vals=None,\
+def run_interactive_slider_calibration(coarse_comp, complinelistdict, default_vals=None,history_vals=None,\
                                    steps = None, default_key = None, trust_initial = False):
 
     init_default = (4523.4,1.0007,-1.6e-6)

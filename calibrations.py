@@ -43,7 +43,7 @@ class Calibrations:
         # self.calibc_hdus = np.array(self.calibc_hdus)
 
         self.ncalibs = len(coarse_calibrations.keys())
-        self.do_fineary_calib = (fine_calibrations is not None)
+        self.do_fine_calib = (fine_calibrations is not None)
 
         self.lampstr_c = 'basic'
         self.lampstr_f = 'full'
@@ -51,7 +51,7 @@ class Calibrations:
         for lamp in lamptypesc:
             self.lampstr_c += '-'+str(lamp)
 
-        if self.do_fineary_calib:
+        if self.do_fine_calib:
             self.linelistf,self.all_lines = filemanager.load_calibration_lines_dict(lamptypesf,use_selected=use_selected_calib_lines)
             #self.linelistf,self.selected_lines,self.all_lines = filemanager.load_calibration_lines_dict(lamptypesf,use_selected=use_selected_calib_lines)
             self.fine_calibrations = fine_calibrations
@@ -106,7 +106,7 @@ class Calibrations:
 
     def load_most_recent_coefs(self):
         couldntfind = False
-        if self.do_fineary_calib:
+        if self.do_fine_calib:
             for pairnum, (cc_filnum, cf_filnum) in self.pairings.items():
                 name = self.lampstr_f
                 calib,thetype = self.filemanager.locate_calib_dict(name, self.camera, self.config,cf_filnum)
@@ -119,7 +119,7 @@ class Calibrations:
                     break
                 else:
                     self.history_calibration_coefs[pairnum] = calib_tab
-        if couldntfind or not self.do_fineary_calib:
+        if couldntfind or not self.do_fine_calib:
             for pairnum, (cc_filnum, cf_filnum) in self.pairings.items():
                 name = self.lampstr_c
                 calib,thetype = self.filemanager.locate_calib_dict(name, self.camera, self.config,cc_filnum)
@@ -131,7 +131,7 @@ class Calibrations:
 
     def load_final_calib_hdus(self):
         couldntfind = False
-        if self.do_fineary_calib:
+        if self.do_fine_calib:
             filnum_ind = c
         else:
             filnum_ind = 0
@@ -171,44 +171,51 @@ class Calibrations:
         #     figManager.window.showMaximized()
         #     plt.tight_layout()
         #     plt.show()
-
+        trust = False
         defaults = self.default_calibration_coefs
         default_fit = self.default_fit_key
         for pairnum,(cc_filnum, throwaway) in self.pairings.items():
             histories = self.history_calibration_coefs[pairnum]
-
-            comp_data = Table(self.coarse_calibrations[cc_filnum].data)
-            out_calib = self.run_interactive_slider_calibration(coarse_comp=comp_data, complinelistdict=self.linelistc, default_vals=defaults, \
-                                                                history_vals=histories, trust_initial=self.trust_after_first, default_key=default_fit)#,  steps=None
-            trust = self.trust_after_first
-            self.coarse_calibration_coefs[pairnum] = out_calib.copy()
-            out_evolution = OrderedDict()
-            if pairnum == 0:
-                for fiber in out_calib.columns:
+            if trust:
+                self.coarse_calibration_coefs[pairnum] = defaults.copy()
+                for fiber in defaults.columns:
                     colvals = out_calib[fiber]
                     out_evolution[fiber] = 0.*colvals
+                self.evolution_in_coarse_coefs[pairnum] = out_evolution
             else:
-                for fiber in out_calib.columns:
-                    colvals = out_calib[fiber]
-                    out_evolution[fiber] = colvals-defaults[fiber]
-            self.evolution_in_coarse_coefs[pairnum] = out_evolution
+                comp_data = Table(self.coarse_calibrations[cc_filnum].data)
+                out_calib = self.run_interactive_slider_calibration(coarse_comp=comp_data, complinelistdict=self.linelistc, default_vals=defaults, \
+                                                                    history_vals=histories, trust_initial=self.trust_after_first, default_key=default_fit)#,  steps=None
+                trust = self.trust_after_first
+                self.coarse_calibration_coefs[pairnum] = out_calib.copy()
+                out_evolution = OrderedDict()
+                if pairnum == 0:
+                    for fiber in out_calib.columns:
+                        colvals = out_calib[fiber]
+                        out_evolution[fiber] = 0.*colvals
+                else:
+                    for fiber in out_calib.columns:
+                        colvals = out_calib[fiber]
+                        out_evolution[fiber] = colvals-defaults[fiber]
+                self.evolution_in_coarse_coefs[pairnum] = out_evolution
 
-            self.filemanager.save_basic_calib_dict(out_calib, self.lampstr_c, self.camera, self.config, filenum=cc_filnum)
-            defaults = out_calib
-            default_fit = 'default'
+                self.filemanager.save_basic_calib_dict(out_calib, self.lampstr_c, self.camera, self.config, filenum=cc_filnum)
+                defaults = out_calib.copy()
+                default_fit = 'default'
+
 
     def run_final_calibrations(self):
-        if not self.do_fineary_calib:
+        if not self.do_fine_calib:
             print("There doesn't seem to be a fine calibration defined. Using the supplied calibc's")
         select_lines = True
-        if self.do_fineary_calib:
+        if self.do_fine_calib:
             filenum_ind = 1
         else:
             filenum_ind = 0
         for pairnum,filnums in self.pairings.items():
             filenum = filnums[filenum_ind]
 
-            ## Note that if there isn't a fineary calibration, fine_calibrations
+            ## Note that if there isn't a fine calibration, fine_calibrations
             ## has already been set equal to coarse_calibrations hdus
             data = Table(self.fine_calibrations[filenum].data)
             linelist = self.selected_lines
@@ -287,7 +294,7 @@ class Calibrations:
 
     def save_final_calibrations(self):
         for pairnum,outlist in self.final_calibrated_hdulists.items():
-            if self.do_fineary_calib:
+            if self.do_fine_calib:
                 filenum = self.pairings[pairnum][1]
             else:
                 filenum = self.pairings[pairnum][0]
