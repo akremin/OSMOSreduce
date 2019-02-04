@@ -48,7 +48,8 @@ def run_interactive_slider_calibration(coarse_comp, complinelistdict, default_va
 
     ## Loop over fiber names (strings e.g. 'r101')
     ##hack!
-    for fiber_identifier in ['r101','r408','r409','r608','r816']:
+    fibernames = coarse_comp.colnames
+    for fiber_identifier in fibernames:#['r101','r408','r409','r608','r816']:
         counter += 1
         print(fiber_identifier)
 
@@ -69,48 +70,88 @@ def run_interactive_slider_calibration(coarse_comp, complinelistdict, default_va
 
         pix1 = pixels
         pix2 = pixels*pixels
-
-        abest,bbest,cbest,corrbest,pvalbest = 0.,0.,0.,0.,0.
-        alow,ahigh = 4000,5000
-        prec_multiplier = int(1 / precision)
         subset = np.arange(0, len(pixels), 2).astype(int)
         subset_comp = comp_spec[subset]
         subpix1 = pix1[subset]
         subpix2 = pix2[subset]
-        for b in np.arange(0.96,1.04,0.01):
-            subpixb = b*subpix1
-            subpixinds = (subpixb *prec_multiplier).astype(int)
-            for a in np.arange(4200, 4800, 2.):
+
+        abest, bbest, cbest, corrbest, pvalbest = 0., 0., 0., 0., 0.
+        alow, ahigh = 3000, 8000
+        prec_multiplier = int(1 / precision)
+
+        if counter == 1:
+            for b in np.arange(0.96,1.04,0.01):
+                subpixb = b*subpix1
+                subpixinds = (subpixb *prec_multiplier).astype(int)
+                for a in np.arange(alow, ahigh, 1.):
+                    indoffset = int((a-waves[0])*prec_multiplier)
+                    synthwaveinds = subpixinds+indoffset
+                    cut_subset_comp = subset_comp
+                    if synthwaveinds[-40] < 0. or synthwaveinds[40] >= len(fluxes):
+                        continue
+                    elif synthwaveinds[0]<0. or synthwaveinds[-1]>=len(fluxes):
+                        waverestrict_cut = np.argwhere(((synthwaveinds>=0) & (synthwaveinds<len(fluxes))))
+                        synthwaveinds = synthwaveinds[waverestrict_cut]
+                        cut_subset_comp = subset_comp[waverestrict_cut]
+                    synthflux = fluxes[synthwaveinds]
+                    corr,pval = pearsonr(synthflux,cut_subset_comp)
+                    if corr>corrbest:
+                        abest,bbest,cbest,corrbest,pvalbest = a,b,0.,corr,pval
+            print("Itter 1 results:")
+            print(corrbest)
+            print(abest,bbest,cbest)
+        else:
+            last_fiber = fibernames[counter-2]
+            [abest, bbest, cbest, trash1, trash2, trash3] = all_coefs[last_fiber]
+
+            subpixbc = bbest*subpix1 + cbest*subpix2
+            subpixinds = (subpixbc *prec_multiplier).astype(int)
+            for a in np.arange(alow,ahigh, 1.):
                 indoffset = int((a-waves[0])*prec_multiplier)
                 synthwaveinds = subpixinds+indoffset
+                cut_subset_comp = subset_comp
+                if synthwaveinds[-40] < 0. or synthwaveinds[40] >= len(fluxes):
+                    continue
+                elif synthwaveinds[0] < 0. or synthwaveinds[-1] >= len(fluxes):
+                    waverestrict_cut = np.argwhere(((synthwaveinds >= 0) & (synthwaveinds < len(fluxes))))[0]
+                    synthwaveinds = synthwaveinds[waverestrict_cut]
+                    cut_subset_comp = subset_comp[waverestrict_cut]
                 synthflux = fluxes[synthwaveinds]
-                corr,pval = pearsonr(synthflux,subset_comp)
+                corr, pval = pearsonr(synthflux, cut_subset_comp)
                 if corr>corrbest:
-                    abest,bbest,cbest,corrbest,pvalbest = a,b,0.,corr,pval
-        print("Itter 1 results:")
-        print(corrbest)
-        print(abest,bbest,cbest)
+                    abest,corrbest,pvalbest = a,corr,pval
+            print("Itter 1 results:")
+            print(corrbest)
+            print("coef a: ",abest)
+            print("Using past vals coefs b,c: ",bbest,cbest)
 
         aitterbest,bitterbest,citterbest = 0.,0.,0.
         corrbest = 0.
 
-        for b in np.arange(bbest-0.02,bbest+0.02,1.0e-4):#for b in np.arange(0.96,1.04,0.0001):
+        for b in np.arange(bbest-0.02,bbest+0.02,1.0e-3):#for b in np.arange(0.96,1.04,0.0001):
             subpixb = b*subpix1
-            for c in np.arange(cbest-(4.0e-6),cbest+(4.0e-6),4.0e-7):
+            for c in np.arange(cbest-(4.0e-6),cbest+(4.0e-6),2.0e-7):
                 subpixbc = subpixb + (c * subpix2)
                 #pixwaves = np.round(pixbc, int(np.log10(prec_multiplier)))
                 subpixinds = (subpixbc *prec_multiplier).astype(int)
                 for a in np.arange(abest - 20, abest + 20, 1.):
                     indoffset = int((a-waves[0])*prec_multiplier)
                     synthwaveinds = subpixinds+indoffset
+                    cut_subset_comp = subset_comp
+                    if synthwaveinds[-40] < 0. or synthwaveinds[40] >= len(fluxes):
+                        continue
+                    elif synthwaveinds[0]<0. or synthwaveinds[-1]>=len(fluxes):
+                        waverestrict_cut = np.argwhere(((synthwaveinds>=0) & (synthwaveinds<len(fluxes))))[0]
+                        synthwaveinds = synthwaveinds[waverestrict_cut]
+                        cut_subset_comp = subset_comp[waverestrict_cut]
                     synthflux = fluxes[synthwaveinds]
-                    corr,pval = pearsonr(synthflux,subset_comp)
+                    corr,pval = pearsonr(synthflux,cut_subset_comp)
                     if corr>corrbest:
                         aitterbest, bitterbest, citterbest, corrbest, pvalbest = a, b, c, corr, pval
         abest, bbest, cbest = aitterbest, bitterbest, citterbest
         print("Itter 2 results:")
         print(corrbest)
-        print(abest,bbest,cbest)
+        print("coefs a,b,c: ",abest,bbest,cbest)
 
         aitterbest, bitterbest, citterbest = 0., 0., 0.
         corrbest = 0.
@@ -124,20 +165,31 @@ def run_interactive_slider_calibration(coarse_comp, complinelistdict, default_va
                 for a in np.arange(abest - 4., abest + 4., 0.1):
                     indoffset = int((a-waves[0])*prec_multiplier)
                     synthwaveinds = pixinds+indoffset
+                    cut_comp_specp = comp_spec
+                    if synthwaveinds[-40] < 0. or synthwaveinds[40] >= len(fluxes):
+                        continue
+                    elif synthwaveinds[0]<0. or synthwaveinds[-1]>=len(fluxes):
+                        waverestrict_cut = np.argwhere(((synthwaveinds>=0) & (synthwaveinds<len(fluxes))))[0]
+                        synthwaveinds = synthwaveinds[waverestrict_cut]
+                        cut_comp_specp = comp_spec[waverestrict_cut]
                     synthflux = fluxes[synthwaveinds]
-                    corr,pval = pearsonr(synthflux,comp_spec)
+                    corr,pval = pearsonr(synthflux,cut_comp_specp)
                     if corr>corrbest:
                         aitterbest,bitterbest,citterbest,corrbest,pvalbest = a,b,c,corr,pval
         abest, bbest, cbest = aitterbest,bitterbest,citterbest
         print("Itter 3 results:")
         print(corrbest)
-        print(abest,bbest,cbest)
+        print("coefs a,b,c: ",abest,bbest,cbest)
+
+        all_coefs[fiber_identifier] = [abest, bbest, cbest, 0., 0., 0.]
+        all_flags[fiber_identifier] = corrbest
 
         plt.figure()
         plt.plot(waves,fluxes,'r-',label='synth')
         plt.plot(abest+(bbest*pix1)+(cbest*pix2),comp_spec,'b-',label='data')
         plt.legend(loc='best')
-        plt.show()
+        if counter % 20 == 0:
+            plt.show()
 
         ## Do an interactive second order fit to the spectra
         # if trust_initial and counter != 1:
