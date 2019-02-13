@@ -1,16 +1,13 @@
-import os
 from astropy.io import fits
 import numpy as np
+import numpy as np
+from astropy.io import fits
 from astropy.table import Table
+from scipy.interpolate import CubicSpline
+from scipy.signal import medfilt, find_peaks
 
 from calibrations import Calibrations
 from observations import Observations
-from collections import OrderedDict
-from scipy.interpolate import CubicSpline,UnivariateSpline
-from scipy.signal import medfilt,find_peaks
-import matplotlib.pyplot as plt
-
-
 
 
 class FieldData:
@@ -180,7 +177,7 @@ class FieldData:
         elif self.step == 'apcut':
             for camera in self.instrument.cameras:
                 self.combine_fibermaps(camera, return_table=False)
-            from new_aperature_detector import cutout_all_apperatures
+            from aperture_detector import cutout_all_apperatures
             self.all_hdus = cutout_all_apperatures(self.all_hdus,self.instrument.cameras,\
                                                    deadfibers=self.instrument.deadfibers,summation_preference=self.twod_to_oned)
         elif self.step == 'wavecalib':
@@ -278,7 +275,6 @@ class FieldData:
         comparc_table = self.comparcs[cam].create_comparc_default(save=False)
         final_table, final_flux_array = flatten_data(fiber_fluxes=fiber_fluxes,waves=comparc_table)
 
-        import matplotlib.pyplot as plt
         for filnum in self.filenumbers['science']:
             hdu = self.all_hdus[(cam,filnum,'science',None)]
             data = hdu.data
@@ -580,7 +576,7 @@ class FieldData:
 
 
     def fit_redshfits(self,cam):
-        from zfit_testing import fit_redshifts
+        from fit_redshifts import fit_redshifts
         waves = Table(self.all_hdus[(cam,'combined_wavelengths','science',None)].data)
         fluxes = Table(self.all_hdus[(cam, 'combined_fluxes', 'science', None)].data)
         if (cam, 'combined_mask', 'science', None) in self.all_hdus.keys():

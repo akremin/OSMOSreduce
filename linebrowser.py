@@ -23,6 +23,7 @@ def fifth_order_poly(p_x, zeroth, first, second, third, fourth, fifth):
     return zeroth + (first * p_x) + (second * np.power(p_x,2)) + (third * np.power(p_x,3)) + \
                    (fourth * np.power(p_x,4)) + (fifth * np.power(p_x,5))
 
+
 class LineBrowser:
     def __init__(self, wm, fm, f_x, coefs, all_wms, bounds=None,edge_line_distance=0.):
         self.bounds = bounds

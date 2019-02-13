@@ -1,2 +1,2 @@
-from . import io
+from . import quickreduce_io
 from . import calibrations
