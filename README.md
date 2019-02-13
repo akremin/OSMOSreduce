@@ -26,9 +26,6 @@ That standard is as follows:
 './configs/io_{maskname}.ini'
 './configs/pipeline.ini'
 
-There is also an implicit assumed configuration file for the specific instrument setup. Example:
-'instrument_11C_kremin.ini'
-
 You can also create your own quickreduce where those variables are defined within. 
 Example: A02_quickreduce.py
 
