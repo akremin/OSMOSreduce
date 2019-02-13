@@ -1,112 +1,15 @@
 import os
 from astropy.io import fits
-#from quickreduce_funcs import print_data_neatly
 import numpy as np
 from astropy.table import Table
 
-from inputoutput import FileManager
-from instrument import InstrumentState
 from calibrations import Calibrations
+from observations import Observations
 from collections import OrderedDict
 from scipy.interpolate import CubicSpline,UnivariateSpline
 from scipy.signal import medfilt,find_peaks
 import matplotlib.pyplot as plt
 
-class Observations:
-    def __init__(self,filenumbers,obs_pairing_strategy):
-        self.comparc_cs = filenumbers['coarse_comp']
-        if filenumbers['fine_comp'] is None:
-            self.comparc_fs = np.array([None]*len(self.comparc_cs))
-        elif len(filenumbers['fine_comp']) == 1 and filenumbers['fine_comp'][0] is None:
-            self.comparc_fs = np.array([None] * len(self.comparc_cs))
-        else:
-            self.comparc_fs = filenumbers['fine_comp']
-
-        self.flats = filenumbers['twiflat']
-        self.scis = filenumbers['science']
-        self.nobs = len(self.comparc_cs)
-
-
-        self.two_step_comparc = (self.comparc_fs[0] is not None)
-
-        self.observations = OrderedDict()
-        self.comparc_pairs = OrderedDict()
-        self.obs_set_index_lookup = OrderedDict()
-        self.cal_pair_index_lookup = OrderedDict()
-
-        self.obs_pairing_strategy = obs_pairing_strategy
-
-        if self.obs_pairing_strategy not in ['nearest','user']: # 'unique',
-            # 'nearest' chooses closest filenumber to sci
-            # 'unique' pairs comps with science as uniquely as possible
-            #             while it's second priority is to pair closest
-            #             NOTE YET IMPLEMENTED
-            # 'user'  pairs in the exact order given in the filenum lists
-            self.obs_pairing_strategy = 'nearest'
-
-        self.assign_observational_sets()
-
-    def assign_observational_sets(self):
-        """
-        # 'nearest' chooses closest filenumber to sci
-        # 'unique' pairs comps with science as uniquely as possible
-        #             while it's second priority is to pair closest
-        # 'user'  pairs in the exact order given in the filenum list
-        :return: None
-        """
-        comparc_cs = self.comparc_cs.astype(int)
-        if self.two_step_comparc:
-            comparc_fs = self.comparc_fs.astype(int)
-        else:
-            comparc_fs = self.comparc_fs
-
-        flats = self.flats
-        scis = self.scis
-
-        comparc_pairs = OrderedDict()
-        observation_sets = OrderedDict()
-        obs_set_index_lookup = OrderedDict()
-        comparc_c_pair_index_lookup = OrderedDict()
-        comparc_f_pair_index_lookup = OrderedDict()
-        if self.obs_pairing_strategy == 'unique':
-            print("Unique observation pairing isn't yet implemented, defaulting to 'nearest'")
-            self.obs_pairing_strategy = 'nearest'
-
-        if self.obs_pairing_strategy == 'user':
-            for ii,sci,flat,comparc_c,comparc_f in enumerate(zip(scis,flats,comparc_cs,comparc_fs)):
-                comparc_pairs[ii] = (comparc_c,comparc_f)
-                observation_sets[ii] = (sci,flat,comparc_c,comparc_f)
-
-        if self.obs_pairing_strategy == 'nearest':
-            if self.two_step_comparc:
-                for ii,comparc_f in enumerate(comparc_fs):
-                    nearest_comparc_c = comparc_cs[np.argmin(np.abs(comparc_cs - comparc_f))]
-                    comparc_pairs[ii] = (nearest_comparc_c,comparc_f)
-                    comparc_c_pair_index_lookup[nearest_comparc_c] = ii
-                    comparc_f_pair_index_lookup[comparc_f] = ii
-            else:
-                for ii, comparc_c in enumerate(comparc_cs):
-                    comparc_pairs[ii] = (comparc_c, None)
-                    comparc_c_pair_index_lookup[comparc_c] = ii
-                    comparc_f_pair_index_lookup[comparc_c] = ii
-            for ii, sci in enumerate(scis):
-                nearest_comparc_f = comparc_fs[np.argmin(np.abs(comparc_fs - sci))]
-                nearest_comparc_pair_ind = comparc_f_pair_index_lookup[nearest_comparc_f]
-                comparc_c,comparc_f = comparc_pairs[nearest_comparc_pair_ind]
-                observation_sets[ii] = (sci, comparc_c,comparc_f,nearest_comparc_pair_ind)
-                obs_set_index_lookup[sci] = ii
-
-        self.observations = observation_sets
-        self.comparc_pairs = comparc_pairs
-        self.obs_set_index_lookup = obs_set_index_lookup
-        self.comparc_c_pair_index_lookup = comparc_c_pair_index_lookup
-        self.comparc_f_pair_index_lookup = comparc_f_pair_index_lookup
-
-    def return_comparc_pairs(self):
-        return self.comparc_pairs
-
-    def return_observation_sets(self):
-        return self.observations
 
 
 
@@ -133,11 +36,6 @@ class FieldData:
         self.fibersplit = False
         self.current_data_saved = False
         self.current_data_from_disk = False
-        # self.bias_subtracted = False
-        # self.cosmics_removed = False
-        # self.wavelengths_comparc_rated = False
-        # self.flattened = False
-        # self.observations_combined = False
 
         self.reduction_order = {None: 0, 'raw': 0, 'bias': 1, 'stitch': 2, 'remove_crs': 3,   \
                                 'apcut': 4, 'wavecalib': 5,'flatten': 6, 'skysub': 7, 'combine': 8,\
@@ -173,12 +71,7 @@ class FieldData:
         self.step = step
         numeric_step_value = self.reduction_order[self.step]
         self.data_stitched = numeric_step_value>self.reduction_order['stitch']
-        # self.bias_subtracted = numeric_step_value>2
-        # self.cosmics_removed = numeric_step_value>3
         self.fibersplit    = numeric_step_value>self.reduction_order['apcut']
-        # self.wavelengths_comparc_rated = numeric_step_value>5
-        # self.flattened = numeric_step_value>6
-        # self.observations_combined = numeric_step_value>7
 
 
         if numeric_step_value > self.reduction_order['bias']:
@@ -187,9 +80,9 @@ class FieldData:
             self.instrument.opamps = [None]
         if numeric_step_value > self.reduction_order['apcut']:
             self.filenumbers['fibermap'] = np.array(['master'])
-
-        if numeric_step_value > self.reduction_order['wavecalib']:
-            pass
+        #
+        # if numeric_step_value > self.reduction_order['wavecalib']:
+        #     pass
         if numeric_step_value > self.reduction_order['flatten']:
             self.filenumbers['twiflat'] = np.array(['master'])
         if numeric_step_value > self.reduction_order['combine']:
@@ -273,16 +166,13 @@ class FieldData:
                 self.write_all_filedata()
             import PyCosmic
             for (camera, filenum, imtype, opamp) in self.all_hdus.keys():
-                # if imtype in ['bias','coarse_comp']:
-                #    continue
-
                 readfile = self.filemanager.get_read_filename(camera=camera, imtype=imtype,\
                                                         filenum=filenum, amp=opamp)
                 writefile = self.filemanager.get_write_filename(camera=camera, imtype=imtype,\
                                                         filenum=filenum, amp=opamp)
                 maskfile = writefile.replace('.fits', '.crmask.fits')
                 print("\nFor image type: {}, shoe: {},   filenum: {}".format(imtype, camera, filenum))
-                # outdat, pycosmask, pyheader =
+
                 PyCosmic.detCos(readfile, maskfile, writefile, rdnoise='ENOISE',parallel=False,\
                                                               sigma_det=8, gain='EGAIN', verbose=True, return_data=False)
             self.proceed_to('apcut')
@@ -298,7 +188,7 @@ class FieldData:
                 self.populate_calibrations()
             for camera in self.instrument.cameras:
                self.comparcs[camera].run_initial_calibrations()
-            ##hack!!
+            ##hack
             # outdata, thetype = self.filemanager.locate_comparc_dict('basic-HgAr-NeAr-Xe', 'r', '11C', 628, locate_type='basic')
             # self.comparcs['r'].first_comparc_coefs[0] = Table(outdata)
             for camera in self.instrument.cameras:
@@ -464,10 +354,6 @@ class FieldData:
 
         skies, scis = {},{}
         for key in sci_data.colnames:
-            # camera,tet,fib = key[0],int(key[1]),int(key[2:])
-            # if camera.lower() != cam.lower():
-            #     raise(ValueError,"Camera didn't match the fiber camera designation")
-            # fibid = "{s}{d}{:02d}".format(camera,tet+1,fib+1)
             fibid = key.replace(cam,'FIBER')
             objname = header[fibid]
             if 'SKY' in objname:
@@ -528,6 +414,7 @@ class FieldData:
 
 
     def subtract_skies(self,cam):
+        from quickreduce_funcs import smooth_and_dering
         if len(self.comparcs[cam].final_comparc_rated_hdulists.keys()) == 0:
             self.comparcs[cam].load_final_comparc_hdus()
         observation_keys = list(self.observations.observations.keys())
@@ -677,82 +564,6 @@ class FieldData:
                                 test_sub = np.ones(right-left)*np.sort(doctored[left:right])[((right-left)//10)]
                             doctored[left:right] = test_sub
 
-                # ## Some skylines don't appear in the data. But low level sky is still there
-                # ## remove all identified peaks that we checked above, and then subtract the residual from the galaxy spectrum
-                # master_sub = master_interp.copy()
-                # for left, right in zip(peak_lefts, peak_rights):
-                #     master_sub[left:right] = master_sub[left:right] - master_interp[left:right]
-                # master_sub = master_sub - medfilt(master_sub,371)
-                # doctored -= master_sub
-
-                ## For each sky peak, look to see if it exists in the galaxy spectrum
-                ## If it exists, scale the peak flux to match the galaxy and subtract that line
-                ## if line doesn't exist, do nothing
-                # mean_ratio = np.mean(gheights) / np.mean(sheights)
-                # for ii, speak in enumerate(speak_inds):
-                #     match = np.where(np.abs(gpeak_inds - speak) < 1.1)[0]
-                #     if len(match) > 0:
-                #         if len(match) > 1:
-                #             match = match[np.argmax(gheights[match])]
-                #         sky_height = sheights[ii]
-                #         left = speak_lefts[ii]
-                #         right = speak_rights[ii]
-                #         if (gpeak_rights[match] - right) > 4:
-                #             if np.abs(gpeak_rights[match] - speak_rights[ii + 1]) < 4:
-                #                 right = speak_rights[ii + 1]
-                #                 sky_height = np.max([sheights[ii], sheights[ii + 1]])
-                #         elif (left - gpeak_lefts[match]) > 4:
-                #             if np.abs(speak_lefts[ii - 1] - gpeak_lefts[match]) < 4:
-                #                 left = speak_lefts[ii - 1]
-                #                 sky_height = np.max([sheights[ii], sheights[ii - 1]])
-                #         if (right - gpeak_rights[match]) > 2:
-                #             right = int(gpeak_rights[match])
-                #         if (gpeak_lefts[match] - left) > 2:
-                #             left = int(gpeak_lefts[match])
-                #
-                #         gal_height = gheights[match]
-                #
-                #         ratio = np.mean(subd_galflux[left:right]) / np.mean(sky_contsubd[left:right])
-                #         if (ratio > 0.1 * mean_ratio) and (ratio < 10 * mean_ratio):
-                #             test_sub = subd_galflux[left:right] - (ratio * sky_contsubd[left:right])
-                #             if np.std(test_sub) > (6*np.std(subd_galflux[200:200+(right-left)])):
-                #                 test_sub = np.ones(right-left)*np.sort(subd_galflux[left:right])[((right-left)//10)]
-                #             subd_galflux[left:right] = test_sub
-                #
-                # ## Some skylines don't appear in the data. But low level sky is still there
-                # ## remove all identified peaks that we checked above, and then subtract the residual from the galaxy spectrum
-                # sky_sub = sky_contsubd.copy()
-                # for left, right in zip(peak_lefts, peak_rights):
-                #     sky_sub[left:right] -= sky_contsubd[left:right]
-                # sky_sub = sky_sub - medfilt(sky_sub,371)
-                # subd_galflux -= sky_sub
-
-                # fig, ax = plt.subplots()
-                # plt.title(skyfib)
-                # plt.plot(gallams, subd_galflux+continuum,label='sky subd')
-                # plt.plot(gallams, doctored + continuum, label='master subd')
-                # plt.plot(gallams, galflux+1000, label='orig')
-                # #plt.plot(gallams, sky_contsubd+1400, label='nearest sky')
-                # plt.plot(gallams, master_interp+1200, label='master')
-                # figManager = plt.get_current_fig_manager()
-                # figManager.window.showMaximized()
-                # plt.tight_layout()
-                # plt.legend(loc='best')
-                # plot_skies(ax, np.min(gallams), np.max(gallams))
-                #
-                # fig2, ax2 = plt.subplots()
-                # plt.plot(gallams, master_interp, label='master')
-                # for sky,skyfit in skyfits.items():
-                #     outskyflux = skyfit(gallams)
-                #     corrected = smooth_and_dering(outskyflux)
-                #     plt.plot(gallams,corrected,label=sky,alpha=0.4)
-                # figManager = plt.get_current_fig_manager()
-                # figManager.window.showMaximized()
-                # plt.tight_layout()
-                # plt.legend(loc='best')
-                # plot_skies(ax2, np.min(gallams), np.max(gallams))
-                # plt.show()
-
                 out_sci_data.add_column(Table.Column(name=galfib,data=(doctored+continuum)))
                 sci_lams[galfib] = gallams
                 # plt.plot(gallams,sci_data[galfib],alpha=0.4)
@@ -765,9 +576,6 @@ class FieldData:
         #     for nam in lamdict.keys():
         #         plt.plot(lamdict[nam],scidict[nam],alpha=0.4)
         # plt.show()
-
-
-
 
 
 
@@ -789,61 +597,3 @@ class FieldData:
             sci_data[ap] = (waves[ap],fluxes[ap],current_mask)
         results = fit_redshifts(sci_data,mask_name=self.filemanager.maskname, run_auto=True)
         self.fit_data[cam] = results
-
-def plot_skies(axi,minlam,maxlam):
-    skys = Table.read(r'C:\Users\kremin\Github\M2FSreduce\lamp_linelists\gident_UVES_skylines.csv',format='ascii.csv')
-    sky_lines = skys['WAVE_AIR']
-    sky_fluxes = skys['FLUX']
-    shortlist_skylines = ((sky_lines>minlam)&(sky_lines<maxlam))
-    shortlist_fluxes = (sky_fluxes > 0.2)
-    shortlist_bool = (shortlist_fluxes & shortlist_skylines)
-
-    select_table = skys[shortlist_bool]
-    from comparcs import air_to_vacuum
-    shortlist_skylines = air_to_vacuum(select_table['WAVE_AIR'])
-    fluxes = select_table['FLUX']
-    log_flux = np.log(fluxes-np.min(fluxes)+1.01)
-    max_log_flux = np.max(log_flux)
-    for vlin,flux in zip(shortlist_skylines,log_flux):
-        axi.axvline(vlin, ls='-.', alpha=0.2, c='black',lw=0.4+4*flux/max_log_flux)
-
-def smooth_and_dering(outskyflux):
-    outskyflux[np.isnan(outskyflux)] = 0.
-    smthd_outflux = medfilt(outskyflux, 3)
-    peak_inds, peak_props = find_peaks(outskyflux, height=(1500, 100000), width=(0, 20))
-    heights = peak_props['peak_heights']
-    ringing_factor = 1 + (heights // 1000)
-    ring_lefts = (peak_inds - ringing_factor * (peak_inds - peak_props['left_bases'])).astype(int)
-    peak_lefts = (peak_props['left_bases']).astype(int)
-    ring_rights = (peak_inds + ringing_factor * (peak_props['right_bases'] - peak_inds)).astype(int)
-    peak_rights = (peak_props['right_bases']).astype(int)
-
-    corrected = smthd_outflux.copy()
-    for rleft, pleft in zip(ring_lefts, peak_lefts):
-        corrected[rleft:pleft] = smthd_outflux[rleft:pleft]
-    for rright, pright in zip(ring_rights, peak_rights):
-        corrected[pright:rright] = smthd_outflux[pright:rright]
-    return corrected
-
-
-
-
-class ReductionController:
-    def __init__(self,fielddata,filemanager,instrumentsetup):
-        self.field_data = fielddata
-        self.file_manager = filemanager
-        self.instrument_setup = instrumentsetup
-
-        self.field_data.load(step='bias')
-        self.field_data.run_step(step='bias')
-        self.field_data.save_data()
-        self.field_data.proceed_to(step='remove_crs')
-        self.field_data.check_data_consistent_for_current_step(step='remove_crs')
-        self.field_data.run_step('remove_crs')
-        self.field_data.save_data()
-        self.field_data.proceed_to(step='sddsf')
-
-
-
-
-

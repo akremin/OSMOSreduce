@@ -14,30 +14,12 @@ from wavelength_calibration import get_highestflux_waves,\
 
 
 
-def run_interactive_slider_calibration(coarse_comp, complinelistdict, default_vals=None,history_vals=None,\
-                                   steps = None, default_key = None, last_obs=None, print_itters = True):
+def run_automated_calibration(coarse_comp, complinelistdict, last_obs=None, print_itters = True):
     precision = 1e-2
     convergence_criteria = 1.0e-5 # change in correlation value from itteration to itteration
     waves, fluxes = generate_synthetic_spectra(complinelistdict, compnames=['HgAr', 'NeAr'],precision=precision,maxheight=10000.)
     init_default = (4523.4,1.0007,-1.6e-6)
 
-    default_dict = {    'default': init_default,
-                        'predicted from prev spec': init_default,
-                        'cross correlation': init_default           }
-
-    do_history = False
-    if history_vals is not None:
-        default_dict['from history'] = init_default
-        do_history = True
-
-    if steps is None:
-        steps = (1, 0.01, 0.00001)
-
-    if default_key is None:
-        default_key = 'cross correlation'
-
-    ## Find the highest flux wavelengths in the calibrations
-    wsorted_top_wave, wsorted_top_flux = get_highestflux_waves(complinelistdict)
     ## Make sure the information is in astropy table format
     coarse_comp = Table(coarse_comp)
     ## Define loop params
@@ -62,12 +44,6 @@ def run_interactive_slider_calibration(coarse_comp, complinelistdict, default_va
 
         ## create pixel array for mapping to wavelength
         pixels = np.arange(len(comp_spec))
-
-        ## Update the defaults using history or cross correlation if available,
-        ## and also update with a fitted function for the offsets
-        default_dict = update_default_dict(default_dict,fiber_identifier,default_vals, history_vals, \
-                                           pixels, comp_spec,matched_peak_waves,\
-                                           do_history,first_iteration)
 
         pix1 = pixels
         pix2 = pixels*pixels
@@ -152,62 +128,8 @@ def run_interactive_slider_calibration(coarse_comp, complinelistdict, default_va
         all_coefs[fiber_identifier] = [abest, bbest, cbest, 0., 0., 0.]
         all_flags[fiber_identifier] = corrbest
 
-        # plt.figure()
-        # plt.plot(waves,fluxes,'r-',label='synth')
-        # plt.plot(abest+(bbest*pix1)+(cbest*pix2),comp_spec,'b-',label='data')
-        # plt.legend(loc='best')
-        # if counter % 20 == 0:
-        #     plt.show()
-
-        ## Do an interactive second order fit to the spectra
-        # if trust_initial and counter != 1:
-        #     good_spec = True
-        #     out_coef = {}
-        #     out_coef['a'],out_coef['b'],out_coef['c'] = default_dict[default_key]
-        #     print("\t\tYou trusted {} which gave: a={} b={} c={}".format(default_key,*default_dict[default_key]))
-        # else:
-        #     good_spec,out_coef = interactive_plot(pixels=pixels, spectra=comp_spec,\
-        #                      linelistdict=complinelistdict, gal_identifier=fiber_identifier,\
-        #                      default_dict=default_dict,steps=steps,default_key=default_key)
-        #
-        # ## If it's the first iteration, use the results to compute the largest
-        # ## flux lines and their true wavelength values
-        # ## these are used in all future iterations of this loop in the cross cor
-        # if first_iteration and good_spec:
-        #     top_peak_waves = top_peak_wavelengths(pixels, comp_spec, out_coef)
-        #
-        #     for peak in top_peak_waves:
-        #         index = np.argmin(np.abs(wsorted_top_wave-peak))
-        #         matched_peak_waves.append(wsorted_top_wave[index])
-        #         matched_peak_flux.append(wsorted_top_flux[index])
-        #         matched_peak_index.append(index)
-        #
-        #     matched_peak_waves = np.asarray(matched_peak_waves)
-        #     matched_peak_flux = np.asarray(matched_peak_flux)
-        #     matched_peak_index = np.asarray(matched_peak_index)
-        #     print("Returned waves: {}\nMatched_waves:{}\n".format(top_peak_waves,matched_peak_waves))
-        #
-        # ## Save the flag
-        # all_flags[fiber_identifier] = good_spec
-        #
-        # ## Save the coefficients if it's good
-        # if good_spec:
-        #     default_dict['predicted from prev spec'] = (out_coef['a'],out_coef['b'],out_coef['c'])
-        #     all_coefs[fiber_identifier] = [out_coef['a'],out_coef['b'],out_coef['c'],0.,0.,0.]
-        #     first_iteration = False
-        # else:
-        #     all_coefs[fiber_identifier] = [0.,0.,0.,0.,0.,0.]
-        #
-        # if counter == 999:
-        #     counter = 0
-        #     with open('_temp_wavecalib.pkl','wb') as temp_pkl:
-        #         pkl.dump([all_coefs,all_flags],temp_pkl)
-        #     print("Saving an incremental backup to _temp_wavecalib.pkl")
-        #     cont = str(input("\n\n\tDo you want to continue? (y or n)\t\t"))
-        #     if cont.lower() == 'n':
-        #         break
-
     return Table(all_coefs)
+
 
 def fit_using_crosscorr(pixels, raw_spec, comp_highres_fluxes, avals, bvals, cvals, calib_wave_start, flux_wave_precision,print_itters):
     alow, ahigh, astep = avals
@@ -394,8 +316,8 @@ def compare_outputs(raw_data,table1,table2):
         plt.plot(pixels, dwaves, 'r-')
         plt.show()
 
-def wrapper_script(input_dict):
-    return run_interactive_slider_calibration(**input_dict)
+def automated_calib_wrapper_script(input_dict):
+    return run_automated_calibration(**input_dict)
 
 if __name__ == '__main__':
     ## r_calibration_basic-HgAr-NeAr-Xe_11C_628_199652
@@ -443,7 +365,7 @@ if __name__ == '__main__':
         NPROC = 4
 
     with Pool(NPROC) as pool:
-        tabs = pool.map(wrapper_script,all_obs)
+        tabs = pool.map(automated_calib_wrapper_script,all_obs)
         print(tabs)
 
     # out_tab1 = run_interactive_slider_calibration(coarse_comp_data[fib1s], complinelistdict, default_vals=None,history_vals=None,\
@@ -455,6 +377,9 @@ if __name__ == '__main__':
     compare_outputs(coarse_comp_data, tabs[0], tabs[1])
 
     tabs[1] = tabs[1][fib2s[::-1].tolist()]
+    tabs[0].remove_column(fibernames[int(len(fibernames) / 2)])
+    tabs[1].remove_column(fibernames[int(len(fibernames) / 2) - 1])
+
     out_tab = hstack([tabs[0],tabs[1]])
 
     out_tab.write("out_coefs_{}{}.fits".format(cam,filenum),format='fits',overwrite=True)

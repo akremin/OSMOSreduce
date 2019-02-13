@@ -10,7 +10,10 @@ from collections import OrderedDict
 
 import numpy as np
 from astropy.table import Table
-
+from multiprocessing import Pool
+from astropy.table import hstack
+from wavelength_calibration import compare_outputs,automated_calib_wrapper_script
+import matplotlib.pyplot as plt
 
 class Calibrations:
     from wavelength_calibration import wavelength_fitting_by_line_selection, run_interactive_slider_calibration
@@ -153,55 +156,47 @@ class Calibrations:
         if couldntfind:
             raise(IOError,"Couldn't find matching calibrations. Please make sure the step has been run fully")
 
-    # def use_saved_calibrations(self):
-    #     if list(self.history_calibration_coefs.values())[0] is None:
-    #         self.load_most_recent_coefs()
-    #     self.final_calibrated_hdulists = self.history_calibration_coefs
-    def run_initial_calibrations(self):
-        import matplotlib.pyplot as plt
-        # for fiber in ['r101', 'r201', 'r301', 'r401', 'r501', 'r601', 'r701', 'r801']:  # comp.colnames:
-        #     plt.figure()
-        #     for pairnum, (cc_filnum, throwaway) in self.pairings.items():
-        #         comp_data = self.coarse_calibrations[cc_filnum].data[fiber]
-        #         comp_data = comp_data - np.min(comp_data)
-        #         pix = np.arange(len(comp_data))
-        #         plt.plot(pix, comp_data, '-')
-        #         #plt.semilogy(pix,comp_data,'-')
-        #     figManager = plt.get_current_fig_manager()
-        #     figManager.window.showMaximized()
-        #     plt.tight_layout()
-        #     plt.show()
-        trust = False
-        defaults = self.default_calibration_coefs
-        default_fit = self.default_fit_key
-        for pairnum,(cc_filnum, throwaway) in self.pairings.items():
-            histories = self.history_calibration_coefs[pairnum]
-            if trust:
-                self.coarse_calibration_coefs[pairnum] = defaults.copy()
-                for fiber in defaults.columns:
-                    colvals = out_calib[fiber]
-                    out_evolution[fiber] = 0.*colvals
-                self.evolution_in_coarse_coefs[pairnum] = out_evolution
-            else:
-                comp_data = Table(self.coarse_calibrations[cc_filnum].data)
-                out_calib = self.run_interactive_slider_calibration(coarse_comp=comp_data, complinelistdict=self.linelistc, default_vals=defaults, \
-                                                                    history_vals=histories, trust_initial=self.trust_after_first, default_key=default_fit)#,  steps=None
-                trust = self.trust_after_first
-                self.coarse_calibration_coefs[pairnum] = out_calib.copy()
-                out_evolution = OrderedDict()
-                if pairnum == 0:
-                    for fiber in out_calib.columns:
-                        colvals = out_calib[fiber]
-                        out_evolution[fiber] = 0.*colvals
-                else:
-                    for fiber in out_calib.columns:
-                        colvals = out_calib[fiber]
-                        out_evolution[fiber] = colvals-defaults[fiber]
-                self.evolution_in_coarse_coefs[pairnum] = out_evolution
 
-                self.filemanager.save_basic_calib_dict(out_calib, self.lampstr_c, self.camera, self.config, filenum=cc_filnum)
-                defaults = out_calib.copy()
-                default_fit = 'default'
+    def run_initial_calibrations(self):
+        for pairnum,(cc_filnum, throwaway) in self.pairings.items():
+            comp_data = Table(self.coarse_calibrations[cc_filnum].data)
+            fibernames = np.sort(comp_data.colnames)
+            fib1s = fibernames[:int(len(fibernames) / 2) + 1]
+            fib2s = fibernames[int(len(fibernames) / 2) - 1:][::-1]
+            histories = self.history_calibration_coefs[pairnum]
+            if histories is not None:
+                hist1 = histories[fib1s.tolist()]
+                hist2 = histories[fib2s.tolist()]
+            else:
+                hist1,hist2 = None, None
+            coarse_comp_data_hist = None
+            # coarse_comp_data_hist = Table.read("out_coefs_{}.fits".format(filenum_hist),format='fits')
+            obs1 = {'coarse_comp': comp_data[fib1s.tolist()], 'complinelistdict': self.linelistc,
+                'print_itters': False,'last_obs': hist1}
+            obs2 = {'coarse_comp': comp_data[fib2s.tolist()], 'complinelistdict': self.linelistc,
+                'print_itters': False,'last_obs':hist2}
+
+            all_obs = [obs1, obs2]
+            if len(all_obs) < 4:
+                NPROC = len(all_obs)
+            else:
+                NPROC = 4
+
+            with Pool(NPROC) as pool:
+                tabs = pool.map(automated_calib_wrapper_script, all_obs)
+                print(tabs)
+
+            compare_outputs(comp_data, tabs[0], tabs[1])
+
+            tabs[1] = tabs[1][fib2s[::-1].tolist()]
+            tabs[0].remove_column(fibernames[int(len(fibernames) / 2)])
+            tabs[1].remove_column(fibernames[int(len(fibernames) / 2) - 1])
+
+            out_calib = hstack([tabs[0], tabs[1]])
+
+            self.coarse_calibration_coefs[pairnum] = out_calib.copy()
+
+            self.filemanager.save_basic_calib_dict(out_calib, self.lampstr_c, self.camera, self.config, filenum=cc_filnum)
 
 
     def run_final_calibrations(self):
@@ -232,7 +227,6 @@ class Calibrations:
             out_calib, out_linelist, lambdas, pixels, variances  = self.wavelength_fitting_by_line_selection(data, linelist, self.all_lines, initial_coef_table,select_lines=select_lines)#bounds=None)
             if select_lines:
                 self.selected_lines = out_linelist
-                select_lines = False
 
             self.fine_calibration_coefs[pairnum] = out_calib
 
@@ -269,7 +263,6 @@ class Calibrations:
             hdulist = fits.HDUList([prim,calibs,lambs,pix,varis])
             self.final_calibrated_hdulists[pairnum] = hdulist
             self.filemanager.save_full_calib_dict(hdulist, self.lampstr_f, self.camera, self.config, filenum=filenum)
-
 
     def create_calibration_default(self,save=True):
         npairs = len(self.pairnums)

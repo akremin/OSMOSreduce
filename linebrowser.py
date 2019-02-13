@@ -24,7 +24,7 @@ def fifth_order_poly(p_x, zeroth, first, second, third, fourth, fifth):
                    (fourth * np.power(p_x,4)) + (fifth * np.power(p_x,5))
 
 class LineBrowser:
-    def __init__(self, wm, fm, f_x, coefs, all_wms, bounds=None):
+    def __init__(self, wm, fm, f_x, coefs, all_wms, bounds=None,edge_line_distance=0.):
         self.bounds = bounds
         self.coefs = np.asarray(coefs,dtype=np.float64)
 
@@ -32,9 +32,10 @@ class LineBrowser:
         self.p_x = p_x
         xspectra = fifth_order_poly(p_x,*coefs)
 
-        good_waves = ((wm>(xspectra[0]-4))&(wm<(xspectra[-1]+4)))
+        deviation = edge_line_distance
+        good_waves = ((wm>(xspectra[0]-deviation))&(wm<(xspectra[-1]+deviation)))
         wm,fm = wm[good_waves],fm[good_waves]
-        good_waves = ((all_wms>(xspectra[0]-4))&(all_wms<(xspectra[-1]+4)))
+        good_waves = ((all_wms>(xspectra[0]-deviation))&(all_wms<(xspectra[-1]+deviation)))
         all_wms = all_wms[good_waves]
         del good_waves
 
@@ -62,35 +63,15 @@ class LineBrowser:
             line_matches['peaks_h'].append(fypeak[np.argsort(np.abs(wm[j] - fxpeak))][0])  # closest peak (height)
 
         yspectra = fyreal
-        fig, ax = plt.subplots(1)
-        # maximize window
-        figManager = plt.get_current_fig_manager()
-        figManager.window.showMaximized()
-        plt.subplots_adjust(right=0.8, left=0.05, bottom=0.20)
-
-        for w in all_wms:
-            ax.axvline(w, color='gray', alpha=0.2)
-
-        vlines = []
-        for w in wm:
-            vlines.append(ax.axvline(w, color='r', alpha=0.5))
-
-        fline, = plt.plot(xspectra, yspectra, 'b', picker=5)
-        line, = ax.plot(wm, np.zeros(wm.size), 'ro')
-        est_f, = ax.plot(wm, fm / 2.0, 'ro', picker=5)  # 5 points tolerance
 
         self.lastind = 0
 
         self.j = 0
-        self.est_f = est_f
         self.px = p_x
-        self.fig = fig
-        self.ax = ax
         self.all_wms = all_wms
         self.wm = wm
         self.fm = fm
-        self.vlines = vlines
-        self.fline = fline
+
         self.xspectra = xspectra
         self.yspectra = yspectra
         self.peaks = peaks
@@ -102,6 +83,32 @@ class LineBrowser:
 
 
         self.last = {'j':[],'lines':[],'peaks_h':[],'peaks_w':[],'peaks_p':[],'vlines':[],'wm':[],'fm':[]}
+        self.initiate_browser()
+
+    def initiate_browser(self):
+        fig, ax = plt.subplots(1)
+
+        # maximize window
+        figManager = plt.get_current_fig_manager()
+        figManager.window.showMaximized()
+        plt.subplots_adjust(right=0.8, left=0.05, bottom=0.20)
+
+        for w in self.all_wms:
+            ax.axvline(w, color='gray', alpha=0.2)
+
+        vlines = []
+        for w in self.wm:
+            vlines.append(ax.axvline(w, color='r', alpha=0.5))
+
+        fline, = plt.plot(self.xspectra, self.yspectra, 'b', picker=5)
+        line, = ax.plot(self.wm, np.zeros(self.wm.size), 'ro')
+        est_f, = ax.plot(self.wm, self.fm / 2.0, 'ro', picker=5)  # 5 points tolerance
+
+        self.fig = fig
+        self.ax = ax
+        self.est_f = est_f
+        self.vlines = vlines
+        self.fline = fline
         # self.text = ax.text(0.05, 0.95, 'Pick red reference line',transform=ax.transAxes, va='top')
         # self.selected,  = ax.plot([xs[0]], [ys[0]], 'o', ms=12, alpha=0.4,color='yellow', visible=False)
         self.selected = self.ax.axvline(self.line_matches['lines'][self.j], lw=3, alpha=0.5, color='red', ymin=0.5)
@@ -268,22 +275,7 @@ class LineBrowser:
 
     def fit(self):
         # fit 5th order polynomial to peak/line selections
-        pnaught = self.coefs
-        pixels = np.sort(self.line_matches['peaks_p']).astype(np.float64)
-        waves = np.sort(self.line_matches['lines']).astype(np.float64)
-
-        try:
-            if self.bounds is None:
-                params, pcov = curve_fit(fifth_order_poly, pixels, waves, p0=pnaught)
-            else:
-                params, pcov = curve_fit(fifth_order_poly, pixels, waves, \
-                                         p0=pnaught, bounds = self.bounds)
-        except TypeError:
-            print("Type error, fit failed, saving default")
-            params =  self.coefs
-            pcov = np.ones(shape=(5,5))*1.0e6
-
-        return params,pcov
+        return least_squares_fit(self.coefs,self.line_matches['peaks_p'],self.line_matches['lines'],self.bounds)
 
     def create_saveplot(self, coefs, cov, savename):
         from quickreduce_funcs import format_plot
@@ -324,8 +316,32 @@ class LineBrowser:
         format_plot(axfitpts, title="Fit versus Data", xlabel='Pixels', ylabel='Wavelength', labelsize=16)
         plt.legend(loc='best')
 
-        axcovar.matshow(np.log(cov))
-        axcovar.set_xticklabels(['a', 'b', 'c', 'd', 'e', 'f'])
-        axcovar.set_yticklabels(['a', 'b', 'c', 'd', 'e', 'f'])
+        normd_cov = cov.copy()
+        for i,co in enumerate(coefs):
+            for j,co2 in enumerate(coefs):
+                normd_cov[i,j] /= (co*co2)
+        axcovar.matshow(normd_cov)
+        axcovar.set_xticklabels(['','a', 'b', 'c', 'd', 'e', 'f'])
+        axcovar.set_yticklabels(['','a', 'b', 'c', 'd', 'e', 'f'])
+
         format_plot(axcovar, title='Covariance of Fit', xlabel='Param_j Unc', ylabel='Param_i Unc', labelsize=16)
         plt.savefig('{}.png'.format(savename), dpi=600)
+        plt.close()
+
+
+def least_squares_fit(coefs,pixels,wavelengths,bounds):
+    # fit 5th order polynomial to peak/line selections
+    pixels = np.sort(pixels).astype(np.float64)
+    waves = np.sort(wavelengths).astype(np.float64)
+    try:
+        if bounds is None:
+            params, pcov = curve_fit(fifth_order_poly, pixels, waves, p0=coefs, method='lm')
+        else:
+            params, pcov = curve_fit(fifth_order_poly, pixels, waves, \
+                                     p0=coefs, bounds = bounds)
+    except TypeError:
+        print("Type error, fit failed, saving default")
+        params =  coefs
+        pcov = np.ones(shape=(5,5))*1.0e6
+
+    return params,pcov

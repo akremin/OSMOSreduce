@@ -30,113 +30,233 @@ print(deltat)
 
 
 
-# if do_step['wavecalib']:
-#     load_fromfile_if_possible = False
-#     timestamp = np.datetime64('now', 'm').astype(int) - np.datetime64('2018-06-01T00:00', 'm').astype(int)
-#
-#     from wavelength_calibration_funcs import calibrate_pixels2wavelengths
-#     from calibrations import wavelength_fitting, interactive_wavelength_fitting
-#
-#     from calibrations import save_calib_dict ,locate_calib_dict
-#
-#     # bounds = None
-#     bounds = ([-1e5 ,0.96 ,-1e-4 ,-1e-6 ,-1e-8 ,-1e-8] ,[1e5 ,1.2 ,1e-4 ,1e-6 ,1e-8 ,1e-8])
-#     complinelistdict = load_calibration(cal_lamp, wavemincut=4500, wavemaxcut=6600)
-#     tharlinelistdict = load_calibration(thar_lamp, wavemincut=4500, wavemaxcut=6600)
-#
-#     calib_coefs = {}
-#     calib_coefs['comp'] = {key :{} for key in dict_of_hdus['comp'][setup_info['cameras'][0]].keys()}
-#     calib_coefs['thar'] = {key :{} for key in dict_of_hdus['thar'][setup_info['cameras'][0]].keys()}
-#     calib_coefs['interactive'] = {key :{} for key in setup_info['cameras']}
-#
-#     for camera in setup_info['cameras']:
-#         comp_filenums = list(dict_of_hdus['comp'][camera].keys())
-#         thar_filenums = list(dict_of_hdus['thar'][camera].keys())
-#
-#         ## Interactive
-#         fil = comp_filenums[0]
-#         if load_fromfile_if_possible:
-#             coef_table = locate_calib_dict('./', 'interactive' ,camera ,config ,fil)
-#             if coef_table is None:
-#                 load_fromfile_if_possible = False
-#             else:
-#                 calib_coef_table = coef_table
-#
-#         coarse_comp = (dict_of_hdus['comp'][camera][fil]).data
-#
-#         if not load_fromfile_if_possible:
-#             calib_coef_table = interactive_wavelength_fitting(coarse_comp ,complinelistdict, \
-#                                                               default = (4522.6 ,1.0007 ,-1.6e-6), \
-#                                                               trust_initial = True)
-#             calib_coefs['interactive'][camera] = calib_coef_table
-#             save_calib_dict(calib_coef_table ,'interactive' ,camera ,config ,fil ,timestamp)
-#
-#         calib_coefs['interactive'][camera] = calib_coef_table
-#
-#         ## First pointed fit
-#         if load_fromfile_if_possible:
-#             coef_table = locate_calib_dict('./', 'compfit' ,camera ,config ,comp_filenums[0])
-#             if coef_table is None:
-#                 load_fromfile_if_possible = False
-#             else:
-#                 calib_coef_table = coef_table
-#
-#         if not load_fromfile_if_possible:
-#             calib_coef_table, covs, selected_complinelists = wavelength_fitting(coarse_comp, complinelistdict, \
-#                                                                                 calib_coef_table ,select_lines = True, bounds=bounds)
-#             save_calib_dict(calib_coef_table, 'compfit', camera, config, comp_filenums[0], timestamp)
-#
-#         calib_coefs['comp'][comp_filenums[0]][camera] = calib_coef_table
-#
-#         ## Loop through pointed fits
-#         # for filenum in comp_filenums[1:]:
-#         #     if load_fromfile_if_possible:
-#         #         coef_table = locate_calib_dict('./', 'compfit', camera, config, filenum)
-#         #         if coef_table is None:
-#         #             load_fromfile_if_possible = False
-#         #         else:
-#         #             calib_coef_table = coef_table
-#         #
-#         #     if not load_fromfile_if_possible:
-#         #         comp = dict_of_hdus['comp'][camera][filenum].data
-#         #         calib_coef_table, covs = wavelength_fitting(comp, selected_complinelists, calib_coef_table)
-#         #         save_calib_dict(calib_coef_table, 'compfit', camera, config, filenum, timestamp)
-#         #
-#         #     calib_coefs['comp'][filenum][camera] = calib_coef_table
-#
-#         if load_fromfile_if_possible:
-#             coef_table = locate_calib_dict('./', 'tharfit', camera, config, thar_filenums[0])
-#             if coef_table is None:
-#                 load_fromfile_if_possible = False
-#             else:
-#                 calib_coef_table = coef_table
-#
-#         if not load_fromfile_if_possible:
-#             first_thar = (dict_of_hdus['thar'][camera][thar_filenums[0]]).data
-#             calib_coef_table, covs, selected_tharlinelists = wavelength_fitting(first_thar, tharlinelistdict, \
-#                                                                                 calib_coef_table ,select_lines = True)
-#             save_calib_dict(calib_coef_table, 'tharfit', thar_filenums[0], camera, config, timestamp)
-#
-#         calib_coefs['thar'][thar_filenums[0]][camera] = calib_coef_table
-#
-#         for filenum in thar_filenums[1:]:
-#             if load_fromfile_if_possible:
-#                 coef_table = locate_calib_dict('./', 'tharfit', camera, config, filenum)
-#                 if coef_table is None:
-#                     load_fromfile_if_possible = False
-#                 else:
-#                     calib_coef_table = coef_table
-#
-#             if not load_fromfile_if_possible:
-#                 thar = dict_of_hdus['thar'][camera][filenum].data
-#                 calib_coef_table, covs = wavelength_fitting(thar ,selected_tharlinelists, calib_coef_table)
-#                 save_calib_dict(calib_coef_table, 'tharfit', camera, config, filenum, timestamp)
-#
-#             calib_coefs['thar'][filenum][camera] = calib_coef_table
-#
-#     with open('calib_coefs.pkl' ,'wb') as pklout:
-#         pkl.dump(calib_coefs ,pklout)
 
+def run_automated_calibration(coarse_comp, complinelistdict, last_obs=None, print_itters = True):
+    precision = 1e-3
+    convergence_criteria = 1.0e-5 # change in correlation value from itteration to itteration
+    waves, fluxes = generate_synthetic_spectra(complinelistdict, compnames=['HgAr', 'NeAr'],precision=precision,maxheight=10000.)
+
+    ## Make sure the information is in astropy table format
+    coarse_comp = Table(coarse_comp)
+    ## Define loop params
+    counter = 0
+
+    ## Initiate arrays/dicts for later appending inside loop (for keeping in scope)
+    all_coefs = {}
+    all_flags = {}
+
+    ## Loop over fiber names (strings e.g. 'r101')
+    ##hack!
+    fibernames = coarse_comp.colnames
+    for fiber_identifier in fibernames:#['r101','r408','r409','r608','r816']:
+        counter += 1
+        #print("\n\n", fiber_identifier)
+
+        ## Get the spectra (column with fiber name as column name)
+        comp_spec = np.asarray(coarse_comp[fiber_identifier])
+
+        ## create pixel array for mapping to wavelength
+        pixels = np.arange(len(comp_spec))
+
+        pix1 = pixels
+        pix2 = pixels*pixels
+        subset = np.arange(0, len(pixels), 2).astype(int)
+        subset_comp = comp_spec[subset]
+        subpix1 = pix1[subset]
+
+        abest, bbest, cbest, corrbest = 0., 0., 0., 0.
+        alow, ahigh = 3000, 8000
+
+        if last_obs is None or fiber_identifier not in last_obs.keys():
+            if counter == 1:
+                avals = (alow, ahigh+1, 1)
+                bvals = (0.96,1.04,0.01)
+                cvals = (0., 1., 1.)
+                if print_itters:
+                    print("\nItter 1 results, (fixing c to 0.):")
+                abest, bbest, cbest, corrbest = fit_using_crosscorr(pixels=subpix1, raw_spec=subset_comp,
+                                                                      comp_highres_fluxes=fluxes, \
+                                                                      avals=avals, bvals=bvals, cvals=cvals, \
+                                                                      calib_wave_start=waves[0],
+                                                                      flux_wave_precision=precision,\
+                                                                      print_itters=print_itters)
+            else:
+                last_fiber = fibernames[counter-2]
+                [trasha, bbest, cbest, trash1, trash2, trash3] = all_coefs[last_fiber]
+                astep,bstep,cstep = 1,1,1
+                avals = (alow,   ahigh+astep,  astep)
+                bvals = (bbest , bbest+bstep , bstep)
+                cvals = (cbest , cbest+cstep , cstep)
+                if print_itters:
+                    print("\nItter 1 results, (fixing b and c to past vals):")
+                abest, trashb, trashc, corrbest = fit_using_crosscorr(pixels=subpix1, raw_spec=subset_comp,
+                                                                    comp_highres_fluxes=fluxes, \
+                                                                    avals=avals, bvals=bvals, cvals=cvals, \
+                                                                    calib_wave_start=waves[0],
+                                                                    flux_wave_precision=precision,\
+                                                                      print_itters=print_itters)
+        else:
+            [abest, bbest, cbest, trash1, trash2, trash3] = last_obs[fiber_identifier]
+            if print_itters:
+                print("\nItter 1 results:")
+                print("--> Using previous obs value of:   a={:.2f}, b={:.5f}, c={:.2e}".format(abest, bbest, cbest))
+
+        if print_itters:
+            print("\nItter 2 results:")
+        astep,bstep,cstep = 1, 1.0e-3, 4.0e-7
+        awidth, bwidth, cwidth = 20, 0.02, 4.0e-6
+        avals = ( abest-awidth, abest+awidth+astep, astep )
+        bvals = ( bbest-bwidth, bbest+bwidth+bstep, bstep )
+        cvals = ( cbest-cwidth, cbest+cwidth+cstep, cstep )
+        abest, bbest, cbest, corrbest = fit_using_crosscorr(pixels=subpix1, raw_spec=subset_comp, comp_highres_fluxes=fluxes, \
+                                                            avals=avals, bvals=bvals, cvals=cvals, \
+                                                            calib_wave_start=waves[0], flux_wave_precision=precision,\
+                                                                      print_itters=print_itters)
+
+        itter = 0
+        dcorr = 1.
+        while dcorr > convergence_criteria:
+            itter += 1
+            if print_itters:
+                print("\nItter {:d} results:".format(itter+2))
+            last_corrbest = corrbest
+            incremental_res_div = 2.
+            astep, bstep, cstep = astep/incremental_res_div, bstep/incremental_res_div, cstep/incremental_res_div
+            awidth,bwidth,cwidth = awidth/incremental_res_div,bwidth/incremental_res_div,cwidth/incremental_res_div
+            avals = ( abest-awidth, abest+awidth+astep, astep )
+            bvals = ( bbest-bwidth, bbest+bwidth+bstep, bstep )
+            cvals = ( cbest-cwidth, cbest+cwidth+cstep, cstep )
+            abest_itt, bbest_itt, cbest_itt, corrbest = fit_using_crosscorr(pixels=pixels, raw_spec=comp_spec, comp_highres_fluxes=fluxes, \
+                                                                avals=avals, bvals=bvals, cvals=cvals, \
+                                                                calib_wave_start=waves[0], flux_wave_precision=precision,\
+                                                                      print_itters=print_itters)
+            if corrbest > last_corrbest:
+                abest,bbest,cbest = abest_itt, bbest_itt, cbest_itt
+
+            dcorr = np.abs(corrbest-last_corrbest)
+
+        print("\n\n", fiber_identifier)
+        print("--> Results:   a={:.2f}, b={:.5f}, c={:.2e}".format(abest, bbest, cbest))
+
+        all_coefs[fiber_identifier] = [abest, bbest, cbest, 0., 0., 0.]
+        all_flags[fiber_identifier] = corrbest
+
+    return Table(all_coefs)
+
+
+def fit_using_crosscorr(pixels, raw_spec, comp_highres_fluxes, avals, bvals, cvals, calib_wave_start, flux_wave_precision,print_itters):
+    alow, ahigh, astep = avals
+    blow, bhigh, bstep = bvals
+    clow, chigh, cstep = cvals
+
+    pix1 = pixels
+    pix2 = pixels*pixels
+    prec_multiplier = int(1/flux_wave_precision)
+    if print_itters:
+        print("--> Looking for best fit within:   a=({:.2f}, {:.2f})  b=({:.5f}, {:.5f})  c=({:.2e}, {:.2e})  with steps=({:.2f}, {:.1e}, {:.1e})".format(alow, ahigh-astep,\
+                                                                                                      blow, bhigh-bstep,\
+                                                                                                      clow, chigh-cstep,\
+                                                                                                      astep, bstep,cstep))
+
+    aitterbest, bitterbest, citterbest,corrbest = 0., 0., 0.,0.
+    for b in np.arange(blow,bhigh,bstep):
+        pixb = b * pix1
+        for c in np.arange(clow,chigh,cstep):
+            pixbc = pixb + (c * pix2)
+            pixinds = (pixbc * prec_multiplier).astype(int)
+            for a in np.arange(alow,ahigh,astep):
+                indoffset = int((a - calib_wave_start) * prec_multiplier)
+                synthwaveinds = pixinds + indoffset
+                cut_comp_spec = raw_spec
+                if synthwaveinds[-40] < 0. or synthwaveinds[40] >= len(comp_highres_fluxes):
+                    continue
+                elif synthwaveinds[0] < 0. or synthwaveinds[-1] >= len(comp_highres_fluxes):
+                    waverestrict_cut = np.argwhere(((synthwaveinds >= 0) & (synthwaveinds < len(comp_highres_fluxes))))[0]
+                    synthwaveinds = synthwaveinds[waverestrict_cut]
+                    cut_comp_spec = raw_spec[waverestrict_cut]
+                synthflux = comp_highres_fluxes[synthwaveinds]
+                #corr, pval = pearsonr(synthflux, cut_comp_spec)
+                corrs = np.correlate(synthflux, cut_comp_spec)
+                corr = np.sqrt(np.dot(corrs,corrs))
+                if corr > corrbest:
+                    aitterbest, bitterbest, citterbest, corrbest = a, b, c, corr
+
+    if print_itters:
+        if (aitterbest == alow) or (aitterbest == (ahigh-astep)):
+            if ahigh != alow+astep:
+                print("!--> Warning: best fit return a boundary of the search region: alow={:.2f}, ahigh={:.2f}, abest={:.2f}".format(alow,ahigh,aitterbest))
+        if (bitterbest == blow) or (bitterbest == (bhigh-bstep)):
+            if bhigh != blow+bstep:
+                print("!--> Warning: best fit return a boundary of the search region: blow={:.5f}, bhigh={:.5f}, bbest={:.5f}".format(blow,bhigh,bitterbest))
+        if (citterbest == clow) or (citterbest == (chigh-cstep)):
+            if chigh != clow+cstep:
+              print("!--> Warning: best fit return a boundary of the search region: clow={:.2e}, chigh={:.2e}, cbest={:.2e}".format(clow,chigh,citterbest))
+
+        print("--> --> Best fit correlation value: {}    with fits a={:.2f}, b={:.5f}, c={:.2e}".format(corrbest,aitterbest, bitterbest, citterbest))
+
+    return aitterbest, bitterbest, citterbest, corrbest
+
+def gaussian(x0,height,xs):
+    width = 0.01+np.log(height)/np.log(500.)
+    twosig2 = 2.*width*width
+    dx = xs-x0
+    fluxes = height*np.exp(-(dx*dx)/twosig2)
+    return fluxes
+
+def generate_synthetic_spectra(compdict,compnames=[],precision=1.e-4,maxheight=1000.):
+    import matplotlib.pyplot as plt
+    heights,waves = [],[]
+
+    for compname in compnames:
+        itterwaves,itterheights = compdict[compname]
+        normalized_height = np.asarray(itterheights).astype(np.float64)/np.max(itterheights)
+        waves.extend(np.asarray(itterwaves.astype(np.float64)).tolist())
+        heights.extend(normalized_height.tolist())
+
+    wave_order = np.argsort(waves)
+    heights = np.asarray(heights)[wave_order]
+    waves = np.asarray(waves)[wave_order]
+
+    wavelengths = np.arange(np.floor(waves.min()),np.ceil(waves.max()),precision).astype(np.float64)
+    fluxes = np.zeros(len(wavelengths)).astype(np.float64)
+
+    for center,height in zip(waves,heights):
+        modheight = maxheight*height
+        itterflux = gaussian(center,modheight,wavelengths)
+        fluxes = fluxes + itterflux
+
+    #plt.figure(); plt.plot(wavelengths,fluxes,'r-'); plt.plot(waves,maxheight*heights,'b.'); plt.show()
+    return wavelengths,fluxes
+
+
+
+
+
+
+
+
+def compare_outputs(raw_data,table1,table2):
+    def waves(pixels, a, b, c):
+        return a + (b * pixels) + (c * pixels * pixels)
+    fib1s = set(table1.colnames)
+    fib2s = set(table2.colnames)
+    matches = fib1s.intersection(fib2s)
+
+    for match in matches:
+        pixels = np.arange(len(raw_data[match])).astype(np.float64)
+        a1,b1,c1,d1,e1,f1 = table1[match]
+        a2, b2, c2, d2, e2, f2 = table2[match]
+        waves1 = waves(pixels, a1, b1, c1)
+        waves2 = waves(pixels, a2, b2, c2)
+        dwaves = waves1-waves2
+        print("\n"+match)
+        print("--> Max deviation: {}  mean: {}  median: {}".format(dwaves[np.argmax(np.abs(dwaves))], np.mean(np.abs(dwaves)), np.median(np.abs(dwaves))))
+        plt.figure()
+        plt.plot(pixels, dwaves, 'r-')
+        plt.show()
+
+def automated_calib_wrapper_script(input_dict):
+    return run_automated_calibration(**input_dict)
 
 
 def aperature_number_pixoffset(fibnum,camera='r'):
@@ -366,19 +486,11 @@ def run_interactive_slider_calibration(coarse_comp, complinelistdict, default_va
 
 
 
-def wavelength_fitting_by_line_selection(self,comp, selectedlistdict, fulllinelist, coef_table, select_lines = False, bounds=None):
+def wavelength_fitting_by_line_selection(self, comp, selectedlistdict, fulllinelist, coef_table, select_lines = False, bounds=None):
     if select_lines:
         wm, fm = [], []
         for key,(keys_wm,keys_fm) in selectedlistdict.items():
             if key in['ThAr','Th']:
-                # wm_thar,fm_thar = np.asarray(keys_wm), np.asarray(keys_fm)
-                # sorted = np.argsort(fm_thar)
-                # wm_thar_fsort,fm_thar_fsort = wm_thar[sorted], fm_thar[sorted]
-                # cutoff = len(wm_thar_fsort)//2
-                # wm_thar_fsortcut = wm_thar_fsort[cutoff:]
-                # fm_thar_fsortcut = fm_thar_fsort[cutoff:]
-                # wm.extend(wm_thar_fsortcut.tolist())
-                # fm.extend(fm_thar_fsortcut.tolist())
                 wm.extend(keys_wm)
                 fm.extend(keys_fm)
             else:
@@ -398,17 +510,72 @@ def wavelength_fitting_by_line_selection(self,comp, selectedlistdict, fulllineli
     variances = {}
     app_fit_pix = {}
     app_fit_lambs = {}
-    for fiber in comp.colnames: #['r101','r401','r801']:
+
+    def iterate_fib(fib):
+        tetn = int(fib[1])
+        fibn = int(fib[2:])
+        if tetn == 8 and fibn >= 8:
+            fibn -= 1
+        elif tetn == 4 and fibn >= 8:
+            fibn -= 1
+        else:
+            fibn += 1
+            if fibn > 16:
+                tetn += 1
+                fibn = 1
+        outfib = '{}{}{:02d}'.format(cam, tetn, fibn)
+        return outfib
+
+    def ensure_match(fib, allfibs, subset, cam):
+        print(fib)
+        outfib = fib
+        if outfib not in allfibs:
+            outfib = iterate_fib(outfib)
+            outfib = ensure_match(outfib, allfibs, subset, cam)
+        if outfib in subset:
+            outfib = iterate_fib(outfib)
+            outfib = ensure_match(outfib, allfibs, subset, cam)
+        return outfib
+
+    cam = comp.colnames[0][0]
+    specific_set = [cam+'101',cam+'816',cam+'416',cam+'501']
+    hand_fit_subset = []
+    for i,fib in enumerate(specific_set):
+        outfib = ensure_match(fib,comp.colnames,hand_fit_subset,cam)
+        hand_fit_subset.append(outfib)
+    seed = 10294
+    np.random.seed(seed)
+    randfibs = ['{:02d}'.format(x) for x in np.random.randint(1, 16, 4)]
+    for tetn,fibn in zip([2,3,6,7],randfibs):
+        fib = '{}{}{}'.format(cam,tetn,fibn)
+        outfib = ensure_match(fib, comp.colnames, hand_fit_subset, cam)
+        hand_fit_subset.append(outfib)
+
+    #hand_fit_subset = [cam+'101',cam+'416',cam+'816']
+    hand_fit_subset = np.asarray(hand_fit_subset)
+    extrema_fiber = False
+    for fiber in hand_fit_subset:#''r401','r801']:hand_fit_subset
+        if fiber[1:] in ['101','816','501','416']:
+            extrema_fiber = True
+        else:
+            extrema_fiber = False
         counter += 1
         f_x = comp[fiber].data
         coefs = coef_table[fiber]
-        iteration_wm,iteration_fm = [],[]
-        if select_lines:
-            iteration_wm,iteration_fm = wm.copy(),fm.copy()
-        else:
-            iteration_wm,iteration_fm = selectedlistdict[fiber]
+        iteration_wm, iteration_fm = wm.copy(), fm.copy()
 
-        browser = LineBrowser(iteration_wm,iteration_fm, f_x, coefs, fulllinelist, bounds=bounds)
+        if len(all_coefs.keys())>0:
+            coef_devs = np.zeros(len(coefs)).astype(np.float64)
+            for key,key_coefs in all_coefs.items():
+                dev = np.asarray(key_coefs)-np.asarray(coef_table[key])
+                coef_devs += dev
+            coef_devs /= len(all_coefs.keys())
+
+            updated_coefs = coefs+coef_devs
+        else:
+            updated_coefs = coefs
+
+        browser = LineBrowser(iteration_wm,iteration_fm, f_x, updated_coefs, fulllinelist, bounds=bounds,edge_line_distance=10.0)
         if np.any((np.asarray(browser.line_matches['lines'])-np.asarray(browser.line_matches['peaks_w']))>0.5):
             browser.plot()
         params,covs = browser.fit()
@@ -416,7 +583,7 @@ def wavelength_fitting_by_line_selection(self,comp, selectedlistdict, fulllineli
         print(fiber,*params)
         all_coefs[fiber] = params
         variances[fiber] = covs.diagonal()
-        print(np.dot(variances[fiber],variances[fiber]))
+        print(np.sum(variances[fiber]))
 
         #savename = '{}'.format(fiber)
         #browser.create_saveplot(params,covs, savename)
@@ -430,10 +597,12 @@ def wavelength_fitting_by_line_selection(self,comp, selectedlistdict, fulllineli
             wm_sorter = np.argsort(init_deleted_wm)
             deleted_wm_srt, deleted_fm_srt = init_deleted_wm[wm_sorter], init_deleted_fm[wm_sorter]
             del init_deleted_fm, init_deleted_wm, wm_sorter
-            mask_wm_nearedge = ((deleted_wm_srt>(browser.xspectra[0]+10)) & (deleted_wm_srt<(browser.xspectra[-1]-10)))
-            deleted_wm = deleted_wm_srt[mask_wm_nearedge]
-            deleted_fm = deleted_fm_srt[mask_wm_nearedge]
-            del deleted_fm_srt, deleted_wm_srt, mask_wm_nearedge
+            if extrema_fiber:
+                deleted_wm,deleted_fm = deleted_wm_srt, deleted_fm_srt
+            else:
+                mask_wm_nearedge = ((deleted_wm_srt>(browser.xspectra[0]+10.0)) & (deleted_wm_srt<(browser.xspectra[-1]-10.0)))
+                deleted_wm = deleted_wm_srt[mask_wm_nearedge]
+                deleted_fm = deleted_fm_srt[mask_wm_nearedge]
             bool_mask = np.ones(shape=len(wm),dtype=bool)
             for w,f in zip(deleted_wm,deleted_fm):
                 loc = wm.searchsorted(w)
@@ -444,18 +613,6 @@ def wavelength_fitting_by_line_selection(self,comp, selectedlistdict, fulllineli
         #wave, Flux, fifth, fourth, cube, quad, stretch, shift = wavecalibrate(p_x, f_x, 1679.1503, 0.7122818, 2778.431)
         plt.close()
         del browser
-        if counter == 66:
-            counter = 0
-            if select_lines:
-                with open('_temp_fine_wavecalib.pkl','wb') as temp_pkl:
-                    pkl.dump([all_coefs,variances,app_specific_linelists],temp_pkl)
-            else:
-                with open('_temp_fine_wavecalib.pkl', 'wb') as temp_pkl:
-                    pkl.dump([all_coefs, variances], temp_pkl)
-            print("Saving an incremental backup to _temp_fine_wavecalib.pkl")
-            cont = str(input("\n\n\tDo you want to continue? (y or n)\t\t"))
-            if cont.lower() == 'n':
-                break
 
     cont = input("\n\n\tDo you need to repeat any? (y or n)")
     if cont.lower() == 'y':
@@ -473,7 +630,7 @@ def wavelength_fitting_by_line_selection(self,comp, selectedlistdict, fulllineli
             else:
                 iteration_wm, iteration_fm = selectedlistdict[fiber]
 
-            browser = LineBrowser(iteration_wm, iteration_fm, f_x, coefs, fulllinelist, bounds=bounds)
+            browser = LineBrowser(iteration_wm, iteration_fm, f_x, coefs, fulllinelist, bounds=bounds,edge_line_distance=-20.0)
             browser.plot()
             params, covs = browser.fit()
 
@@ -490,6 +647,52 @@ def wavelength_fitting_by_line_selection(self,comp, selectedlistdict, fulllineli
             del browser
             fiber = input("\n\tName the fiber")
 
+
+    numeric_hand_fit_names = np.asarray([ 16*int(fiber[1])+int(fiber[2:]) for fiber in hand_fit_subset])
+
+    last_fiber = cam+'101'
+
+    all_fibers = np.sort(list(comp.colnames))
+    for fiber in all_fibers:
+        if fiber in hand_fit_subset:
+            continue
+        if fiber not in coef_table.colnames:
+            continue
+        coefs = np.asarray(coef_table[fiber])
+        f_x = comp[fiber].data
+
+        fibern = 16*int(fiber[1])+int(fiber[2:])
+
+        nearest_fibs = hand_fit_subset[np.argsort(np.abs(fibern-numeric_hand_fit_names))[:2]]
+        diffs_fib1 = np.asarray(all_coefs[nearest_fibs[0]]) - np.asarray(coef_table[nearest_fibs[0]])
+        diffs_fib2 = np.asarray(all_coefs[nearest_fibs[1]]) - np.asarray(coef_table[nearest_fibs[1]])
+
+        nearest_fib = np.asarray(all_coefs[last_fiber]) - np.asarray(coef_table[last_fiber])
+
+        diffs_mean = (0.25*diffs_fib1)+(0.25*diffs_fib2)+(0.5*nearest_fib)
+
+        adjusted_coefs_guess = coefs+diffs_mean
+        browser = LineBrowser(wm,fm, f_x, adjusted_coefs_guess, fulllinelist, bounds=None, edge_line_distance=-20.0)
+
+        params,covs = browser.fit()
+
+        plt.close()
+        browser.create_saveplot(params, covs, 'fiberfits/{}'.format(fiber))
+        print('\n\n',fiber,*params)
+        all_coefs[fiber] = params
+        variances[fiber] = covs.diagonal()
+        normd_vars = variances[fiber]/(params*params)
+        print(np.sqrt(np.sum(normd_vars)))
+        print(np.sqrt(normd_vars))
+
+        #savename = '{}'.format(fiber)
+        #browser.create_saveplot(params,covs, savename)
+
+        app_fit_pix[fiber] = browser.line_matches['peaks_p']
+        app_fit_lambs[fiber] = browser.line_matches['lines']
+        del browser
+        last_fiber = fiber
+
     if not select_lines:
         app_specific_linelists = None
-    return Table(all_coefs), app_specific_linelists, app_fit_lambs, app_fit_pix, variances
+    return all_coefs, app_specific_linelists, app_fit_lambs, app_fit_pix, variances

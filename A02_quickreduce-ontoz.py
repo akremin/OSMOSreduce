@@ -23,6 +23,8 @@ import matplotlib
 matplotlib.use('Qt5Agg')
 
 import os
+import sys
+import getopt
 import numpy as np
 import pickle as pkl
 
@@ -31,6 +33,7 @@ from astropy.table import Table
 import matplotlib.pyplot as plt
 from collections import OrderedDict
 from scipy.ndimage.filters import median_filter
+from quickreduce_funcs import digest_filenumbers
 
 from FieldData import FieldData
 from inputoutput import FileManager
@@ -39,13 +42,30 @@ from instrument import InstrumentState
 import configparser
 
 def pipeline(maskname=None,obs_config_name=None,io_config_name=None, pipe_config_name='pipeline_config.ini'):
+    """
+    Call the pipeline
+
+    inputs: maskname=None
+            obs_config_name=None    (becomes 'obs_{}.ini'.format(maskname) if None)
+            io_config_name=None     (becomes 'io_{}.ini'.format(maskname) if None)
+            pipe_config_name='pipeline_config.ini'
+
+    * Requires EITHER maskname or (obs_config_name and io_config_name)
+      - If maskname specified, the filenames of obs_* and io_* must have the format
+        mentioned above
+      - If just filenames specified, maskname will be taken from config files
+      - If both maskname and filenames are specified, it is up to you to ensure they
+        are consistent
+    * If pipeline_config_name is not specified, the default of "pipeline_config.ini
+       should be present
+
+    """
     if maskname is None and (obs_config_name is None or io_config_name is None):
         raise(IOError,"I don't know the necessary configuration file information. Exiting")
     if obs_config_name is None:
         obs_config_name = 'obs_{}.ini'.format(maskname)
     if io_config_name is None:
         io_config_name = 'io_{}.ini'.format(maskname)
-
 
     pipe_config = configparser.ConfigParser()
     pipe_config.read(pipe_config_name)
@@ -65,28 +85,41 @@ def pipeline(maskname=None,obs_config_name=None,io_config_name=None, pipe_config
             start = key
             break
 
+    ## Interpret the filenumbers specified in the configuration files
     str_filenumbers = OrderedDict(obs_config['FILENUMBERS'])
     obs_config.remove_section('FILENUMBERS')
     filenumbers = digest_filenumbers(str_filenumbers)
 
+    ## Load the filemanager and instrument status based on the configuration files
     filemanager = FileManager( io_config )
     instrument = InstrumentState( obs_config )
+
+    ## Get specific pipeline options
     pipe_options = dict(pipe_config['PIPE_OPTIONS'])
 
+    ## Load the data and instantiate the pipeline functions within the data class
     data = FieldData(filenumbers, filemanager=filemanager, instrument=instrument,
                      startstep=start, pipeline_options=pipe_options)
 
+    ## For all steps marked true, run those steps on the data
     for step,do_this_step in steps.items():
         if do_this_step.lower()=='false':
             print("\nSkipping {}".format(step))
             continue
 
+        ## Get ready for the requested step
         print("\nPerforming {}:".format(step))
         data.proceed_to(step=step)
+
+        ## Check that the currently loaded data is relevant to the
+        ## requested step. If not, it will raise an error
         data.check_data_ready_for_current_step()#step=step)
 
+        ## run the step
         data.run_step()#step=step)
 
+        ## cosmic ray step autosaves during the process
+        ## for other steps, save the results
         if step != 'cr_remove':
             try:
                 data.write_all_filedata()#step=step)
@@ -100,33 +133,30 @@ def pipeline(maskname=None,obs_config_name=None,io_config_name=None, pipe_config
 
 
 
-def digest_filenumbers(str_filenumbers):
-    out_dict = {}
-    for key,strvals in str_filenumbers.items():
-        out_num_list = []
-        if ',' in strvals:
-            vallist = str(strvals).strip('[]() \t').split(',')
 
-            for strval in vallist:
-                if '-' in strval:
-                    start,end = strval.split('-')
-                    for ii in range(int(start),int(end)+1):
-                        out_num_list.append(int(ii))
-                else:
-                    out_num_list.append(int(strval))
-        elif '-' in strvals:
-            start,end = str(strvals).split('-')
-            for ii in range(int(start),int(end)+1):
-                out_num_list.append(int(ii))
-        elif strvals.isnumeric:
-            out_num_list.append(int(strvals))
-        out_dict[key] = np.sort(out_num_list)
+def parse_command_line(argv):
+    from optparse import OptionParser
+    parser = OptionParser()
+    parser.add_option("-m", "--maskname",
+                      action="store", type="string", dest="maskname")
+    parser.add_option("-i", "--instfile",
+                      action="store", type="string", dest="io_config_name")
+    parser.add_option("-o", "--obsfile",
+                      action="store", type="string", dest="obs_config_name")
+    parser.add_option("-p", "--pipefile",
+                      action="store", type="string", dest="pipe_config_name")
+    if argv is None:
+        (options, args) = parser.parse_args()
+    else:
+        (options, args) = parser.parse_args(argv)
 
-    return out_dict
-
+    return options.__dict__
 
 
 
 if __name__ == '__main__':
-    maskname = 'A02'
-    pipeline(maskname=maskname)
+    if len(sys.argv)>1:
+        input_variables = parse_command_line()
+    else:
+        input_variables = {'maskname': 'A02'}
+    pipeline(**input_variables)
