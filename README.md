@@ -5,7 +5,8 @@ Note:
 --- 
 * Reduction software for Magellan M2FS spectra
 
-* Several subfunctions were based on Dan Gifford's OSMOSreduce package used to reduce 2.4m MDM telescope slit-mask spectra.
+* Initially forked from Dan Gifford's OSMOSreduce package used to reduce 2.4m MDM telescope slit-mask spectra.
+   * Code has been significantly altered. A few subfunctions share inspiration and lines of code from the original.
 
 * Code produced by Anthony Kremin for M2FS on the 6.5 Magellan-Clay telescope. 
 
