@@ -1,6 +1,5 @@
 import os
 
-# from quickreduce_funcs import print_data_neatly
 import numpy as np
 from astropy.io import fits
 from astropy.table import Table
