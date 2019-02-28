@@ -602,15 +602,14 @@ class FieldData:
                 gal_contsub = galflux - gcont
                 sky_contsub = skyflux - scont
 
-                # gal_contsub -= np.min(gal_contsub)
-                # sky_contsub -= np.min(sky_contsub)
-                s_peak_inds, s_peak_props = find_peaks(sky_contsub, height=(None, None), width=(0.5, 8), \
-                                                       threshold=(None, None),
-                                                       prominence=(sky_contsub.max() / 10, None), wlen=24)
 
-                g_peak_inds, g_peak_props = find_peaks(gal_contsub, height=(30, None), width=(0.5, 8), \
+                s_peak_inds, s_peak_props = find_peaks(sky_contsub, height=(sky_contsub.max() / 10, None), width=(0.5, 8), \
                                                        threshold=(None, None),
-                                                       prominence=(50, None), wlen=42)
+                                                       prominence=(sky_contsub.max() / 5, None), wlen=24)
+
+                g_peak_inds, g_peak_props = find_peaks(sky_contsub, height=(gal_contsub.max() / 10, None), width=(0.5, 8), \
+                                                       threshold=(None, None),
+                                                       prominence=(gal_contsub.max() / 5, None), wlen=24)
 
                 g_peak_inds_matched = []
                 for peak in s_peak_inds:
@@ -636,239 +635,40 @@ class FieldData:
                 sky_contsub = skyflux - scont
 
 
-                s_peak_inds, s_peak_props = find_peaks(sky_contsub, height=(30, None), width=(0.5, 8), \
-                                                       threshold=(None, None),
-                                                       prominence=(50, None), wlen=42)
-
+                s_peak_inds, s_peak_props = find_peaks(sky_contsub, height=(40, None), width=(0.5, 8), \
+                                                       threshold=(10, None),
+                                                       prominence=(10, None), wlen=24)
+                g_peak_inds, g_peak_props = find_peaks(gal_contsub, height=(30, None), width=(0.5, 8), \
+                                                       threshold=(10, None),
+                                                       prominence=(10, None), wlen=24)
 
                 remaining_sky = skyflux.copy()
-                s_lefts = np.array(s_peak_props['left_ips']).astype(int)
-                s_rights = np.array(s_peak_props['right_ips']).astype(int) + 1
 
                 line_pairs = []
-                skips = []
-                for ii in range(len(s_lefts)):
-                    if ii in skips:
-                        continue
+                for ii in range(len(s_peak_inds)):
                     pair = {}
 
                     lam1 = gallams[s_peak_inds[ii]]
-                    spacing1 = to_sigma(s_lefts[ii],s_rights[ii])
                     ind1 = np.argmin(np.abs(gallams[g_peak_inds] - lam1))
 
                     if np.abs(gallams[g_peak_inds[ind1]]-gallams[s_peak_inds[ii]])>3.0:
                         continue
 
-                    if ii + 1 == len(s_lefts):
-                        lam2 = None
-                        spacing2 = None
-                    else:
-                        lam2 = gallams[s_peak_inds[ii + 1]]
-                        spacing2 = to_sigma(s_rights[ii + 1] , s_lefts[ii + 1])
-
-                    if lam2 is not None and (lam1+spacing1) > (lam2-spacing2):
-                        pair['doublet'] = True
-
-                        skips.append(ii+1)
-                        ind2 = np.argmin(np.abs(gallams[g_peak_inds] - lam2))
-                        pair['gal1'] = [g_peak_inds[ind1],g_peak_props['left_ips'][ind1],\
-                                        g_peak_props['right_ips'][ind1] + 1, g_peak_props['peak_heights'][ind1],\
-                                        g_peak_props['width_heights'][ind1]]
-
-                        pair['gal2'] = [g_peak_inds[ind2],g_peak_props['left_ips'][ind2],\
-                                        g_peak_props['right_ips'][ind2] + 1, g_peak_props['peak_heights'][ind2],\
-                                        g_peak_props['width_heights'][ind2]]
-
-                        pair['sky1'] = [s_peak_inds[ii], s_lefts[ii], \
-                                        s_rights[ii] + 1, s_peak_props['peak_heights'][ii], \
-                                        s_peak_props['width_heights'][ii]]
-
-                        pair['sky2'] = [s_peak_inds[ii+1], s_lefts[ii+1], \
-                                        s_rights[ii+1] + 1, s_peak_props['peak_heights'][ii+1], \
-                                        s_peak_props['width_heights'][ii+1]]
-
-                    else:
-                        pair['doublet'] = False
-                        pair['gal1'] = [g_peak_inds[ind1],g_peak_props['left_ips'][ind1],\
-                                        g_peak_props['right_ips'][ind1] + 1, g_peak_props['peak_heights'][ind1],\
-                                        g_peak_props['width_heights'][ind1]]
-                        pair['sky1'] = [s_peak_inds[ii], s_lefts[ii], \
-                                        s_rights[ii] + 1, s_peak_props['peak_heights'][ii], \
-                                        s_peak_props['width_heights'][ii]]
+                    pair['gal'] = {'peak':g_peak_inds[ind1],'left':g_peak_props['left_ips'][ind1],\
+                                    'right':g_peak_props['right_ips'][ind1] + 1, 'height':g_peak_props['peak_heights'][ind1],\
+                                    'wheight':g_peak_props['width_heights'][ind1]}
+                    pair['sky'] = {'peak':s_peak_inds[ii], 'left':s_peak_props['left_ips'][ii], \
+                                    'right':s_peak_props['right_ips'][ii] + 1, 'height':s_peak_props['peak_heights'][ii], \
+                                    'wheight':s_peak_props['width_heights'][ii]}
 
                     line_pairs.append(pair)
 
                 sky_smthd_contsub = np.convolve(sky_contsub,[1/15.,3/15.,7/15.,3/15.,1/15.],'same')
                 gal_smthd_contsub = np.convolve(gal_contsub, [1 / 15., 3 / 15., 7 / 15., 3 / 15., 1 / 15.], 'same')
                 for pair in line_pairs:
-                    g1_peak, g1_left, g1_right, g1_height,g1_wh = pair['gal1']
-                    s1_peak, s1_left, s1_right, s1_height,s1_wh = pair['sky1']
-                    s_multi_sigma1 = to_sigma(s1_right,s1_left)
-                    g_multi_sigma1 = to_sigma(g1_right,g1_left)
-                    if int(g1_right)==len(pixels):
-                        g1_right = len(pixels)-1
-                    if int(s1_right) == len(pixels):
-                        s1_right = len(pixels) - 1
-                    if pair['doublet']:
-                        g2_peak, g2_left, g2_right,g2_height,g2_wh = pair['gal2']
-                        s2_peak, s2_left, s2_right,s2_height,s2_wh = pair['sky2']
-                        s_multi_sigma2 = to_sigma(s2_right, s2_left)
-                        g_multi_sigma2 = to_sigma(g2_right, g2_left)
-                        if int(g2_right) == len(pixels):
-                            g2_right = len(pixels) - 1
-                        if int(s2_right) == len(pixels):
-                            s2_right = len(pixels) - 1
-                        lower_wave_ind = np.argmin(np.abs(gallams - (gallams[s1_peak] - s_multi_sigma1)))
-                        upper_wave_ind = np.argmin(np.abs(gallams - (gallams[s2_peak] + s_multi_sigma2)))
-                    else:
-                        lower_wave_ind = np.argmin(np.abs(gallams - (gallams[s1_peak] - s_multi_sigma1)))
-                        upper_wave_ind = np.argmin(np.abs(gallams - (gallams[s1_peak] + s_multi_sigma1)))+1
+                    g1_peak = pair['gal']['peak']
+                    s1_peak = pair['sky']['peak']
 
-
-                    lams = gallams[lower_wave_ind:upper_wave_ind]
-                    g_cutout = gal_contsub[lower_wave_ind:upper_wave_ind].copy()
-                    s_cutout = sky_contsub[lower_wave_ind:upper_wave_ind].copy()
-                    # nlams = len(lams)
-                    # gauss_convolution = gauss(np.arange(nlams),0.,mean=nlams/2.,sig=nlams/4.,\
-                    #                           amp=np.sqrt(2* np.pi * nlams * nlams / 16.))
-                    # print(gauss_convolution)
-                    nzeros = 5
-                    g_cutout[:nzeros] = 0.+np.arange(nzeros)*np.median(g_cutout[nzeros:nzeros+2])/nzeros
-                    g_cutout[-nzeros:] = np.median(g_cutout[-nzeros-2:-nzeros])-\
-                                         np.arange(nzeros)*np.median(g_cutout[-nzeros-2:-nzeros])/nzeros
-                    s_cutout[:nzeros] = 0. + np.arange(nzeros) * np.median(s_cutout[nzeros:nzeros + 2]) / nzeros
-                    s_cutout[-nzeros:] = np.median(s_cutout[-nzeros - 2:-nzeros]) - \
-                                         np.arange(nzeros) * np.median(s_cutout[-nzeros - 2:-nzeros]) / nzeros
-                    g_cutout[np.isnan(g_cutout)] = 0.
-                    s_cutout[np.isnan(s_cutout)] = 0.
-                    if np.any(np.isinf(g_cutout)):
-                        print("Infinite values detected in galaxy cutout!")
-                        g_cutout[np.isinf(g_cutout)] = 1.0e5
-                    if np.any(np.isinf(s_cutout)):
-                        print("Infinite values detected in sky cutout!")
-                        s_cutout[np.isinf(s_cutout)] = 1.0e5
-
-                    #gauss_convolution
-                    #s_cutout *= gauss_convolution
-                    # print(s_p0)
-                    # print(g_p0)
-                    # print(bounds)
-
-                    if pair['doublet']:
-                        fitting_function = doublet_gauss
-
-                        s_p0 = [0., gallams[s1_peak], gallams[s2_peak], s_multi_sigma1 / nsigma, \
-                                s_multi_sigma2 / nsigma, s1_height, s2_height]
-                        g_p0 = [0., gallams[g1_peak], gallams[g2_peak], g_multi_sigma1 / nsigma, \
-                                g_multi_sigma2 / nsigma, g1_height, g2_height]
-                        bounds = ([-100., min([gallams[int(s1_left)], gallams[int(g1_left)]]), \
-                                   min([gallams[int(s2_left)], gallams[int(g2_left)]]), 0., 0., 0., 0.], \
-                                  [min([0.8 * s1_height,0.8*s2_height]), \
-                                   max([gallams[int(s1_right)], gallams[int(g1_right)]]), \
-                                   max([gallams[int(s2_right)], gallams[int(g2_right)]]), \
-                                   max(4., 1.2 * s_multi_sigma1 / nsigma, 1.2 * g_multi_sigma1 / nsigma), \
-                                   max(4., 1.2 * s_multi_sigma2 / nsigma, 1.2 * g_multi_sigma2 / nsigma), \
-                                   max([6 * s1_height, 6 * g1_height]), \
-                                   max([6 * s2_height, 6 * g2_height])])
-                    else:
-                        fitting_function = gauss
-
-                        s_p0 = [0., gallams[s1_peak], s_multi_sigma1 / nsigma, s1_height]
-                        g_p0 = [0., gallams[g1_peak], g_multi_sigma1 / nsigma, g1_height]
-                        bounds = ([-100., min([gallams[int(s1_left)], gallams[int(g1_left)]]), 0., 0.], \
-                                  [0.8 * s1_height, \
-                                   max([gallams[int(s1_right)], gallams[int(g1_right)]]), \
-                                   max([4., 1.2 * s_multi_sigma1 / nsigma, 1.2 * g_multi_sigma1 / nsigma]), \
-                                   max([6 * s1_height, 6 * g1_height])
-                                   ])
-
-                    b1,b2 = bounds
-                    if np.any(np.array(s_p0)<np.array(b1)) or np.any(np.array(s_p0)>np.array(b2)):
-                        print(b1)
-                        print(b2)
-                        print(s_p0)
-                        print("stop")
-                    if np.any(np.array(g_p0)<np.array(b1)) or np.any(np.array(g_p0)>np.array(b2)):
-                        print(b1)
-                        print(b2)
-                        print(g_p0)
-                        print("stop")
-                    sfit_coefs, scovsing = curve_fit(fitting_function, lams, \
-                                                     s_cutout, \
-                                                     p0=s_p0,bounds=bounds, maxfev=10000)
-
-                    gfit_coefs, gcovsing = curve_fit(fitting_function, lams, \
-                                                     g_cutout, \
-                                                     p0=g_p0, bounds=bounds, maxfev=10000)
-
-                    s_normd_err = np.sqrt(np.sum(np.diagonal(scovsing)/(sfit_coefs*sfit_coefs)))
-                    g_normd_err = np.sqrt(np.sum(np.diagonal(gcovsing) / (gfit_coefs * gfit_coefs)))
-                    # print(len(lams),s_normd_err,sfit_coefs)
-
-                    if s_normd_err > 20 and len(lams)>(nzeros*2+4+4):
-                        szeros = nzeros+2
-                        s_cutout[:szeros] = 0. + np.arange(szeros) * np.median(s_cutout[szeros:szeros + 2]) / szeros
-                        s_cutout[-szeros:] = np.median(s_cutout[-szeros - 2:-szeros]) - \
-                                             np.arange(szeros) * np.median(s_cutout[-szeros - 2:-szeros]) / szeros
-                        sfit_coefs, scovsing = curve_fit(fitting_function, lams[2:-2], \
-                                                         s_cutout[2:-2], \
-                                                         p0=s_p0, bounds=bounds, maxfev=10000)
-                        # print(len(lams), s_normd_err, sfit_coefs)
-                    if g_normd_err > 20 and len(lams)>(nzeros*2+4+4):
-                        gzeros = nzeros+2
-                        g_cutout[:gzeros] = 0. + np.arange(gzeros) * np.median(g_cutout[gzeros:gzeros + 2]) / gzeros
-                        g_cutout[-gzeros:] = np.median(g_cutout[-gzeros - 2:-gzeros]) - \
-                                             np.arange(gzeros) * np.median(g_cutout[-gzeros - 2:-gzeros]) / nzeros
-
-                        gfit_coefs, gcovsing = curve_fit(fitting_function, lams[2:-2], \
-                                                         g_cutout[2:-2], \
-                                                         p0=g_p0, bounds=bounds, maxfev=10000)
-
-                    # transform = gfit_coefs  # use the fit from the galaxy spectrum
-                    # transform[-1] = sfit_coefs[-1]  # switch amplitude to that of the sky model
-                    # transform[0] = sfit_coefs[0]  # switch dc offset to that of sky model
-                    # if pair['doublet']:
-                    #     transform[-2] = sfit_coefs[-2]
-                    # s_transformed_fit = fitting_function(lams, *transform)
-                    #g1_peak, g1_left, g1_right, g1_height,g1_wh = pair['gal1']
-                    #s1_peak, s1_left, s1_right, s1_height,s1_wh = pair['sky1']
-                    # sleft = int(s1_peak)
-                    # keep_going = True
-                    # while keep_going:
-                    #     if sky_smthd_contsub[sleft-1]<sky_smthd_contsub[sleft]:
-                    #         sleft -= 1
-                    #     elif sky_smthd_contsub[sleft-2]<sky_smthd_contsub[sleft]:
-                    #         sleft -= 1
-                    #     elif sky_smthd_contsub[sleft-3]<sky_smthd_contsub[sleft]:
-                    #         sleft -= 1
-                    #     else:
-                    #         keep_going = False
-                    #
-                    # sright = int(s1_peak)
-                    # keep_going = True
-                    # while keep_going:
-                    #     if sky_smthd_contsub[sright+1]<sky_smthd_contsub[sright]:
-                    #         sright += 1
-                    #     elif sky_smthd_contsub[sright+2]<sky_smthd_contsub[sright]:
-                    #         sright += 1
-                    #     elif sky_smthd_contsub[sright+3]<sky_smthd_contsub[sright]:
-                    #         sright += 1
-                    #     else:
-                    #         keep_going = False
-                    #
-                    # gleft = int(g1_peak)
-                    # keep_going = True
-                    # while keep_going:
-                    #     if gal_smthd_contsub[gleft - 1] < gal_smthd_contsub[gleft]:
-                    #         gleft -= 1
-                    #     elif gal_smthd_contsub[sleft - 2] < gal_smthd_contsub[gleft]:
-                    #         gleft -= 1
-                    #     elif gal_smthd_contsub[gleft - 3] < gal_smthd_contsub[gleft]:
-                    #         gleft -= 1
-                    #     else:
-                    #         keep_going = False
-
-                    #gleft = int(g1_peak)
                     itterleft = int(s1_peak)
                     keep_going = True
                     nextset = np.arange(1, 4).astype(int)
@@ -887,15 +687,12 @@ class FieldData:
                             s_select = np.any(
                                 sky_smthd_contsub[itterleft - nextset[:endcut]] < sky_smthd_contsub[itterleft])
 
-                        over_zero_select = (
-                                    (gal_smthd_contsub[itterleft] > -10.) & (sky_smthd_contsub[itterleft] > -10.))
+                        over_zero_select = ((gal_smthd_contsub[itterleft] > -10.) & (sky_smthd_contsub[itterleft] > -10.))
                         if g_select and s_select and over_zero_select:
                             itterleft -= 1
                         else:
                             keep_going = False
-                    sleft, gleft = int(itterleft), int(itterleft)
 
-                    #gright = int(g1_peak)
                     itterright = int(s1_peak)
                     keep_going = True
                     nextset = np.arange(1, 4).astype(int)
@@ -917,67 +714,16 @@ class FieldData:
                             itterright += 1
                         else:
                             keep_going = False
-                    sright,gright = int(itterright),int(itterright)
-                    #sleft, sright = sfit_coefs[1] - 2.5 * sfit_coefs[2], sfit_coefs[1] + 2.5 * sfit_coefs[2]
-                    #gleft, gright = gfit_coefs[1] - 2.5 * gfit_coefs[2], gfit_coefs[1] + 2.5 * gfit_coefs[2]
 
-                    # slower_wave_ind = np.argmin(np.abs(gallams - sleft))
-                    # supper_wave_ind = np.argmin(np.abs(gallams - sright)) + 1
-                    #
-                    # glower_wave_ind = np.argmin(np.abs(gallams - gleft))
-                    # gupper_wave_ind = np.argmin(np.abs(gallams - gright)) + 1
+                    slower_wave_ind = int(itterright)
+                    supper_wave_ind = int(itterright) + 1
 
-                    slower_wave_ind = sleft
-                    supper_wave_ind = sright + 1
-
-                    glower_wave_ind = gleft
-                    gupper_wave_ind = gright + 1
-
-
-                    if np.abs((sright-sleft)-(gright-gleft))> 6:
-                        # if pair['doublet']:
-                        #     speaks = [gallams[s1_peak],gallams[s2_peak]]
-                        #     slefts = [gallams[int(s1_left)], gallams[int(s2_left)]]
-                        #     srights = [gallams[int(s1_right)], gallams[int(s2_right)]]
-                        #     sheights = [s1_height,s2_height]
-                        #     swheights = [s1_wh, s2_wh]
-                        #     gpeaks = [gallams[int(g1_peak)], gallams[int(g2_peak)]]
-                        #     glefts = [gallams[int(g1_left)], gallams[int(g2_left)]]
-                        #     grights = [gallams[int(g1_right)], gallams[int(g2_right)]]
-                        #     gheights = [g1_height, g2_height]
-                        #     gwheights = [g1_wh, g2_wh]
-                        # else:
-                        #     speaks,sheights,swheights = gallams[int(s1_peak)],s1_height,s1_wh
-                        #     gpeaks, gheights, gwheights = gallams[int(g1_peak)], g1_height, g1_wh
-                        #     slefts,glefts = gallams[int(s1_left)], gallams[int(g1_left)]
-                        #     srights,grights = gallams[int(s1_right)], gallams[int(g1_right)]
-                        # plt.figure()
-                        # plt.plot(lams, gal_contsub[lower_wave_ind:upper_wave_ind],alpha=0.2,label='gal')
-                        # plt.plot(gallams[slower_wave_ind:supper_wave_ind],sky_contsub[slower_wave_ind:supper_wave_ind],alpha=0.4,label='sky')
-                        # plt.plot(lams, gal_smthd_contsub[lower_wave_ind:upper_wave_ind], alpha=0.2, label='smthd gal')
-                        # plt.plot(gallams[slower_wave_ind:supper_wave_ind], sky_smthd_contsub[slower_wave_ind:supper_wave_ind],
-                        #          alpha=0.4, label='smthd sky')
-                        #
-                        # plt.plot(speaks, sheights, 'k*', label='sky peak')
-                        # plt.plot(slefts, swheights, 'k>')
-                        # plt.plot(srights, swheights, 'k<')
-                        #
-                        # plt.plot(gpeaks, gheights, 'c*', label='gal peak')
-                        # plt.plot(glefts, gwheights, 'c>')
-                        # plt.plot(grights, gwheights, 'c<')
-                        # # plt.plot(lams,gauss(lams,*gfit_coefs),label='galfit')
-                        # plt.xlim(gallams[lower_wave_ind - 10], gallams[upper_wave_ind + 10])
-                        # plt.legend(loc='best')
-                        #
-                        # plt.show()
-                        print("bad")
-
-                    g_distrib = gal_contsub[glower_wave_ind:gupper_wave_ind].copy()
+                    g_distrib = gal_contsub[slower_wave_ind:supper_wave_ind].copy()
                     min_g_distrib = g_distrib.min()
                     g_distrib = g_distrib-min_g_distrib+0.00001
-                    # g_lams = gallams[glower_wave_ind:gupper_wave_ind]
-                    # g_dlams = gallams[glower_wave_ind+1:gupper_wave_ind+1]-\
-                    #           gallams[glower_wave_ind:gupper_wave_ind]
+                    # g_lams = gallams[slower_wave_ind:supper_wave_ind]
+                    # g_dlams = gallams[slower_wave_ind+1:supper_wave_ind+1]-\
+                    #           gallams[slower_wave_ind:supper_wave_ind]
                     # integral_g = np.dot(g_distrib,g_dlams)
                     integral_g = np.sum(g_distrib)
                     normd_g_distrib = g_distrib / integral_g
@@ -1002,100 +748,46 @@ class FieldData:
 
                     sky_g_distrib = normd_g_distrib * integral_s
                     if len(sky_g_distrib)>3:
-                        removedlineflux = np.convolve(gal_contsub[glower_wave_ind:gupper_wave_ind].copy() - sky_g_distrib,\
+                        removedlineflux = np.convolve(gal_contsub[slower_wave_ind:supper_wave_ind].copy() - sky_g_distrib,\
                                     [1 / 5., 3 / 5., 1 / 5.], 'same')
                     else:
-                        removedlineflux = gal_contsub[glower_wave_ind:gupper_wave_ind].copy() - sky_g_distrib
-
-                    if np.any((gal_contsub[glower_wave_ind:gupper_wave_ind] - sky_g_distrib)<(-60)) and \
-                            np.all((gal_contsub[glower_wave_ind:gupper_wave_ind])>(-60)):
-                        # if pair['doublet']:
-                        #     speaks = [gallams[s1_peak],gallams[s2_peak]]
-                        #     slefts = [gallams[int(s1_left)], gallams[int(s2_left)]]
-                        #     srights = [gallams[int(s1_right)], gallams[int(s2_right)]]
-                        #     sheights = [s1_height,s2_height]
-                        #     swheights = [s1_wh, s2_wh]
-                        #     gpeaks = [gallams[int(g1_peak)], gallams[int(g2_peak)]]
-                        #     glefts = [gallams[int(g1_left)], gallams[int(g2_left)]]
-                        #     grights = [gallams[int(g1_right)], gallams[int(g2_right)]]
-                        #     gheights = [g1_height, g2_height]
-                        #     gwheights = [g1_wh, g2_wh]
-                        # else:
-                        #     speaks,sheights,swheights = gallams[int(s1_peak)],s1_height,s1_wh
-                        #     gpeaks, gheights, gwheights = gallams[int(g1_peak)], g1_height, g1_wh
-                        #     slefts,glefts = gallams[int(s1_left)], gallams[int(g1_left)]
-                        #     srights,grights = gallams[int(s1_right)], gallams[int(g1_right)]
-                        # plt.figure()
-                        # plt.plot(gallams[glower_wave_ind:gupper_wave_ind], gal_contsub[glower_wave_ind:gupper_wave_ind] - sky_g_distrib, label='new sub',
-                        #          alpha=0.4)
-                        # plt.plot(gallams[glower_wave_ind:gupper_wave_ind],sky_g_distrib,alpha=0.4,label='transformed sky')
-                        # plt.plot(lams, gal_contsub[lower_wave_ind:upper_wave_ind],alpha=0.2,label='gal')
-                        # plt.plot(gallams[slower_wave_ind:supper_wave_ind],s_distrib,alpha=0.4,label='sky')
-                        #
-                        # plt.plot(speaks, sheights, 'k*', label='sky peak')
-                        # plt.plot(slefts, swheights, 'k>')
-                        # plt.plot(srights, swheights, 'k<')
-                        #
-                        # plt.plot(gpeaks, gheights, 'c*', label='gal peak')
-                        # plt.plot(glefts, gwheights, 'c>')
-                        # plt.plot(grights, gwheights, 'c<')
-                        # # plt.plot(lams,gauss(lams,*gfit_coefs),label='galfit')
-                        # plt.xlim(gallams[lower_wave_ind - 10], gallams[upper_wave_ind + 10])
-                        # plt.legend(loc='best')
-                        #
-                        # plt.show()
-                        print("That didn't go well")
-
+                        removedlineflux = gal_contsub[slower_wave_ind:supper_wave_ind].copy() - sky_g_distrib
 
                     doplots = False
-                    if doplots:
-                        if pair['doublet']:
-                            speaks = [gallams[s1_peak],gallams[s2_peak]]
-                            slefts = [gallams[int(s1_left)], gallams[int(s2_left)]]
-                            srights = [gallams[int(s1_right)], gallams[int(s2_right)]]
-                            sheights = [s1_height,s2_height]
-                            swheights = [s1_wh, s2_wh]
-                            gpeaks = [gallams[int(g1_peak)], gallams[int(g2_peak)]]
-                            glefts = [gallams[int(g1_left)], gallams[int(g2_left)]]
-                            grights = [gallams[int(g1_right)], gallams[int(g2_right)]]
-                            gheights = [g1_height, g2_height]
-                            gwheights = [g1_wh, g2_wh]
-                        else:
-                            speaks,sheights,swheights = gallams[int(s1_peak)],s1_height,s1_wh
-                            gpeaks, gheights, gwheights = gallams[int(g1_peak)], g1_height, g1_wh
-                            slefts,glefts = gallams[int(s1_left)], gallams[int(g1_left)]
-                            srights,grights = gallams[int(s1_right)], gallams[int(g1_right)]
+                    dips_low = np.any((gal_contsub[slower_wave_ind:supper_wave_ind] - sky_g_distrib) < (-60))
+                    all_above = np.all((gal_contsub[slower_wave_ind:supper_wave_ind]) > (-60))
+                    if doplots or (dips_low and all_above):
+                        speaks,sheights,swheights = gallams[int(s1_peak)],pair['sky']['height'],pair['sky']['wheight']
+                        gpeaks, gheights, gwheights = gallams[int(g1_peak)], pair['gal']['height'], pair['gal']['wheight']
+                        slefts,glefts = gallams[int(pair['sky']['left'])], gallams[int(pair['gal']['left'])]
+                        srights,grights = gallams[int(pair['sky']['right'])], gallams[int(pair['gal']['right'])]
 
-                        sfit_flux = fitting_function(lams, *sfit_coefs)
                         plt.subplots(1, 3)
 
                         plt.subplot(131)
-                        plt.plot(lams,s_cutout, label='sky', alpha=0.4)
+                        plt.plot(gallams[slower_wave_ind-10:supper_wave_ind+10],sky_contsub[slower_wave_ind-10:supper_wave_ind+10], label='sky', alpha=0.4)
                         plt.plot(speaks, sheights, 'k*', label='peaks')
                         plt.plot(slefts, swheights, 'k>')
                         plt.plot(srights, swheights, 'k<')
-                        plt.plot(lams, sfit_flux, label='skyfit')
-                        plt.xlim(gallams[lower_wave_ind ], gallams[upper_wave_ind])
+                        plt.xlim(gallams[slower_wave_ind-10:supper_wave_ind+10])
                         plt.legend(loc='best')
 
-                        gfit_flux = fitting_function(lams, *gfit_coefs)
                         plt.subplot(132)
-                        plt.plot(lams,g_cutout, label='gal', alpha=0.4)
+                        plt.plot(gallams[slower_wave_ind-10:supper_wave_ind+10],gal_contsub[slower_wave_ind-10:supper_wave_ind+10], label='gal', alpha=0.4)
                         plt.plot(gpeaks, gheights, 'k*', label='peaks')
                         plt.plot(glefts, gwheights, 'k>')
                         plt.plot(grights, gwheights, 'k<')
-                        plt.plot(lams, gfit_flux, label='galfit')
-                        plt.xlim(gallams[lower_wave_ind], gallams[upper_wave_ind])
+                        plt.xlim(gallams[slower_wave_ind-10:supper_wave_ind+10])
                         ymin,ymax = plt.ylim()
                         plt.legend(loc='best')
 
                         plt.subplot(133)
-                        plt.plot(gallams[glower_wave_ind:gupper_wave_ind], gal_contsub[glower_wave_ind:gupper_wave_ind] - sky_g_distrib, label='new sub',
+                        plt.plot(gallams[slower_wave_ind:supper_wave_ind], gal_contsub[slower_wave_ind:supper_wave_ind] - sky_g_distrib, label='new sub',
                                  alpha=0.4)
-                        plt.plot(gallams[glower_wave_ind:gupper_wave_ind], removedlineflux, label='new smth sub',  alpha=0.4)
+                        plt.plot(gallams[slower_wave_ind:supper_wave_ind], removedlineflux, label='new smth sub',  alpha=0.4)
 
-                        plt.plot(gallams[glower_wave_ind:gupper_wave_ind],sky_g_distrib,alpha=0.4,label='transformed sky')
-                        plt.plot(lams, gal_contsub[lower_wave_ind:upper_wave_ind],alpha=0.2,label='gal')
+                        plt.plot(gallams[slower_wave_ind:supper_wave_ind],sky_g_distrib,alpha=0.4,label='transformed sky')
+                        plt.plot(gallams[slower_wave_ind-10:supper_wave_ind+10], gal_contsub[slower_wave_ind-10:supper_wave_ind+10],alpha=0.2,label='gal')
                         plt.plot(gallams[slower_wave_ind:supper_wave_ind],s_distrib,alpha=0.4,label='sky')
 
                         plt.plot(speaks, sheights, 'k*', label='sky peak')
@@ -1106,18 +798,19 @@ class FieldData:
                         plt.plot(glefts, gwheights, 'c>')
                         plt.plot(grights, gwheights, 'c<')
                         # plt.plot(lams,gauss(lams,*gfit_coefs),label='galfit')
-                        plt.xlim(gallams[lower_wave_ind - 10], gallams[upper_wave_ind + 10])
+                        plt.xlim(gallams[slower_wave_ind - 10], gallams[supper_wave_ind + 10])
                         min1,min2 = plt.ylim()
                         plt.ylim(min1,ymax)
                         plt.legend(loc='best')
 
                         plt.show()
-                        aaaa=2
+                        if (dips_low and all_above):
+                            print("That didn't go well")
                     # 1/np.sqrt(2*np.pi*sig*sig)
                     # print(*gfit_coefs,*sfit_coefs)
-                    gal_contsub[glower_wave_ind:gupper_wave_ind] = removedlineflux
+                    gal_contsub[slower_wave_ind:supper_wave_ind] = removedlineflux
                     ## remove the subtracted sky from that remaining in the skyflux
-                    remaining_sky[lower_wave_ind:upper_wave_ind] = scont[lower_wave_ind:upper_wave_ind]
+                    remaining_sky[slower_wave_ind:supper_wave_ind] = scont[slower_wave_ind:supper_wave_ind]
 
                 outgal = gal_contsub + gcont - remaining_sky
                 if np.any(outgal > 1000.):
@@ -1149,10 +842,10 @@ class FieldData:
                     ymin,ymax = plt.ylim()
                     plt.subplot(122)
                     plt.plot(gallams,galflux-skyflux,label='basic',alpha=0.4)
-                    plt.plot(gallams, outgal, label='gcont',alpha=0.4)
+                    plt.plot(gallams, outgal, label='outgal',alpha=0.4)
                     #plt.plot(gallams, gal_contsub, label='gal_contsub',alpha=0.4)
                     plt.legend(loc='best')
-                    plt.ylim(ymin,ymax)
+                    #plt.ylim(ymin,ymax)
                     plt.show()
                 doplots = False
                 out_sci_data.add_column(Table.Column(name=galfib,data=outgal))
@@ -1162,185 +855,6 @@ class FieldData:
             scis[obs] = (out_sci_data.copy(),sci_lams.copy(),sci_filnum)
             self.all_hdus[(cam, sci_filnum, 'science', None)] = fits.BinTableHDU(data=out_sci_data,header=sci_hdu.header,name='flux')
 
-
-
-
-
-    def subtract_skies_old(self, cam):
-        from quickreduce_funcs import smooth_and_dering
-        if len(self.final_calibration_coefs.keys()) == 0:
-            self.get_final_wavelength_coefs()
-        observation_keys = list(self.observations.observations.keys())
-        first_obs = observation_keys[0]
-        sci_filnum, throw, throw1, throw2 = self.observations.observations[first_obs]
-        npixels = len(self.all_hdus[(cam, sci_filnum, 'science', None)].data)
-        pixels = np.arange(npixels).astype(np.float64)
-        pix2 = pixels * pixels
-        pix3 = pix2 * pixels
-        pix4 = pix3 * pixels
-        pix5 = pix4 * pixels
-        target_sky_pair = self.targeting_sky_pairs[cam]
-        ##hack!
-        scis = {}
-        for obs in observation_keys:
-            sci_filnum, ccalib, fcalib, comparc_ind = self.observations.observations[obs]
-            sci_hdu = self.all_hdus.pop((cam, sci_filnum, 'science', None))
-            if self.twostep_wavecomparc:
-                calib_filnum = fcalib
-            else:
-                calib_filnum = ccalib
-            comparc_data = self.final_calibration_coefs[(cam, calib_filnum)]
-            sci_data = Table(sci_hdu.data)
-            out_sci_data = Table()
-            sci_lams = {}
-            skyfibs = np.unique(list(target_sky_pair.values()))
-            a, b, c, d, e, f = comparc_data['{}214'.format(cam)]
-            skyllams = a + b * pixels + c * pix2 + d * pix3 + e * pix4 + f * pix5
-
-            master_skies = []
-            skyfits = {}
-            plt.figure()
-            for skyfib in skyfibs:
-                a, b, c, d, e, f = comparc_data[skyfib]
-                skylams = a + b * pixels + c * pix2 + d * pix3 + e * pix4 + f * pix5
-                skyflux = medfilt(sci_data[skyfib] - medfilt(sci_data[skyfib], 371), 3)
-                plt.plot(skylams, skyflux, label=skyfib)
-                skyfit = CubicSpline(x=skylams, y=skyflux, extrapolate=False)
-                skyfits[skyfib] = skyfit
-                outskyflux = skyfit(skyllams)
-                corrected = smooth_and_dering(outskyflux)
-                master_skies.append(corrected)
-
-            master_sky = np.median(master_skies, axis=0)
-            masterfit = CubicSpline(x=skyllams, y=master_sky, extrapolate=False)
-            plt.plot(skyllams, master_sky, label='master')
-            plt.legend(loc='best')
-
-            for galfib, skyfib in target_sky_pair.items():
-                a, b, c, d, e, f = comparc_data[galfib]
-                gallams = a + b * pixels + c * pix2 + d * pix3 + e * pix4 + f * pix5
-                galflux = sci_data[galfib]
-                galflux[np.isnan(galflux)] = 0.
-                continuum = medfilt(sci_data[galfib], 371)
-                medgal_contsubd = medfilt(galflux - continuum, 3)
-                subd_galflux = galflux - continuum
-
-                skyfit = skyfits[skyfib]
-                outskyflux = masterfit(gallams)  # skyfit(gallams)
-                outskyflux[np.isnan(outskyflux)] = 0.
-                sky_contsubd = medfilt(outskyflux, 5)
-
-                master_interp = masterfit(gallams)
-                master_interp[np.isnan(master_interp)] = 0.
-
-                ## Find the skylines
-                priminence_threshold = np.max(master_interp) // 120
-                peak_inds, peak_props = find_peaks(master_interp, height=(None, None), width=(1, 8), \
-                                                   threshold=(None, None), prominence=(priminence_threshold, None),
-                                                   wlen=24)
-                heights = peak_props['peak_heights']  # peak_props['prominences']
-                peak_lefts = (peak_props['left_bases']).astype(int)
-                peak_rights = (peak_props['right_bases']).astype(int)
-
-                ## Some doublets and triplets will be nested, decouple them
-                for ii in range(len(peak_lefts) - 1):
-                    if peak_lefts[ii + 1] < peak_rights[ii]:
-                        if peak_lefts[ii + 1] - peak_inds[ii] > 0:
-                            peak_rights[ii] = peak_lefts[ii + 1]
-                        else:
-                            peak_lefts[ii + 1] = peak_rights[ii]
-
-                ## Look for peaks in the galaxy spectrum
-                gpeak_inds, gpeak_props = find_peaks(medgal_contsubd, height=(None, None), width=(1, 8), \
-                                                     threshold=(None, None), prominence=(priminence_threshold, None),
-                                                     wlen=24)
-                gheights = gpeak_props['peak_heights']  # peak_props['prominences']
-                gpeak_lefts = (gpeak_props['left_bases']).astype(int)
-                gpeak_rights = (gpeak_props['right_bases']).astype(int)
-
-                ## As with the sky spectrum, decouple nested doublets and triplets
-                for ii in range(len(gpeak_lefts) - 1):
-                    if gpeak_lefts[ii + 1] < gpeak_rights[ii]:
-                        if gpeak_lefts[ii + 1] - gpeak_inds[ii] > 0:
-                            gpeak_rights[ii] = gpeak_lefts[ii + 1]
-                        else:
-                            gpeak_lefts[ii + 1] = gpeak_rights[ii]
-
-                ## Look for peaks in the sky spectrum
-                speak_inds, speak_props = find_peaks(sky_contsubd, height=(None, None), width=(1, 8), \
-                                                     threshold=(None, None), prominence=(priminence_threshold, None),
-                                                     wlen=24)
-                sheights = speak_props['peak_heights']  # peak_props['prominences']
-                speak_lefts = (speak_props['left_bases']).astype(int)
-                speak_rights = (speak_props['right_bases']).astype(int)
-
-                ## As with the median sky spectrum, decouple nested doublets and triplets
-                for ii in range(len(speak_lefts) - 1):
-                    if speak_lefts[ii + 1] < speak_rights[ii]:
-                        if speak_lefts[ii + 1] - speak_inds[ii] > 0:
-                            speak_rights[ii] = speak_lefts[ii + 1]
-                        else:
-                            speak_lefts[ii + 1] = speak_rights[ii]
-
-                ## For each sky peak, look to see if it exists in the galaxy spectrum
-                ## If it exists, scale the peak flux to match the galaxy and subtract that line
-                ## if line doesn't exist, do nothing
-                doctored = subd_galflux.copy()
-                mean_ratio = np.mean(gheights) / np.mean(heights)
-                npeaks = len(peak_inds)
-                for ii, peak in enumerate(peak_inds):
-                    match = np.where(np.abs(gpeak_inds - peak) < 1.1)[0]
-                    if len(match) > 0:
-                        if len(match) > 1:
-                            match = np.max(match)  # match[np.argmax(gheights[match])]
-                        sky_height = heights[ii]
-                        left = peak_lefts[ii]
-                        right = peak_rights[ii]
-                        if ((gpeak_rights[match] - right) > 4) and (ii < npeaks - 1):
-                            if np.abs(gpeak_rights[match] - peak_rights[ii + 1]) < 4:
-                                # print("changed rights")
-                                right = int(peak_rights[ii + 1])
-                                sky_height = np.max([heights[ii], heights[ii + 1]])
-                        elif ((left - gpeak_lefts[match]) > 4) and (ii > 0):
-                            if np.abs(peak_lefts[ii - 1] - gpeak_lefts[match]) < 4:
-                                # print("changed lefts")
-                                left = int(peak_lefts[ii - 1])
-                                sky_height = np.max([heights[ii], heights[ii - 1]])
-
-                        if (right - gpeak_rights[match]) > 2:
-                            right = int(gpeak_rights[match])
-                        if (gpeak_lefts[match] - left) > 2:
-                            left = int(gpeak_lefts[match])
-
-                        gal_height = gheights[match]
-
-                        ratio = np.mean(doctored[left:right]) / np.mean(master_interp[left:right])
-                        if (ratio > 0.1 * mean_ratio) and (ratio < 10 * mean_ratio):
-                            test_sub = doctored[left:right] - (ratio * master_interp[left:right])
-                            if np.std(test_sub) > (6 * np.std(doctored[200:200 + 4 * (right - left)])):
-                                # slope = ((doctored[right]-doctored[left])/(right-left))
-                                # test_sub = np.arange(right-left)*slope+doctored[left]
-                                test_sub = np.ones(right - left) * np.sort(doctored[left:right])[((right - left) // 10)]
-                            doctored[left:right] = test_sub
-
-                out_sci_data.add_column(Table.Column(name=galfib, data=(doctored + continuum)))
-                sci_lams[galfib] = gallams
-                plt.figure()
-                plt.plot(gallams, sci_data[galfib], alpha=0.4, label='orig')
-                plt.plot(gallams, doctored + continuum, alpha=0.4, label='doctored')
-                plt.plot(gallams, sci_data[galfib] - outskyflux, alpha=0.4, label='basic')
-                plt.plot(gallams, outskyflux, alpha=0.4, label='sky')
-                plt.legend(loc='best')
-                plt.show()
-            scis[obs] = (out_sci_data.copy(), sci_lams.copy(), sci_filnum)
-            self.all_hdus[(cam, sci_filnum, 'science', None)] = fits.BinTableHDU(data=out_sci_data,
-                                                                                 header=sci_hdu.header, name='flux')
-
-        # plt.figure()
-        # for obs,(scidict,lamdict,scifile) in scis.items():
-        #     for nam in lamdict.keys():
-        #         plt.plot(lamdict[nam],scidict[nam],alpha=0.4)
-        # plt.show()
 
 
     def fit_redshfits(self,cam):
