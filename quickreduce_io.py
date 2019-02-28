@@ -35,7 +35,7 @@ class DirectoryManager:
                                 'remove_crs':  {'read':dirnms['stitched'], 'write':dirnms['products']},\
                                 'apcut':       {'read':dirnms['products'], 'write':dirnms['oned']}, \
                                 'wavecalib':   {'read':dirnms['oned'],     'write':dirnms['calibd1d']},\
-                                'flat':        {'read':dirnms['calibd1d'], 'write':dirnms['calibd1d']}, \
+                                'flatten':        {'read':dirnms['calibd1d'], 'write':dirnms['calibd1d']}, \
                                 'skysub':      {'read':dirnms['calibd1d'], 'write':dirnms['calibd1d']}, \
                                 'combine':     {'read':dirnms['calibd1d'], 'write':dirnms['final1d']},\
                                 'zfit':        {'read':dirnms['final1d'],  'write':dirnms['zfit']}\
@@ -113,7 +113,7 @@ class FileManager:
                                 'remove_crs': {'read': flnm_tmplt['stitched'], 'write': flnm_tmplt['stitched']}, \
                                 'apcut': {'read': flnm_tmplt['stitched'], 'write': flnm_tmplt['oneds']}, \
                                 'wavecalib': {'read': flnm_tmplt['oneds'], 'write': flnm_tmplt['oneds']}, \
-                                'flat': {'read': flnm_tmplt['oneds'], 'write': flnm_tmplt['oneds']}, \
+                                'flatten': {'read': flnm_tmplt['oneds'], 'write': flnm_tmplt['oneds']}, \
                                 'skysub': {'read': flnm_tmplt['oneds'], 'write': flnm_tmplt['oneds']}, \
                                 'combine': {'read': flnm_tmplt['oneds'], 'write': flnm_tmplt['combined']}, \
                                 'zfit': {'read': flnm_tmplt['combined'], 'write': flnm_tmplt['combined']} \
@@ -126,7 +126,7 @@ class FileManager:
                                 'remove_crs':  {'read':flnm_tags['debiased'], 'write': flnm_tags['crrmvd']},\
                                 'apcut':       {'read':flnm_tags['crrmvd'],   'write': flnm_tags['crrmvd']}, \
                                 'wavecalib':   {'read':flnm_tags['crrmvd'],   'write': flnm_tags['wavecald']},\
-                                'flat':        {'read':flnm_tags['wavecald'], 'write': flnm_tags['flatnd']}, \
+                                'flatten':        {'read':flnm_tags['wavecald'], 'write': flnm_tags['flatnd']}, \
                                 'skysub':      {'read':flnm_tags['flatnd'],   'write': flnm_tags['skysubd']}, \
                                 'combine':     {'read':flnm_tags['skysubd'],  'write': flnm_tags['skysubd']},\
                                  'zfit':       {'read':flnm_tags['skysubd'],  'write': flnm_tags['skysubd']}\
@@ -191,6 +191,8 @@ class FileManager:
         if len(inhdulist)>1:
             if 'flux' in inhdulist:
                 inhdu = inhdulist['flux']
+            elif 'wave' in inhdulist:
+                inhdu = inhdulist['wave']
             else:
                 inhdu = inhdulist[1]
         else:
@@ -251,6 +253,8 @@ class FileManager:
             ftype = fittype.replace('basic','')
         elif 'full' in fittype:
             ftype = fittype.replace('full','')
+        else:
+            ftype = fittype
         if locate_type == 'basic':
             fittype = '(basic)' + ftype
             match_str = self.calibration_template.format(cam=camera, fittype=fittype, \

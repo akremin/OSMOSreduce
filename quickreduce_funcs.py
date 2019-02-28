@@ -14,21 +14,20 @@ def format_plot(ax, title=None, xlabel=None, ylabel=None, labelsize=16, titlesiz
                 legendloc=None):
     if titlesize is None:
         titlesize = labelsize + 2
-    if ticksize is None:
-        ticksize = labelsize - 2
     if legendsize is None:
-        legendsize = labelsize - 4
+        legendsize = labelsize - 2
     if title is not None:
-        plt.title(title, fontsize=titlesize)
+        ax.set_title(title, fontsize=titlesize)
     if xlabel is not None:
-        plt.xlabel(xlabel, fontsize=labelsize)
+        ax.set_xlabel(xlabel, fontsize=labelsize)
     if ylabel is not None:
-        plt.ylabel(ylabel, fontsize=labelsize)
+        ax.set_ylabel(ylabel, fontsize=labelsize)
     if legendloc is not None:
-        plt.legend(loc=legendloc, fontsize=legendsize)
+        ax.legend(loc=legendloc, fontsize=legendsize)
 
-    plt.setp(ax.get_xticklabels(), fontsize=ticksize)
-    plt.setp(ax.get_yticklabels(), fontsize=ticksize)
+    if ticksize is not None:
+        ax.set_xticklabels(labels=ax.get_xticklabels(), fontsize=ticksize)
+        ax.set_yticklabels(labels=ax.get_yticklabels(), fontsize=ticksize)
 
 
 def debug_plots(opamparray,camera, opamp, filetype='Bias',typical_sep=100,np_oper=np.median):

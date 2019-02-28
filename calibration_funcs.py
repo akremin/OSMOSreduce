@@ -294,7 +294,7 @@ def fit_using_crosscorr(pixels, raw_spec, comp_highres_fluxes, avals, bvals, cva
     return aitterbest, bitterbest, citterbest, corrbest
 
 def gaussian(x0,height,xs):
-    width = 0.01+np.log(height)/np.log(500.)
+    width = 1.0+0.2*np.log(height)/np.log(500.)
     twosig2 = 2.*width*width
     dx = xs-x0
     fluxes = height*np.exp(-(dx*dx)/twosig2)
@@ -706,6 +706,49 @@ def pix_to_wave(xs, coefs):
            #coefs['d'] * np.power(xs, 3) + coefs['e'] * np.power(xs, 4) + \
            #coefs['f'] * np.power(xs, 5)
 
+def pix_to_wave_fifthorder(xs, coefs):
+    return coefs[0] + coefs[1] * xs + coefs[2] * np.power(xs, 2) + \
+           coefs[3] * np.power(xs, 3) + coefs[4] * np.power(xs, 4) + \
+           coefs[5] * np.power(xs, 5)
+
+
+def iterate_fib(fib):
+    tetn = int(fib[1])
+    fibn = int(fib[2:])
+    if tetn == 8 and fibn >= 8:
+        fibn -= 1
+    elif tetn == 4 and fibn >= 8:
+        fibn -= 1
+    else:
+        fibn += 1
+        if fibn > 16:
+            tetn += 1
+            fibn = 1
+    outfib = '{}{}{:02d}'.format(cam, tetn, fibn)
+    return outfib
+
+
+def ensure_match(fib, allfibs, subset, cam):
+    print(fib)
+    outfib = fib
+    if outfib not in allfibs:
+        outfib = iterate_fib(outfib)
+        outfib = ensure_match(outfib, allfibs, subset, cam)
+    if outfib in subset:
+        outfib = iterate_fib(outfib)
+        outfib = ensure_match(outfib, allfibs, subset, cam)
+    return outfib
+
+def find_devs(table1,table2):
+    xs = np.arange(2000).astype(np.float64)
+    overlaps = list(set(list(table1.colnames)).intersection(set(list(table2.colnames))))
+    devs = []
+    for fib in overlaps:
+        coef_dev = np.asarray(table1[fib])-np.asarray(table2[fib])
+        full_devs = pix_to_wave_fifthorder(xs, coef_dev)
+        dev = np.std(full_devs)
+        devs.append(dev)
+    return np.mean(devs)
 
 def split_params(off,lin,quad,offstep,linstep,quadstep):
     def_quad_fine = quad

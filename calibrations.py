@@ -10,7 +10,9 @@ from astropy.table import Table, hstack
 
 from calibration_funcs import compare_outputs, automated_calib_wrapper_script, interactive_plot, \
     fit_using_crosscorr, get_highestflux_waves, update_default_dict, \
-    generate_synthetic_spectra, top_peak_wavelengths
+    generate_synthetic_spectra, top_peak_wavelengths,pix_to_wave_fifthorder,\
+    ensure_match, find_devs
+
 from linebrowser import LineBrowser
 
 
@@ -122,71 +124,61 @@ class Calibrations:
                     calib_tab = calib
                 self.history_calibration_coefs[pairnum] = calib_tab
 
-    def load_final_calib_hdus(self):
-        couldntfind = False
-        if self.do_fine_calib:
-            filnum_ind = 1
-        else:
-            filnum_ind = 0
-        for pairnum, filnums in self.pairings.items():
-            filnum = filnums[filnum_ind]
-            name = self.lampstr_f
-            calib,thetype = self.filemanager.locate_calib_dict(name, self.camera, self.config,filnum,locate_type='full')
-            if calib is None:
-                couldntfind = True
-                break
-            elif thetype != 'full':
-                print("Something went wrong when loading calibrations")
-                print("Specified 'full' but got back {}".format(thetype))
-                couldntfind = True
-                break
-            else:
-                self.final_calibrated_hdulists[pairnum] = calib
-                self.fine_calibration_coefs[pairnum] = Table(calib['calib coefs'].data)
-        if couldntfind:
-            raise(IOError,"Couldn't find matching calibrations. Please make sure the step has been run fully")
 
-
-    def run_initial_calibrations(self):
+    def run_initial_calibrations(self,skip_coarse=False,single_core=False):
         for pairnum,(cc_filnum, throwaway) in self.pairings.items():
-            comp_data = Table(self.coarse_calibrations[cc_filnum].data)
-            fibernames = np.sort(comp_data.colnames)
-            fib1s = fibernames[:int(len(fibernames) / 2) + 1]
-            fib2s = fibernames[int(len(fibernames) / 2) - 1:][::-1]
-            histories = self.history_calibration_coefs[pairnum]
-            if histories is not None:
-                hist1 = histories[fib1s.tolist()]
-                hist2 = histories[fib2s.tolist()]
+            if skip_coarse and self.history_calibration_coefs[pairnum] is not None:
+                self.coarse_calibration_coefs[pairnum] = self.history_calibration_coefs[pairnum].copy()
             else:
-                hist1,hist2 = None, None
-            coarse_comp_data_hist = None
-            # coarse_comp_data_hist = Table.read("out_coefs_{}.fits".format(filenum_hist),format='fits')
-            obs1 = {'coarse_comp': comp_data[fib1s.tolist()], 'complinelistdict': self.linelistc,
-                'print_itters': False,'last_obs': hist1}
-            obs2 = {'coarse_comp': comp_data[fib2s.tolist()], 'complinelistdict': self.linelistc,
-                'print_itters': False,'last_obs':hist2}
+                comp_data = Table(self.coarse_calibrations[cc_filnum].data)
+                fibernames = np.sort(comp_data.colnames)
 
-            all_obs = [obs1, obs2]
-            if len(all_obs) < 4:
-                NPROC = len(all_obs)
-            else:
-                NPROC = 4
+                if single_core:
+                    histories = self.history_calibration_coefs[pairnum]
+                    obs1 = {
+                        'coarse_comp': comp_data, 'complinelistdict': self.linelistc,
+                        'print_itters': True, 'last_obs': histories
+                    }
 
-            with Pool(NPROC) as pool:
-                tabs = pool.map(automated_calib_wrapper_script, all_obs)
-                print(tabs)
+                    out_calib = automated_calib_wrapper_script(obs1)
+                else:
+                    fib1s = fibernames[:int(len(fibernames) / 2) + 1]
+                    fib2s = fibernames[int(len(fibernames) / 2) - 1:][::-1]
+                    histories = self.history_calibration_coefs[pairnum]
+                    if histories is not None:
+                        hist1 = histories[fib1s.tolist()]
+                        hist2 = histories[fib2s.tolist()]
+                    else:
+                        hist1,hist2 = None, None
+                    coarse_comp_data_hist = None
+                    # coarse_comp_data_hist = Table.read("out_coefs_{}.fits".format(filenum_hist),format='fits')
+                    obs1 = {'coarse_comp': comp_data[fib1s.tolist()], 'complinelistdict': self.linelistc,
+                        'print_itters': False,'last_obs': hist1}
+                    obs2 = {'coarse_comp': comp_data[fib2s.tolist()], 'complinelistdict': self.linelistc,
+                        'print_itters': False,'last_obs':hist2}
 
-            compare_outputs(comp_data, tabs[0], tabs[1])
+                    all_obs = [obs1, obs2]
+                    if len(all_obs) < 4:
+                        NPROC = len(all_obs)
+                    else:
+                        NPROC = 4
 
-            tabs[1] = tabs[1][fib2s[::-1].tolist()]
-            tabs[0].remove_column(fibernames[int(len(fibernames) / 2)])
-            tabs[1].remove_column(fibernames[int(len(fibernames) / 2) - 1])
+                    with Pool(NPROC) as pool:
+                        tabs = pool.map(automated_calib_wrapper_script, all_obs)
+                    print(tabs)
 
-            out_calib = hstack([tabs[0], tabs[1]])
+                    compare_outputs(comp_data, tabs[0], tabs[1])
 
-            self.coarse_calibration_coefs[pairnum] = out_calib.copy()
+                    tabs[1] = tabs[1][fib2s[::-1].tolist()]
+                    tabs[0].remove_column(fibernames[int(len(fibernames) / 2)])
+                    tabs[1].remove_column(fibernames[int(len(fibernames) / 2) - 1])
 
-            self.filemanager.save_basic_calib_dict(out_calib, self.lampstr_c, self.camera, self.config, filenum=cc_filnum)
+                    out_calib = hstack([tabs[0], tabs[1]])
+
+
+                self.coarse_calibration_coefs[pairnum] = out_calib.copy()
+
+                self.filemanager.save_basic_calib_dict(out_calib, self.lampstr_c, self.camera, self.config, filenum=cc_filnum)
 
 
     def run_final_calibrations(self):
@@ -197,6 +189,10 @@ class Calibrations:
             filenum_ind = 1
         else:
             filenum_ind = 0
+
+        dev_allowance = 1.
+        devs = 2.
+        initial_coef_table = self.coarse_calibration_coefs[0]
         for pairnum,filnums in self.pairings.items():
             filenum = filnums[filenum_ind]
 
@@ -204,21 +200,26 @@ class Calibrations:
             ## has already been set equal to coarse_calibrations hdus
             data = Table(self.fine_calibrations[filenum].data)
             linelist = self.selected_lines
-            initial_coef_table = OrderedDict()
-            if pairnum == 0:
-                initial_coef_table = self.coarse_calibration_coefs[pairnum]
-            else:
-                last_iteration_coefs = self.fine_calibration_coefs[pairnum-1]
-                evolution = self.evolution_in_coarse_coefs[pairnum]
-                for fiber in last_iteration_coefs.columns:
-                    colvals = last_iteration_coefs[fiber]
-                    initial_coef_table[fiber] = colvals + evolution[fiber]
 
-            out_calib, out_linelist, lambdas, pixels, variances  = self.wavelength_fitting_by_line_selection(data, linelist, self.all_lines, initial_coef_table,select_lines=select_lines)#bounds=None)
+            if pairnum == 0:
+                user_input = 'some'
+            elif pairnum == 1:
+                user_input = 'minimal'
+            elif pairnum > 1 and devs < dev_allowance:
+                user_input = 'none'
+
+            out_calib, out_linelist, lambdas, pixels, variances  = self.wavelength_fitting_by_line_selection(data, linelist, self.all_lines, initial_coef_table,select_lines=select_lines,filenum=filenum,user_input=user_input)#bounds=None)
+
             if select_lines:
                 self.selected_lines = out_linelist
 
-            self.fine_calibration_coefs[pairnum] = out_calib
+            out_calib_table =  Table(out_calib)
+            self.fine_calibration_coefs[pairnum] = out_calib_table.copy()
+
+            if pairnum > 0:
+                devs = find_devs(initial_coef_table,out_calib_table)
+
+            initial_coef_table =  out_calib_table
 
             ## Create hdulist to export
             prim = fits.PrimaryHDU(header=self.fine_calibrations[filenum].header)
@@ -284,7 +285,7 @@ class Calibrations:
             self.filemanager.save_full_calib_dict(outlist, self.lampstr_f, self.camera, self.config, filenum=filenum)
 
 
-    def wavelength_fitting_by_line_selection(self, comp, selectedlistdict, fulllinelist, coef_table, select_lines = False, bounds=None):
+    def wavelength_fitting_by_line_selection(self, comp, selectedlistdict, fulllinelist, coef_table, select_lines = False, bounds=None,filenum=None,user_input='some'):
         if select_lines:
             wm, fm = [], []
             for key,(keys_wm,keys_fm) in selectedlistdict.items():
@@ -308,48 +309,31 @@ class Calibrations:
         variances = {}
         app_fit_pix = {}
         app_fit_lambs = {}
-
-        def iterate_fib(fib):
-            tetn = int(fib[1])
-            fibn = int(fib[2:])
-            if tetn == 8 and fibn >= 8:
-                fibn -= 1
-            elif tetn == 4 and fibn >= 8:
-                fibn -= 1
-            else:
-                fibn += 1
-                if fibn > 16:
-                    tetn += 1
-                    fibn = 1
-            outfib = '{}{}{:02d}'.format(cam, tetn, fibn)
-            return outfib
-
-        def ensure_match(fib, allfibs, subset, cam):
-            print(fib)
-            outfib = fib
-            if outfib not in allfibs:
-                outfib = iterate_fib(outfib)
-                outfib = ensure_match(outfib, allfibs, subset, cam)
-            if outfib in subset:
-                outfib = iterate_fib(outfib)
-                outfib = ensure_match(outfib, allfibs, subset, cam)
-            return outfib
-
         cam = comp.colnames[0][0]
-        specific_set = [cam+'101',cam+'816',cam+'416',cam+'501']
         hand_fit_subset = []
-        for i,fib in enumerate(specific_set):
-            outfib = ensure_match(fib,comp.colnames,hand_fit_subset,cam)
-            hand_fit_subset.append(outfib)
-        seed = 10294
-        np.random.seed(seed)
-        randfibs = ['{:02d}'.format(x) for x in np.random.randint(1, 16, 4)]
-        for tetn,fibn in zip([2,3,6,7],randfibs):
-            fib = '{}{}{}'.format(cam,tetn,fibn)
-            outfib = ensure_match(fib, comp.colnames, hand_fit_subset, cam)
-            hand_fit_subset.append(outfib)
+        if user_input=='some':
+            specific_set = [cam+'101',cam+'816',cam+'416',cam+'501']
 
-        #hand_fit_subset = [cam+'101',cam+'416',cam+'816']
+            for i,fib in enumerate(specific_set):
+                outfib = ensure_match(fib,comp.colnames,hand_fit_subset,cam)
+                hand_fit_subset.append(outfib)
+            seed = 10294
+            np.random.seed(seed)
+            randfibs = ['{:02d}'.format(x) for x in np.random.randint(1, 16, 4)]
+            for tetn,fibn in zip([2,3,6,7],randfibs):
+                fib = '{}{}{}'.format(cam,tetn,fibn)
+                outfib = ensure_match(fib, comp.colnames, hand_fit_subset, cam)
+                hand_fit_subset.append(outfib)
+        elif user_input == 'minimal':
+            specific_set = [cam+'101',cam+'416',cam+'816']
+            for i, fib in enumerate(specific_set):
+                outfib = ensure_match(fib, comp.colnames, hand_fit_subset, cam)
+                hand_fit_subset.append(outfib)
+        elif user_input == 'all':
+            hand_fit_subset = list(coef_table.colnames)
+        else:
+            pass
+
         hand_fit_subset = np.asarray(hand_fit_subset)
         extrema_fiber = False
         for fiber in hand_fit_subset:#''r401','r801']:hand_fit_subset
@@ -412,45 +396,59 @@ class Calibrations:
             plt.close()
             del browser
 
-        cont = input("\n\n\tDo you need to repeat any? (y or n)")
-        if cont.lower() == 'y':
-            fiber = input("\n\tName the fiber")
-            print(fiber)
-            cam = comp.colnames[0][0]
-            while fiber != '':
-                if cam not in fiber:
-                    fiber = cam + fiber
-                f_x = comp[fiber].data
-                coefs = coef_table[fiber]
-                iteration_wm, iteration_fm = [], []
-                if select_lines:
-                    iteration_wm, iteration_fm = wm.copy(), fm.copy()
-                else:
-                    iteration_wm, iteration_fm = selectedlistdict[fiber]
-
-                browser = LineBrowser(iteration_wm, iteration_fm, f_x, coefs, fulllinelist, bounds=bounds,edge_line_distance=-20.0)
-                browser.plot()
-                params, covs = browser.fit()
-
-                print(fiber, *params)
-                all_coefs[fiber] = params
-                variances[fiber] = covs.diagonal()
-                print(np.dot(variances[fiber], variances[fiber]))
-
-                if select_lines:
-                    app_specific_linelists[fiber] = (browser.wm, browser.fm)
-
-                # wave, Flux, fifth, fourth, cube, quad, stretch, shift = wavecalibrate(p_x, f_x, 1679.1503, 0.7122818, 2778.431)
-                plt.close()
-                del browser
+        if len(hand_fit_subset)>0:
+            cont = input("\n\n\tDo you need to repeat any? (y or n)")
+            if cont.lower() == 'y':
                 fiber = input("\n\tName the fiber")
+                print(fiber)
+                cam = comp.colnames[0][0]
+                while fiber != '':
+                    if cam not in fiber:
+                        fiber = cam + fiber
+                    f_x = comp[fiber].data
+                    coefs = coef_table[fiber]
+                    iteration_wm, iteration_fm = [], []
+                    if select_lines:
+                        iteration_wm, iteration_fm = wm.copy(), fm.copy()
+                    else:
+                        iteration_wm, iteration_fm = selectedlistdict[fiber]
 
+                    browser = LineBrowser(iteration_wm, iteration_fm, f_x, coefs, fulllinelist, bounds=bounds,edge_line_distance=-20.0)
+                    browser.plot()
+                    params, covs = browser.fit()
 
-        numeric_hand_fit_names = np.asarray([ 16*int(fiber[1])+int(fiber[2:]) for fiber in hand_fit_subset])
+                    print(fiber, *params)
+                    all_coefs[fiber] = params
+                    variances[fiber] = covs.diagonal()
+                    print(np.dot(variances[fiber], variances[fiber]))
 
-        last_fiber = cam+'101'
+                    if select_lines:
+                        app_specific_linelists[fiber] = (browser.wm, browser.fm)
 
+                    plt.close()
+
+                    savename = './fiberfits/{}'.format(fiber)
+                    if filenum is not None:
+                        savename = savename + '_' + str(filenum)
+                    browser.create_saveplot(params, covs, savename)
+
+                    del browser
+                    fiber = input("\n\tName the fiber")
+
+        # if len(hand_fit_subset) > 0 and select_lines:
+        #     with open('_selected_lines.pkl','wb') as pklfil:
+        #         pkl.dump((wm,fm,hand_fit_subset,all_coefs),pklfil)
+        # else:
+        #     with open('_selected_lines.pkl','rb') as pklfil:
+        #         (wm,fm,hand_fit_subset,all_coefs) = pkl.load(pklfil)
+
+        if user_input != 'none':
+            numeric_hand_fit_names = np.asarray([ 16*int(fiber[1])+int(fiber[2:]) for fiber in hand_fit_subset])
+            last_fiber = cam+'101'
+
+        coef_table = Table(coef_table)
         all_fibers = np.sort(list(comp.colnames))
+
         for fiber in all_fibers:
             if fiber in hand_fit_subset:
                 continue
@@ -459,29 +457,38 @@ class Calibrations:
             coefs = np.asarray(coef_table[fiber])
             f_x = comp[fiber].data
 
-            fibern = 16*int(fiber[1])+int(fiber[2:])
+            if user_input != 'none' and len(hand_fit_subset)>1:
+                fibern = 16*int(fiber[1])+int(fiber[2:])
 
-            nearest_fibs = hand_fit_subset[np.argsort(np.abs(fibern-numeric_hand_fit_names))[:2]]
-            diffs_fib1 = np.asarray(all_coefs[nearest_fibs[0]]) - np.asarray(coef_table[nearest_fibs[0]])
-            diffs_fib2 = np.asarray(all_coefs[nearest_fibs[1]]) - np.asarray(coef_table[nearest_fibs[1]])
+                nearest_fibs = hand_fit_subset[np.argsort(np.abs(fibern-numeric_hand_fit_names))[:2]]
+                diffs_fib1 = np.asarray(all_coefs[nearest_fibs[0]]) - np.asarray(coef_table[nearest_fibs[0]])
+                diffs_fib2 = np.asarray(all_coefs[nearest_fibs[1]]) - np.asarray(coef_table[nearest_fibs[1]])
 
-            nearest_fib = np.asarray(all_coefs[last_fiber]) - np.asarray(coef_table[last_fiber])
+                nearest_fib = np.asarray(all_coefs[last_fiber]) - np.asarray(coef_table[last_fiber])
 
-            diffs_mean = (0.25*diffs_fib1)+(0.25*diffs_fib2)+(0.5*nearest_fib)
+                diffs_mean = (0.25*diffs_fib1)+(0.25*diffs_fib2)+(0.5*nearest_fib)
 
-            adjusted_coefs_guess = coefs+diffs_mean
+                adjusted_coefs_guess = coefs+diffs_mean
+            else:
+                adjusted_coefs_guess = coefs
+
             browser = LineBrowser(wm,fm, f_x, adjusted_coefs_guess, fulllinelist, bounds=None, edge_line_distance=-20.0)
 
             params,covs = browser.fit()
 
             plt.close()
-            browser.create_saveplot(params, covs, 'fiberfits/{}'.format(fiber))
-            print('\n\n',fiber,*params)
+
+            savename = './fiberfits/{}'.format(fiber)
+            if filenum is not None:
+                savename = savename+'_'+str(filenum)
+            browser.create_saveplot(params, covs, savename)
+            print('\n\n',fiber,'{:.2f}{:.6e}{:.6e}{:.6e}{:.6e}{:.6e}'.format(*params))
             all_coefs[fiber] = params
             variances[fiber] = covs.diagonal()
             normd_vars = variances[fiber]/(params*params)
-            print(np.sqrt(np.sum(normd_vars)))
-            print(np.sqrt(normd_vars))
+
+            print("".format(np.sqrt(normd_vars)))
+            print("".format(np.sqrt(np.sum(normd_vars))))
 
             #savename = '{}'.format(fiber)
             #browser.create_saveplot(params,covs, savename)
@@ -490,6 +497,10 @@ class Calibrations:
             app_fit_lambs[fiber] = browser.line_matches['lines']
             del browser
             last_fiber = fiber
+
+            fitlamb = pix_to_wave_fifthorder(np.asarray(app_fit_pix[fiber]), params)
+            dlamb = fitlamb - app_fit_lambs[fiber]
+            print("mean={}, median={}, std={}".format(np.mean(dlamb),np.median(dlamb),np.std(dlamb)))
 
         if not select_lines:
             app_specific_linelists = None

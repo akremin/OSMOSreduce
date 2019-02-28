@@ -137,7 +137,7 @@ def pipeline(maskname=None,obs_config_name=None,io_config_name=None, pipe_config
 
 
 
-def parse_command_line(argv):
+def parse_command_line(argv=None):
     from optparse import OptionParser
     parser = OptionParser()
     parser.add_option("-m", "--maskname",

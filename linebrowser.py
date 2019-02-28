@@ -282,53 +282,182 @@ class LineBrowser:
         from quickreduce_funcs import format_plot
         waves = fifth_order_poly(self.p_x, *coefs)
         fitlines = np.asarray(self.line_matches['lines'])
+        fitlineloc = np.asarray(self.wm)
+        fitheights = np.asarray(self.fm)
         dellines = np.asarray(self.all_wms)
         fitpix = np.asarray(self.line_matches['peaks_p'])
 
-        fig = plt.figure(figsize=(20., 25.))
-        ax_lineplot = plt.subplot2grid((5, 4), (0, 0), colspan=4, fig=fig)
-        ax_loglineplot = plt.subplot2grid((5, 4), (1, 0), colspan=4, fig=fig)
-        ax_alllineplot = plt.subplot2grid((5, 4), (2, 0), colspan=4, fig=fig)
-        axfitpts = plt.subplot2grid((5, 4), (3, 0), colspan=2, rowspan=2, fig=fig)
-        axcovar = plt.subplot2grid((5, 4), (3, 2), colspan=2, rowspan=2, fig=fig)
+        fig = plt.figure(figsize=(20., 25.),frameon=False)
+        ax_lineplot_first = plt.subplot2grid((20, 16), (9, 0), colspan=16,rowspan=5, fig=fig)
+        #ax_loglineplot = plt.subplot2grid((5, 4), (1, 0), colspan=4, fig=fig)
+        ax_lineplot_second = plt.subplot2grid((20, 16), (15, 0), colspan=16, rowspan=5, fig=fig)
+        axfitpts = plt.subplot2grid((20, 16), (0, 0), colspan=10, rowspan=4, fig=fig)#,sharex=True)
+        axresid = plt.subplot2grid((20, 16), (5, 0), colspan=8, rowspan=3, fig=fig)
+        axHisty = plt.subplot2grid((20, 16), (5, 8), colspan=2, rowspan=3, fig=fig)
+        axcovar = plt.subplot2grid((20, 16), (3, 11), colspan=5, rowspan=5, fig=fig)
+        axstats = plt.subplot2grid((20, 16), (0, 11), colspan=6, rowspan=2, fig=fig)
+        #axfitpts = axresid.twinx()
 
-        ax_lineplot.plot(waves, self.yspectra, 'b-')
-        for w in fitlines:
-            ax_lineplot.axvline(w, color='r', alpha=0.5)
-        format_plot(ax_lineplot, title='Fit with used lines', xlabel='Wavelength', ylabel='Flux', labelsize=16)
+        minlam,maxlam = waves.min(),waves.max()
+        middlelam = int((maxlam+minlam)*0.5)
 
-        ax_loglineplot.semilogy(waves, self.yspectra, 'b-')
-        # ax_loglineplot.set_yscale('log')
-        for w in fitlines:
-            ax_loglineplot.axvline(w, color='r', alpha=0.5)
-        format_plot(ax_loglineplot, title='Log Fit with used lines', xlabel='Wavelength', ylabel='Log Flux',
-                    labelsize=16)
+        for axi,lowlim,uplim,title in zip([ax_lineplot_first,ax_lineplot_second],\
+                                          [minlam,middlelam],[middlelam,maxlam],\
+                                          ["First Half of Range","Second Half of Range"]):
+            axi.plot(waves, self.yspectra, 'b-')
+            axi.plot(self.line_matches['peaks_w'], self.line_matches['peaks_h'], 'co', markersize=6, markeredgewidth=2, markerfacecolor='w', alpha=0.5)
+            for w in dellines:
+                axi.axvline(w, color='gray',linewidth=1 ,alpha=0.2)
+            for w in fitlines:
+                axi.axvline(w, color='r',linewidth=1, alpha=0.5)
+            axi.plot(fitlineloc, fitheights/2., 'r.', markersize=8, alpha=0.5)
+            axi.set_xlim(left=lowlim, right=uplim)
+            axi.set_ylim(0,None)
+            format_plot(axi, title=title, xlabel=r'Wavelength [$\mathrm{\AA}$]', ylabel='Counts', labelsize=16)
 
-        ax_alllineplot.plot(waves, self.yspectra, 'b-')
-        for w in dellines:
-            ax_alllineplot.axvline(w, color='gray', alpha=0.5)
-        for w in fitlines:
-            ax_alllineplot.axvline(w, color='r', alpha=0.5)
-        format_plot(ax_alllineplot, title="Fit showing all lines", xlabel='Wavelength', ylabel='Flux', labelsize=16)
 
-        axfitpts.plot(fitpix, fitlines-fitpix-fitpix.min(), 'r.',label='pts-{}-1*pix'.format(fitpix.min()))
+        axfitpts.plot(fitpix, fitlines-fitpix, 'r.',label='pts-1*pix')
         highres_pix = np.arange(fitpix.min(), fitpix.max(), 0.1)
-        axfitpts.plot(highres_pix, fifth_order_poly(highres_pix, *coefs)-highres_pix-fitpix.min(), 'b-',label='fit-{}-1*pix'.format(fitpix.min()))
-        format_plot(axfitpts, title="Fit versus Data", xlabel='Pixels', ylabel='Wavelength', labelsize=16)
-        plt.legend(loc='best')
+        axfitpts.plot(highres_pix, fifth_order_poly(highres_pix, *coefs)-highres_pix, 'b-',label='fit-1*pix')
+        format_plot(axfitpts, title="Fit versus Data", xlabel='Pixels', ylabel=r'Wavelength [$\mathrm{\AA}$]', labelsize=16)
+        axfitpts.legend(loc='best')
+
+        residuals = fitlines - fifth_order_poly(fitpix, *coefs)
+        axresid.plot(fitpix, residuals, 'r.')
+        axresid.plot(highres_pix, np.zeros(len(highres_pix)), 'k--')
+        format_plot(axresid, title="Residuals", xlabel='Pixels', ylabel=r'Line-Fit [$\mathrm{\AA}$]', labelsize=16)
+
+        axHisty.hist(residuals, bins=12, orientation='horizontal')
+        axHisty.axhline(0., color='k',linestyle='--')
+        axHisty.set_ylim(axresid.get_ylim())
+        #axHisty.set_ylabel(None)
+        axHisty.set_yticklabels([])
+        #axHisty.set_title(r'Residuals $\mathrm{\AA}$',fontsize=16)
+        axHisty.set_xlabel('Counts',fontsize=16)
 
         normd_cov = cov.copy()
         for i,co in enumerate(coefs):
             for j,co2 in enumerate(coefs):
                 normd_cov[i,j] /= (co*co2)
-        axcovar.matshow(normd_cov)
+        # for i in np.arange(len(coefs)):
+        #     for j in np.arange(i):
+        #         normd_cov[i,j] = 0
+        axcovar.imshow(normd_cov,origin='lower')
         axcovar.set_xticklabels(['','a', 'b', 'c', 'd', 'e', 'f'])
         axcovar.set_yticklabels(['','a', 'b', 'c', 'd', 'e', 'f'])
+        format_plot(axcovar, title='Covariance of Fit', xlabel='Coefficient', ylabel='Coefficient', labelsize=16)
 
-        format_plot(axcovar, title='Covariance of Fit', xlabel='Param_j Unc', ylabel='Param_i Unc', labelsize=16)
-        plt.savefig('{}.png'.format(savename), dpi=600)
+        axstats.set_frame_on(True)
+        #axstats.set_xticklabels(None)
+        axstats.set_xticks([])#None)
+        #axstats.set_yticklabels(None)
+        axstats.set_yticks([])#None)
+        axstats.set_title("Stats on Residuals",fontsize=22)
+        ax_settings = {'verticalalignment':'center', \
+                       'transform': axstats.transAxes, 'fontsize':20 }  #'horizontalalignment':'center'
+        axstats.text(0.1, 0.88, 'mean =\t\t   {:.3e}'.format(np.mean(residuals))+r' $\mathrm{\AA}$',**ax_settings)
+        axstats.text(0.1, 0.68, 'median =\t  {:.3e}'.format(np.median(residuals))+r' $\mathrm{\AA}$',**ax_settings)
+        axstats.text(0.1, 0.48, 'mean abs =\t {:.6f}'.format(np.mean(np.abs(residuals))) + r' $\mathrm{\AA}$', **ax_settings)
+        axstats.text(0.1, 0.28, 'median abs =\t{:.6f}'.format(np.median(np.abs(residuals))) + r' $\mathrm{\AA}$', **ax_settings)
+        axstats.text(0.1, 0.08, 'std dev. =\t    {:.06f}'.format(np.std(residuals))+r' $\mathrm{\AA}$',**ax_settings)
+
+        if '/' in savename:
+            plottitle = savename.split('/')[-1]
+        elif '\\' in savename:
+            plottitle = savename.split('\\')[-1]
+        else:
+            plottitle = savename
+        fig.suptitle(plottitle.replace('_',' '),fontsize=30)
+        fig.savefig('{}.png'.format(savename), dpi=600)
         plt.close()
+        del fig
 
+
+
+
+
+    def create_saveplot_var(self, coefs, cov, savename):
+        from quickreduce_funcs import format_plot
+        waves = fifth_order_poly(self.p_x, *coefs)
+        fitlines = np.asarray(self.line_matches['lines'])
+        fitlineloc = np.asarray(self.wm)
+        fitheights = np.asarray(self.fm)
+        dellines = np.asarray(self.all_wms)
+        fitpix = np.asarray(self.line_matches['peaks_p'])
+
+        fig = plt.figure(figsize=(20., 25.),frameon=False)
+        ax_lineplot_first = plt.subplot2grid((20, 16), (0, 0), colspan=16,rowspan=5, fig=fig)
+        #ax_loglineplot = plt.subplot2grid((5, 4), (1, 0), colspan=4, fig=fig)
+        ax_lineplot_second = plt.subplot2grid((20, 16), (6, 0), colspan=16, rowspan=5, fig=fig)
+        axfitpts = plt.subplot2grid((20, 16), (12, 0), colspan=10, rowspan=4, fig=fig)#,sharex=True)
+        axresid = plt.subplot2grid((20, 16), (17, 0), colspan=10, rowspan=3, fig=fig)
+        axcovar = plt.subplot2grid((20, 16), (15, 11), colspan=5, rowspan=5, fig=fig)
+        axstats = plt.subplot2grid((20, 16), (12, 11), colspan=5, rowspan=2, fig=fig)
+        #axfitpts = axresid.twinx()
+
+        minlam,maxlam = waves.min(),waves.max()
+        middlelam = int((maxlam+minlam)*0.5)
+
+        for axi,lowlim,uplim,title in zip([ax_lineplot_first,ax_lineplot_second],\
+                                          [minlam,middlelam],[middlelam,maxlam],\
+                                          ["First Half of Range","Second Half of Range"]):
+            axi.plot(waves, self.yspectra, 'b-')
+            axi.plot(self.line_matches['peaks_w'], self.line_matches['peaks_h'], 'co', markersize=6, markeredgewidth=2, markerfacecolor='w', alpha=0.5)
+            for w in dellines:
+                axi.axvline(w, color='gray',linewidth=1 ,alpha=0.2)
+            for w in fitlines:
+                axi.axvline(w, color='r',linewidth=1, alpha=0.5)
+            axi.plot(fitlineloc, fitheights/2., 'r.', markersize=8, alpha=0.5)
+            axi.set_xlim(left=lowlim, right=uplim)
+            axi.set_ylim(0,None)
+            format_plot(axi, title=title, xlabel=r'Wavelength [$\mathrm{\AA}$]', ylabel='Counts', labelsize=16)
+
+
+        axfitpts.plot(fitpix, fitlines-fitpix, 'r.',label='pts-1*pix')
+        highres_pix = np.arange(fitpix.min(), fitpix.max(), 0.1)
+        axfitpts.plot(highres_pix, fifth_order_poly(highres_pix, *coefs)-highres_pix, 'b-',label='fit-1*pix')
+        format_plot(axfitpts, title="Fit versus Data", xlabel='Pixels', ylabel=r'Wavelength [$\mathrm{\AA}$]', labelsize=16)
+        axfitpts.legend(loc='best')
+
+        residuals = fitlines - fifth_order_poly(fitpix, *coefs)
+        axresid.plot(fitpix, residuals, 'r.')
+        axresid.plot(highres_pix, np.zeros(len(highres_pix)), 'k--')
+        format_plot(axresid, title="Residuals", xlabel='Pixels', ylabel=r'Line-Fit [$\mathrm{\AA}$]', labelsize=16)
+
+        normd_cov = cov.copy()
+        for i,co in enumerate(coefs):
+            for j,co2 in enumerate(coefs):
+                normd_cov[i,j] /= (co*co2)
+        # for i in np.arange(len(coefs)):
+        #     for j in np.arange(i):
+        #         normd_cov[i,j] = 0
+        axcovar.imshow(normd_cov,origin='lower')
+        axcovar.set_xticklabels(['','a', 'b', 'c', 'd', 'e', 'f'])
+        axcovar.set_yticklabels(['','a', 'b', 'c', 'd', 'e', 'f'])
+        format_plot(axcovar, title='Covariance of Fit', xlabel='Coefficient', ylabel='Coefficient', labelsize=16)
+
+        axstats.set_frame_on(True)
+        #axstats.set_xticklabels(None)
+        axstats.set_xticks([])#None)
+        #axstats.set_yticklabels(None)
+        axstats.set_yticks([])#None)
+        axstats.set_title("Stats on Residuals",fontsize=22)
+        ax_settings = {'verticalalignment':'center', \
+                       'transform': axstats.transAxes, 'fontsize':20 }  #'horizontalalignment':'center'
+        axstats.text(0.10, 0.80, 'mean = {:.06e}'.format(np.mean(residuals))+r' $\mathrm{\AA}$',**ax_settings)
+        axstats.text(0.10, 0.50, 'median = {:.06e}'.format(np.median(residuals))+r' $\mathrm{\AA}$',**ax_settings)
+        axstats.text(0.10, 0.20, 'std = {:.06f}'.format(np.std(residuals))+r' $\mathrm{\AA}$',**ax_settings)
+
+        if '/' in savename:
+            plottitle = savename.split('/')[-1]
+        elif '\\' in savename:
+            plottitle = savename.split('\\')[-1]
+        else:
+            plottitle = savename
+        fig.suptitle(plottitle,fontsize=24)
+        fig.savefig('{}.png'.format(savename), dpi=600)
+        plt.close()
+        del fig
 
 def least_squares_fit(coefs,pixels,wavelengths,bounds):
     # fit 5th order polynomial to peak/line selections

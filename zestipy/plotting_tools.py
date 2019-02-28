@@ -86,5 +86,5 @@ def summary_plot(waves, flux, templ_waves, template,zest,z_test,corrs,plt_name,f
     ax.legend(loc='best')
     ax.set_xlabel('Redshift')
     ax.set_ylabel('Correlation')
-    plt.savefig(plt_name,dpi=600)
+    plt.savefig(plt_name,dpi=600,overwrite=True)
     plt.close()
