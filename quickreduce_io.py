@@ -106,6 +106,7 @@ class FileManager:
         self.default_calibration_template = flnm_tmplt['default_calibration']
         self.pickled_datadump_name =flnm_tmplt['pickled_datadump']
         self.lampline_template = flnm_tmplt['lampline']
+        self.redshift_fit_template = flnm_tmplt['redshift_fits']
 
         self.tempname_dict = {
                                 'bias': {'read': flnm_tmplt['raw'], 'write': flnm_tmplt['debiased']},
@@ -167,19 +168,32 @@ class FileManager:
         filename = os.path.join(self.directory.current_read_dir, inname)
         return filename
 
-    def get_write_filename(self,camera, imtype, filenum,amp):
-        outname = self.current_write_template.format(cam=camera, imtype=imtype, filenum=filenum,\
-                                                         opamp=amp, maskname=self.maskname)
+    def get_write_filename(self,camera, imtype, filenum =None,amp=None):
+        if imtype != 'zfit':
+            outname = self.current_write_template.format(cam=camera, imtype=imtype, filenum=filenum,\
+                                                             opamp=amp, maskname=self.maskname)
+        else:
+            outname = self.redshift_fit_template.format(cam=camera,maskname=self.maskname)
         filename = os.path.join(self.directory.current_write_dir, outname)
         return filename
 
 
-    def write_hdu(self,outhdu, camera='r', filenum=999,imtype='comp',amp=None,history=None):
+    def write_hdu(self,outhdu, camera='r', filenum=999,imtype='comp',amp=None, step=None, history=None):
         if history is not None:
             outhdu.header.add_history(history)
-        outhdu.header.add_history("wrote by M2FS reduce on {}".format(self.date_timestamp))
+        outhdu.header.add_history("wrote by M2FS reduce after step {} on {}".format(step,self.date_timestamp))
 
         filename = self.get_write_filename(camera=camera,imtype=imtype,filenum=filenum,amp=amp)
+
+        outhdu.writeto(filename, overwrite=True)
+
+
+    def write_zfit(self,outhdu, camera='r', step=None, history=None):
+        if history is not None:
+            outhdu.header.add_history(history)
+        outhdu.header.add_history("wrote by M2FS reduce after step {} on {}".format(step,self.date_timestamp))
+
+        filename = self.get_write_filename(camera=camera,imtype='zfit')
 
         outhdu.writeto(filename, overwrite=True)
 
@@ -305,9 +319,13 @@ class FileManager:
 
         return all_hdus
 
-    def write_all_filedata(self,all_hdus):
-        for (camera,filnum,imtype,opamp),outhdu in all_hdus.items():
-            self.write_hdu(outhdu=outhdu,camera=camera, filenum=filnum, imtype=imtype, amp=opamp)
+    def write_all_filedata(self,all_hdus,step=''):
+        if step != 'zfit':
+            for (camera,filnum,imtype,opamp),outhdu in all_hdus.items():
+                self.write_hdu(outhdu=outhdu,camera=camera, filenum=filnum, imtype=imtype, amp=opamp, step=step)
+        else:
+            for camera,hdu in all_hdus.items():
+                self.write_zfit(outhdu=hdu,camera=camera,step=step)
 
     def load_calibration_lines_dict(self,cal_lamp,wavemincut=4000,wavemaxcut=10000,use_selected=False):
         """Assumes the format of the salt linelist csvs privuded with this package"""

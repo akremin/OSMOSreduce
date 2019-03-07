@@ -19,8 +19,8 @@ def stitch_all_images(all_hdus,date):
 
 
 def stitch_these_camera_data(hdudict,date):
-    xorients = {1: 'l', -1: 'r'}
-    yorients = {1: 'b', -1: 'u'}
+    xorients = {-1: 'l', 1: 'r'}
+    yorients = {-1: 'b', 1: 'u'}
 
     img = {}
     for opamp,hdu in hdudict.items():
@@ -63,6 +63,10 @@ def stitch_these_camera_data(hdudict,date):
     ## ur
     merged[y_bl:, x_bl:] = trans['ur']
 
+    ## This returns the image with wavelength increasing to the left
+    ## For simplicity, flip image so wavelength increases with pixel number
+    merged = np.fliplr(merged)
+
     ## Update header
     opamp = 1
     header = hdudict[opamp].header.copy()
@@ -79,6 +83,7 @@ def stitch_these_camera_data(hdudict,date):
 
     header.add_history("Stitched 4 opamps by quickreduce on {}".format(date))
 
+    plt.figure(); plt.imshow(merged,origin='lower'); plt.show()
     ## Save data and header to working memory
     outhdu = fits.PrimaryHDU(data=merged, header=header)
 

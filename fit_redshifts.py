@@ -29,10 +29,10 @@ def fit_redshifts(sky_subd_sciences,mask_name,run_auto=True,prior = None):
 
     if run_auto:
         outnames = ['apperature','redshift_est', 'cor', 'template', 'SNavg', 'SNHKmin', 'HSN', 'KSN', 'GSN']
-        types = [str,float,float,str,float,float,float,float,float]
+        types = ['S4',float,float,'S3',float,float,float,float,float]
     else:
         outnames = ['apperature','redshift_est', 'quality_val', 'cor', 'template', 'SNavg', 'SNHKmin', 'HSN', 'KSN', 'GSN']
-        types = [str,float,int,float,str,float,float,float,float,float]
+        types = ['S4',float,int,float,'S3',float,float,float,float,float]
     outtable = Table(names=outnames,dtype=types)
 
     if not run_auto:

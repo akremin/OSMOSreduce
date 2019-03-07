@@ -12,7 +12,7 @@ def flatten_data(fiber_fluxes,waves):
     orig_fluxs_arr = []
     names = []
     pixels = np.arange(len(fiber_fluxes[fiber_fluxes.colnames[0]])).astype(np.float64)
-    for name in waves.columns:
+    for name in waves.colnames:
         a,b,c,d,e,f = waves[name]
         lams = a + b*pixels+ c*np.power(pixels,2)+ d*np.power(pixels,3) +\
                e*np.power(pixels, 4)+ f*np.power(pixels,5)
@@ -29,7 +29,7 @@ def flatten_data(fiber_fluxes,waves):
     ## Create a grid of wavelengths to interpolate data onto
     min_lam, max_lam = np.min(waves_array[:,0]),np.max(waves_array[:,-1])
     min_shared_lam, max_shared_lam = np.max(waves_array[:,0]),np.min(waves_array[:,-1])
-    outwaves = np.arange(min_shared_lam,max_shared_lam,0.2)
+    outwaves = np.arange(min_shared_lam,max_shared_lam,0.1)
 
     ## Initialize the fitted wavelength grade arrays
     adj_flux_array = np.ndarray(shape=(orig_flux_array.shape[0],outwaves.shape[0]))
@@ -91,7 +91,10 @@ def flatten_data(fiber_fluxes,waves):
             lower_lastnan = lower_nanlocs[-1]
             lower_first_val = final_flux[lower_lastnan+1]
             lower_slope = (lower_first_val - fiber_acceptances[ii])/(lower_lastnan+1)
-            lower_fill_values = lower_nanlocs * lower_slope + fiber_acceptances[ii]
+            if lower_slope < 0:
+                lower_fill_values = np.ones(len(lower_nanlocs)).astype(float)*lower_first_val
+            else:
+                lower_fill_values = lower_nanlocs * lower_slope + fiber_acceptances[ii]
         elif len(lower_nanlocs)==1:
             lower_lastnan = lower_nanlocs[0]
             lower_first_val = final_flux[lower_lastnan+1]
@@ -102,6 +105,8 @@ def flatten_data(fiber_fluxes,waves):
             higher_firstnan = higher_nanlocs[0]
             higher_lastval = final_flux[higher_firstnan-1]
             higher_slope = (fiber_acceptances[ii] - higher_lastval ) / (len(final_flux)-higher_firstnan-1)
+            if higher_slope > 0.:
+                higher_slope = 0.
             higher_fill_values = (higher_nanlocs-higher_nanlocs[0])*higher_slope + higher_lastval
         elif len(higher_nanlocs)==1:
             higher_firstnan = higher_nanlocs[0]
