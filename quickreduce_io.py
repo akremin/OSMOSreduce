@@ -26,6 +26,7 @@ class DirectoryManager:
         self.calibration_dir = os.path.abspath(os.path.join(PATHS['data_product_loc'],dirnms['calibration']))
         self.default_calibration_dir = os.path.abspath(PATHS['default_calibration'])
         self.lampline_dir    = os.path.abspath(PATHS['lampline'])
+        self.plot_dir        = os.path.join(self.data_product_loc,dirnms['save_plots'])
         self.catalog_path    = os.path.abspath(PATHS['catalog_loc'])
         self.mtlz_path       = os.path.abspath(PATHS['mtlz_path'])
 
@@ -107,6 +108,7 @@ class FileManager:
         self.pickled_datadump_name =flnm_tmplt['pickled_datadump']
         self.lampline_template = flnm_tmplt['lampline']
         self.redshift_fit_template = flnm_tmplt['redshift_fits']
+        self.save_plot_template = flnm_tmplt['save_plots']
 
         self.tempname_dict = {
                                 'bias': {'read': flnm_tmplt['raw'], 'write': flnm_tmplt['debiased']},
@@ -162,6 +164,11 @@ class FileManager:
         print("Template changed for step {} to:\n read={}\n write={}".format(step, self.current_read_template,\
                                                                              self.current_write_template))
 
+    def get_saveplot_template(self,cam='',ap='',imtype='',step='',comment=''):
+        basic_template = self.save_plot_template.format(cam=cam,ap=ap,imtype=imtype,\
+                                                        step=step,comment=comment)
+        return os.path.join(self.directory.plot_dir,basic_template)
+
     def get_read_filename(self,camera, imtype, filenum, amp):
         inname = self.current_read_template.format(cam=camera, imtype=imtype, filenum=filenum,\
                                                        opamp=amp, maskname=self.maskname)
@@ -188,14 +195,14 @@ class FileManager:
         outhdu.writeto(filename, overwrite=True)
 
 
-    def write_zfit(self,outhdu, camera='r', step=None, history=None):
-        if history is not None:
-            outhdu.header.add_history(history)
-        outhdu.header.add_history("wrote by M2FS reduce after step {} on {}".format(step,self.date_timestamp))
-
-        filename = self.get_write_filename(camera=camera,imtype='zfit')
-
-        outhdu.writeto(filename, overwrite=True)
+    # def write_zfit(self,outhdu, camera='r', step=None, history=None):
+    #     if history is not None:
+    #         outhdu.header.add_history(history)
+    #     outhdu.header.add_history("wrote by M2FS reduce after step {} on {}".format(step,self.date_timestamp))
+    #
+    #     filename = self.get_write_filename(camera=camera,imtype='zfit')
+    #
+    #     outhdu.writeto(filename, overwrite=True)
 
 
     def read_hdu(self,camera='r', filenum=999,imtype='comp',amp=None,fibersplit=False):
@@ -320,12 +327,12 @@ class FileManager:
         return all_hdus
 
     def write_all_filedata(self,all_hdus,step=''):
-        if step != 'zfit':
-            for (camera,filnum,imtype,opamp),outhdu in all_hdus.items():
-                self.write_hdu(outhdu=outhdu,camera=camera, filenum=filnum, imtype=imtype, amp=opamp, step=step)
-        else:
-            for camera,hdu in all_hdus.items():
-                self.write_zfit(outhdu=hdu,camera=camera,step=step)
+        # if step != 'zfit':
+        for (camera,filnum,imtype,opamp),outhdu in all_hdus.items():
+            self.write_hdu(outhdu=outhdu,camera=camera, filenum=filnum, imtype=imtype, amp=opamp, step=step)
+        # else:
+        #     for camera,hdu in all_hdus.items():
+        #         self.write_zfit(outhdu=hdu,camera=camera,step=step)
 
     def load_calibration_lines_dict(self,cal_lamp,wavemincut=4000,wavemaxcut=10000,use_selected=False):
         """Assumes the format of the salt linelist csvs privuded with this package"""

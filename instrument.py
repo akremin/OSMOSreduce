@@ -66,4 +66,7 @@ class InstrumentState:
         else:
             out_num_list = [classify_str(string, expected_type)]
 
+        ## Correct bug where empty brackets returned a list with an empty string instead of an empty list
+        if len(out_num_list) == 1 and out_num_list[0] == '':
+            out_num_list = []
         return np.asarray(out_num_list)

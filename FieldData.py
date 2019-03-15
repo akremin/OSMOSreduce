@@ -8,6 +8,7 @@ from scipy.signal import medfilt, find_peaks
 from collections import OrderedDict
 from calibrations import Calibrations
 from observations import Observations
+from sky_subtraction import subtract_sky
 import matplotlib.pyplot as plt
 
 class FieldData:
@@ -17,9 +18,13 @@ class FieldData:
         self.obs_pairing_strategy = pipeline_options['pairing_strategy']
         self.twod_to_oned = pipeline_options['twod_to_oned_strategy']
         self.debias_strategy = pipeline_options['debias_strategy']
+        self.skysub_strategy = pipeline_options['skysub_strategy']
+
         self.convert_adu_to_e = (str(pipeline_options['convert_adu_to_e']).lower()=='true')
         self.skip_coarse_calib = (str(pipeline_options['try_skip_coarse_calib']).lower()=='true')
         self.single_core = (str(pipeline_options['single_core']).lower()=='true')
+        self.save_plots = (str(pipeline_options['save_plots']).lower()=='true')
+        self.show_plots = (str(pipeline_options['show_plots']).lower()=='true')
         self.check_parameter_flags()
 
         self.twostep_wavecomparc = (len(list(filenumbers['fine_comp']))>0)
@@ -58,6 +63,8 @@ class FieldData:
         if self.reduction_order[startstep]>self.reduction_order['wavecalib']:
             self.get_final_wavelength_coefs()
         self.mtlz = self.filemanager.get_matched_target_list()
+        self.all_skies = {}
+        self.all_gals = {}
 
     def check_parameter_flags(self):
         if self.twod_to_oned != 'simple':
@@ -118,7 +125,7 @@ class FieldData:
             return self.all_hdus
 
     def write_all_filedata(self):
-        self.filemanager.write_all_filedata(self.fit_data,self.step)
+        self.filemanager.write_all_filedata(self.all_hdus,self.step)
         self.current_data_saved = True
 
     def check_data_ready_for_current_step(self):
@@ -155,18 +162,32 @@ class FieldData:
         if self.step == 'bias':
             from bias_subtract import bias_subtract
             self.all_hdus = bias_subtract(self.all_hdus, self.filemanager.date_timestamp, strategy=self.debias_strategy, \
-                                          convert_adu_to_e=self.convert_adu_to_e)
+                                          convert_adu_to_e=self.convert_adu_to_e,save_plots=True,show_plots=False,\
+                                          savetemplate=self.filemanager.get_saveplot_template)
         elif self.step == 'stitch':
             from stitch import stitch_all_images
             self.all_hdus = stitch_all_images(self.all_hdus,self.filemanager.date_timestamp)
             self.instrument.opamps = [None]
             self.data_stitched = True
+            for (camera, filenum, imtype, opamp),outhdu in self.all_hdus.items():
+                if imtype == 'twiflat' and filenum == self.filenumbers['twiflat'][0]:
+                    plt.figure()
+                    if self.show_plots or self.save_plots:
+                        plt.imshow(np.array(outhdu.data), origin='lower-left')
+                        plt.title("Stitched {} {} {}".format(camera, filenum, imtype))
+                    if self.save_plots:
+                        plt.savefig(self.filemanager.get_saveplot_template(cam=camera,ap='',imtype='twilight',step='stitch',comment='_'+str(filenum)),dpi=200)
+                    if self.show_plots:
+                        plt.show()
+                    plt.close()
         elif self.step == 'remove_crs':
             if self.current_data_saved or self.current_data_from_disk:
                 pass
             else:
                 self.write_all_filedata()
             import PyCosmic
+            if self.show_plots or self.save_plots:
+                from quickreduce_funcs import format_plot
             for (camera, filenum, imtype, opamp) in self.all_hdus.keys():
                 readfile = self.filemanager.get_read_filename(camera=camera, imtype=imtype,\
                                                         filenum=filenum, amp=opamp)
@@ -177,6 +198,20 @@ class FieldData:
 
                 PyCosmic.detCos(readfile, maskfile, writefile, rdnoise='ENOISE',parallel=False,\
                                                               sigma_det=8, gain='EGAIN', verbose=True, return_data=False)
+
+                if imtype == 'science':
+                    maskdata = fits.getdata(maskfile)
+                    plt.figure()
+                    if self.show_plots or self.save_plots:
+                        plt.imshow(maskdata, origin='lower-left')
+                        plt.title("CR Mask {} {} {}".format(camera, filenum, imtype))
+                    if self.save_plots:
+                        plt.savefig(self.filemanager.get_saveplot_template(\
+                            cam=camera,ap='',imtype='crmask',step='cr_removal',comment='_'+str(filenum)))
+                    if self.show_plots:
+                        plt.show()
+                    plt.close()
+
             self.proceed_to('apcut')
             self.read_all_filedata()
         elif self.step == 'apcut':
@@ -184,14 +219,14 @@ class FieldData:
                 self.combine_fibermaps(camera, return_table=False)
             from aperture_detector import cutout_all_apperatures
             self.all_hdus = cutout_all_apperatures(self.all_hdus,self.instrument.cameras,\
-                                                   deadfibers=self.instrument.deadfibers,summation_preference=self.twod_to_oned)
+                                                   deadfibers=self.instrument.deadfibers,summation_preference=self.twod_to_oned,\
+                                                   show_plots=self.show_plots,save_plots=self.save_plots,save_template=self.filemanager.get_saveplot_template)
         elif self.step == 'wavecalib':
             if len(self.comparcs.keys()) == 0:
                 self.populate_calibrations()
 
             for camera in self.instrument.cameras:
-               self.comparcs[camera].run_initial_calibrations(skip_coarse = self.skip_coarse_calib,\
-                                                              single_core = self.single_core)
+               self.comparcs[camera].run_initial_calibrations(skip_coarse = self.skip_coarse_calib)
 
             for camera in self.instrument.cameras:
                 self.comparcs[camera].run_final_calibrations()
@@ -200,16 +235,21 @@ class FieldData:
         elif self.step == 'flatten':
             for camera in self.instrument.cameras:
                 self.flatten_sciences(cam=camera)
+
         elif self.step == 'skysub':
             for camera in self.instrument.cameras:
                 self.match_skies(cam=camera)
                 self.subtract_skies(cam=camera)
+
         elif self.step == 'combine':
             for camera in self.instrument.cameras:
                 self.combine_science_observations(cam=camera)
+
         elif self.step == 'zfit':
+            zfit_hdus = {}
             for camera in self.instrument.cameras:
-                self.fit_redshfits(cam=camera)
+                zfit_hdus[(camera,None,'zfits',None)] = self.fit_redshfits(cam=camera)
+            self.all_hdus = zfit_hdus
 
         if self.step != 'remove_crs':
             self.current_data_saved = False
@@ -226,8 +266,10 @@ class FieldData:
             else:
                 comparc_fs = None
             comparc = Calibrations(camera, self.comparc_lampsc, self.comparc_lampsf, comparc_cs, self.filemanager, \
-                                 config=self.instrument.configuration, fine_calibrations=comparc_fs,
-                                 pairings=comparc_pairs, load_history=True, trust_after_first=False)
+                                 config=self.instrument.configuration, fine_calibrations=comparc_fs,\
+                                 pairings=comparc_pairs, load_history=True, trust_after_first=False,\
+                                 single_core=self.single_core,\
+                                 save_plots=self.save_plots,savetemplate_funcs=self.filemanager.get_saveplot_template)
 
             self.comparcs[camera] = comparc
 
@@ -333,27 +375,195 @@ class FieldData:
                 flats_arr[ii,:] = final_table[col]
             #plt.show()
             plt.subplots(2,2)
-            plt.subplot(221)
-            im = plt.imshow(data_arr-data_arr.min()+1., aspect='auto', origin='lower-left')
-            plt.colorbar()
-            clow,chigh = im.get_clim()
-            plt.title("Original cam:{} filnm:{}".format(cam, filnum))
-            plt.subplot(222)
-            plt.imshow(flats_arr-flats_arr.min()+1., aspect='auto', origin='lower-left')
-            plt.title("Flat cam:{} filnm:{}".format(cam,filnum))
+            if self.save_plots or self.show_plots:
+                plt.subplot(221)
+                im = plt.imshow(data_arr-data_arr.min()+1., aspect='auto', origin='lower-left')
+                plt.colorbar()
+                clow,chigh = im.get_clim()
+                plt.title("Original cam:{} filnm:{}".format(cam, filnum))
+                plt.subplot(222)
+                plt.imshow(flats_arr-flats_arr.min()+1., aspect='auto', origin='lower-left')
+                plt.title("Flat cam:{} filnm:{}".format(cam,filnum))
 
-            plt.colorbar()
-            plt.subplot(223)
-            plt.imshow(flt_data_arr-flt_data_arr.min()+1., aspect='auto', origin='lower-left')
-            plt.title("Flattened cam:{} filnm:{}".format(cam,filnum))
-            plt.clim(clow, chigh)
-            plt.colorbar()
-            plt.subplot(224)
-            plt.imshow(np.log(flt_data_arr-flt_data_arr.min()+1.), aspect='auto', origin='lower-left')
-            plt.title("Log Flattened cam:{} filnm:{}".format(cam,filnum))
-            plt.colorbar()
-            plt.show()
+                plt.colorbar()
+                plt.subplot(223)
+                plt.imshow(flt_data_arr-flt_data_arr.min()+1., aspect='auto', origin='lower-left')
+                plt.title("Flattened cam:{} filnm:{}".format(cam,filnum))
+                plt.clim(clow, chigh)
+                plt.colorbar()
+                plt.subplot(224)
+                plt.imshow(np.log(flt_data_arr-flt_data_arr.min()+1.), aspect='auto', origin='lower-left')
+                plt.title("Log Flattened cam:{} filnm:{}".format(cam,filnum))
+                plt.colorbar()
+            if self.save_plots:
+                plt.savefig(self.filemanager.get_saveplot_template(cam=cam,ap='',imtype='sci',step='flatten',comment='_'+str(filnum)))
+            if self.show_plots:
+                plt.show()
+            plt.close()
             self.all_hdus[(cam,filnum,'science',None)] = fits.BinTableHDU(data=Table(outdata),header=hdr,name='flux')
+
+
+    def subtract_skies(self, cam):
+        if len(self.final_calibration_coefs.keys()) == 0:
+            self.get_final_wavelength_coefs()
+        if cam not in self.targeting_sky_pairs.keys():
+            self.match_skies(cam)
+
+        target_sky_pair = self.targeting_sky_pairs[cam]
+        skyfibs = np.array(list(self.all_skies[cam].keys()))
+
+        observation_keys = list(self.observations.observations.keys())
+        first_obs = observation_keys[0]
+        sci_filnum, throw, throw1, throw2 = self.observations.observations[first_obs]
+        npixels = len(self.all_hdus[(cam, sci_filnum, 'science', None)].data)
+        pixels = np.arange(npixels).astype(np.float64)
+        pix2 = pixels * pixels
+        pix3 = pix2 * pixels
+        pix4 = pix3 * pixels
+        pix5 = pix4 * pixels
+
+        for obs in observation_keys:
+            sci_filnum, ccalib, fcalib, comparc_ind = self.observations.observations[obs]
+            sci_hdu = self.all_hdus.pop((cam, sci_filnum, 'science', None))
+            if self.twostep_wavecomparc:
+                calib_filnum = fcalib
+            else:
+                calib_filnum = ccalib
+            comparc_data = self.final_calibration_coefs[(cam, calib_filnum)]
+
+            sci_data = Table(sci_hdu.data)
+            out_sci_data = Table()
+            sci_lams = {}
+
+            skyfits = {}
+            plt.figure()
+            mins, maxs = [], []
+
+            for skyfib in skyfibs:
+                a, b, c, d, e, f = comparc_data[skyfib]
+                skylams = a + b * pixels + c * pix2 + d * pix3 + e * pix4 + f * pix5
+                skyflux = np.array(sci_data[skyfib])  # medfilt(sci_data[skyfib] - medfilt(sci_data[skyfib], 371), 3)
+                skyflux[np.isnan(skyflux)] = 0.
+                if self.save_plots or self.show_plots:
+                    plt.plot(skylams, skyflux, label=skyfib, alpha=0.4)
+                skyfit = CubicSpline(x=skylams, y=skyflux, extrapolate=False)
+                skyfits[skyfib] = skyfit
+
+                mins.append(skylams.min())
+                maxs.append(skylams.max())
+
+            skyllams = np.arange(np.min(mins), np.max(maxs), 0.1).astype(np.float64)
+            del mins, maxs
+
+            master_skies = []
+            meds = []
+            for skyfib in skyfibs:
+                skyfit = skyfits[skyfib]
+                outskyflux = skyfit(skyllams)
+                outskyflux[np.isnan(outskyflux)] = 0.
+                med = np.nanmedian(outskyflux)
+                meds.append(med)
+                master_skies.append(outskyflux)
+
+            master_sky = np.nanmedian(master_skies, axis=0)
+            master_sky[np.isnan(master_sky)] = 0.
+            #medmed = np.median(meds)
+            #master_sky *= medmed
+            del meds
+
+            masterfit = CubicSpline(x=skyllams, y=master_sky, extrapolate=False)
+            if self.save_plots or self.show_plots:
+                plt.plot(skyllams, master_sky, 'k-', label='master', linewidth=4)
+                plt.legend(loc='best')
+            if self.save_plots:
+                plt.savefig(self.filemanager.get_saveplot_template(cam=cam,ap='',imtype='science',step='skysub',comment='_allskies_'+str(sci_filnum)))
+            if self.show_plots:
+                plt.show()
+            plt.close()
+
+            nonzeros = np.where(master_sky > 0.)[0]
+            first_nonzero_lam = skyllams[nonzeros[0]]
+            last_nonzero_lam = skyllams[nonzeros[-1]]
+            del nonzeros
+
+
+
+            if self.save_plots or self.show_plots:
+                median_arrays1 = {int(i): [] for i in range(1, 9)}
+                median_arrays2 = {int(i): [] for i in range(1, 9)}
+
+                for ii, name in enumerate(skyfibs):
+                    tet = int(name[1])
+                    fib = int(name[2:4])
+                    if fib > 8:
+                        median_arrays2[tet].append(master_skies[ii])
+                    else:
+                        median_arrays1[tet].append(master_skies[ii])
+                plt.figure()
+                for (key1, arr1), (key2, arr2) in zip(median_arrays1.items(), median_arrays2.items()):
+                    arr1 = np.array(arr1)
+                    arr2 = np.array(arr2)
+                    if arr1.shape[0] != 0:
+                        med1 = np.nanmedian(np.asarray(arr1), axis=0)
+                        plt.plot(skyllams, med1, label="{}_1".format(key1), alpha=0.4)
+                    if arr2.shape[0] != 0:
+                        med2 = np.nanmedian(np.asarray(arr2), axis=0)
+                        plt.plot(skyllams, med2, label="{}_2".format(key2), alpha=0.4)
+
+                if self.save_plots or self.show_plots:
+                    plt.legend(loc='best')
+                if self.save_plots:
+                    plt.savefig(self.filemanager.get_saveplot_template(cam=cam,ap='',imtype='science',step='skysub',comment='_tetmedskies_'+str(sci_filnum)))
+                if self.show_plots:
+                    plt.show()
+                plt.close()
+
+                del median_arrays1,median_arrays2
+
+            for galfib, skyfib in target_sky_pair.items():
+                a, b, c, d, e, f = comparc_data[galfib]
+                gallams = a + b * pixels + c * pix2 + d * pix3 + e * pix4 + f * pix5
+                galflux = np.asarray(sci_data[galfib])
+
+                if self.skysub_strategy == 'nearest':
+                    skyfit = skyfits[skyfib]
+                    skyflux = skyfit(gallams)
+                elif self.skysub_strategy == 'median':
+                    skyflux = masterfit(gallams)
+
+                lamcut = np.where((gallams < first_nonzero_lam) | (gallams > last_nonzero_lam))[0]
+                galflux[lamcut] = 0.
+                skyflux[lamcut] = 0.
+
+                outgal,remaining_sky,gcont = subtract_sky(galflux=galflux,skyflux=skyflux,gallams=gallams)
+
+                plt.subplots(1, 2)
+                if self.save_plots or self.show_plots:
+                    plt.subplot(121)
+                    plt.plot(gallams, outgal, label='output', alpha=0.4)
+                    plt.plot(gallams, remaining_sky, label='remaining_sky', alpha=0.4)
+                    plt.plot(gallams, gcont, label='gcont', alpha=0.4)
+                    plt.legend(loc='best')
+                    ymin, ymax = plt.ylim()
+                    plt.subplot(122)
+                    plt.plot(gallams, galflux - skyflux, label='basic', alpha=0.4)
+                    plt.plot(gallams, outgal, label='outgal', alpha=0.4)
+                    # plt.plot(gallams, gal_contsub, label='gal_contsub',alpha=0.4)
+                    plt.legend(loc='best')
+                    # plt.ylim(ymin,ymax)
+                if self.save_plots:
+                    plt.savefig(self.filemanager.get_saveplot_template(cam='',ap=galfib,imtype='science',step='skysub',comment='_result_'+str(sci_filnum)))
+                if self.show_plots:
+                    plt.show()
+                plt.close()
+
+                out_sci_data.add_column(Table.Column(name=galfib, data=outgal))
+                sci_lams[galfib] = gallams
+
+            self.all_hdus[(cam, sci_filnum, 'science', None)] = fits.BinTableHDU(data=out_sci_data,
+                                                                                 header=sci_hdu.header,
+                                                                                 name='flux')
+
 
     def combine_science_observations(self, cam):
         if len(self.final_calibration_coefs.keys()) == 0:
@@ -402,740 +612,125 @@ class FieldData:
                 combined_data[col] += outflux
 
         plt.figure()
-        for col in ref_sci_data.colnames:
-            plt.plot(ref_wavearrays[col],combined_data[col],alpha=0.4)
-        plt.show()
+        if self.save_plots or self.show_plots:
+            for col in ref_sci_data.colnames:
+                plt.plot(ref_wavearrays[col],combined_data[col],alpha=0.2)
+        if self.save_plots:
+            plt.savefig(self.filemanager.get_saveplot_template(cam=cam,ap='',imtype='science',step='combine',comment='_all_1d'))
+        if self.show_plots:
+            plt.show()
+        plt.close()
         ref_wave_table = Table(ref_wavearrays)
         self.all_hdus[(cam,'combined_fluxes','science',None)] = fits.BinTableHDU(data=combined_data,header=ref_sci_hdu.header,name='flux')
         self.all_hdus[(cam,'combined_wavelengths','science',None)] = fits.BinTableHDU(data=ref_wave_table,name='wave')
 
 
-
-    def match_skies(self,cam):
+    def match_skies(self ,cam):
         from astropy.coordinates import SkyCoord
         import astropy.units as u
 
         first_obs = list(self.observations.observations.keys())[0]
         sci_filnum, throw, throw1, throw2 = self.observations.observations[first_obs]
         sci_hdu = self.all_hdus[(cam, sci_filnum, 'science', None)]
-        sci_data = Table(sci_hdu.data)
         header = sci_hdu.header
 
-        skies, scis = {},{}
-        for key in sci_data.colnames:
-            fibid = key.replace(cam,'FIBER')
-            objname = header[fibid]
-            if 'SKY' in objname:
-                skies[key] = objname
-            elif 'GAL' in objname:
-                scis[key] = objname
+        skies, scis = {}, {}
+        extra_skies = {}
+        cards = dict(header)
+        for fibid, objname in cards.items():
+            if fibid[:5].upper() == 'FIBER':
+                camid = fibid.replace("FIBER",cam)
+                if camid not in self.instrument.deadfibers:
+                    objname = objname.strip(' \t')
+                    if 'SKY' in objname.upper():
+                        skies[camid] = objname
+                    elif objname.lower() == 'unplugged':
+                        extra_skies[camid] = objname
+                    else:# elif 'GAL' in objname.upper():
+                        scis[camid] = objname
+
+        all_skies = skies.copy()
+        for key,val in extra_skies.items():
+            all_skies[key] = val
 
         if self.mtlz is None:
-            skynums,skynames = [],[]
-            for fibname in skies.keys():
+            skynums ,skynames = [] ,[]
+            for fibname in all_skies.keys():
                 skynames.append(fibname)
                 number_str = fibname.lstrip('rb')
-                numeric = 8*int(number_str[0])+int(number_str[1:])
+                if cam == 'r':
+                    numeric = 16* int(number_str[0]) + int(number_str[1:])
+                else:
+                    numeric = 16 * (9- int(number_str[0])) + int(number_str[1:])
                 skynums.append(numeric)
             skynums = np.array(skynums)
             target_sky_pair = {}
             for fibname, objname in scis.items():
                 number_str = fibname.lstrip('rb')
-                galnum = 8*int(number_str[0])+int(number_str[1:])
-                minsepind = np.argmin(np.abs(skynums-galnum))
+                if cam == 'r':
+                    galnum = 16* int(number_str[0]) + int(number_str[1:])
+                else:
+                    galnum = 16 * (9- int(number_str[0])) + int(number_str[1:])
+                minsepind = np.argmin(np.abs(skynums - galnum))
                 target_sky_pair[fibname] = skynames[minsepind]
         else:
             skyloc_array = []
             skynames = []
-            for fibname,objname in skies.items():
-                fibrow = np.where(self.mtlz['FIBNAME']==fibname)[0][0]
-                objrow = np.where(self.mtlz['ID']==objname)[0][0]
-                if fibrow!=objrow:
+            for fibname, objname in skies.items():
+                fibrow = np.where(self.mtlz['FIBNAME'] == fibname)[0][0]
+                objrow = np.where(self.mtlz['ID'] == objname)[0][0]
+                if fibrow != objrow:
                     print("Fiber and object matched to different rows!")
-                    print(fibname,objname,fibrow,objrow)
-                    raise()
+                    print(fibname, objname, fibrow, objrow)
+                    raise ()
                 if self.mtlz['RA'].mask[fibrow]:
-                    ra,dec = self.mtlz['RA_drilled'][fibrow],self.mtlz['DEC_drilled'][fibrow]
+                    ra, dec = self.mtlz['RA_drilled'][fibrow], self.mtlz['DEC_drilled'][fibrow]
                 else:
-                    ra,dec = self.mtlz['RA'][fibrow],self.mtlz['DEC'][fibrow]
-                skyloc_array.append([ra,dec])
+                    ra, dec = self.mtlz['RA'][fibrow], self.mtlz['DEC'][fibrow]
+                skyloc_array.append([ra, dec])
                 skynames.append(fibname)
-            sky_coords = SkyCoord(skyloc_array,unit=u.deg)
+            sky_coords = SkyCoord(skyloc_array, unit=u.deg)
 
             target_sky_pair = {}
-            for fibname,objname in scis.items():
-                fibrow = np.where(self.mtlz['FIBNAME']==fibname)[0][0]
-                objrow = np.where(self.mtlz['ID']==objname)[0][0]
-                if fibrow!=objrow:
+            for fibname, objname in scis.items():
+                fibrow = np.where(self.mtlz['FIBNAME'] == fibname)[0][0]
+                objrow = np.where(self.mtlz['ID'] == objname)[0][0]
+                if fibrow != objrow:
                     print("Fiber and object matched to different rows!")
-                    print(fibname,objname,fibrow,objrow)
-                    raise()
+                    print(fibname, objname, fibrow, objrow)
+                    raise ()
                 if self.mtlz['RA'].mask[fibrow]:
-                    ra,dec = self.mtlz['RA_drilled'][fibrow],self.mtlz['DEC_drilled'][fibrow]
+                    ra, dec = self.mtlz['RA_drilled'][fibrow], self.mtlz['DEC_drilled'][fibrow]
                 else:
-                    ra,dec = self.mtlz['RA'][fibrow],self.mtlz['DEC'][fibrow]
-                coord = SkyCoord(ra,dec,unit=u.deg)
+                    ra, dec = self.mtlz['RA'][fibrow], self.mtlz['DEC'][fibrow]
+                coord = SkyCoord(ra, dec, unit=u.deg)
                 seps = coord.separation(sky_coords)
                 minsepind = np.argmin(seps)
                 target_sky_pair[fibname] = skynames[minsepind]
 
         self.targeting_sky_pairs[cam] = target_sky_pair
-
-    def subtract_skies(self,cam):
-        from quickreduce_funcs import smooth_and_dering
-        def gauss(lams, offset, mean, sig, amp):
-            return offset + (amp * np.exp(-(lams - mean) * (lams - mean) / (2 * sig * sig))) / np.sqrt(
-                2 * np.pi * sig * sig)
-
-        def linear_gauss(lams, offset, linear, mean, sig, amp):
-            return offset + linear * (lams - lams.min()) + (
-                    amp * np.exp(-(lams - mean) * (lams - mean) / (2 * sig * sig))) / np.sqrt(
-                2 * np.pi * sig * sig)
-
-        def sumd_gauss(lams, offset, mean, sig1, sig2, amp1, amp2):
-            return gauss(lams, offset, mean, sig1, amp1) + gauss(lams, offset, mean, sig2, amp2)
-
-        def doublet_gauss(lams, offset, mean1, mean2, sig1, sig2, amp1, amp2):
-            return gauss(lams, offset, mean1, sig1, amp1) + gauss(lams, offset, mean2, sig2, amp2)
-
-        sigma_to_fwhm = 2.0 * np.sqrt(2.0 * np.log(2.0))
-        fwhm_to_sigma = 1.0 / sigma_to_fwhm
-        nsigma = 4
-
-        def to_sigma(s_right, s_left):
-            return nsigma* fwhm_to_sigma * (s_right - s_left)
-        from scipy.optimize import curve_fit
-        from scipy.signal import medfilt
-
-        if len(self.final_calibration_coefs.keys()) == 0:
-            self.get_final_wavelength_coefs()
-        observation_keys = list(self.observations.observations.keys())
-        first_obs = observation_keys[0]
-        sci_filnum, throw, throw1, throw2 = self.observations.observations[first_obs]
-        npixels = len(self.all_hdus[(cam, sci_filnum, 'science', None)].data)
-        pixels = np.arange(npixels).astype(np.float64)
-        pix2 = pixels*pixels
-        pix3 = pix2*pixels
-        pix4 = pix3*pixels
-        pix5 = pix4*pixels
-        target_sky_pair = self.targeting_sky_pairs[cam]
-        ##hack!
-        scis = {}
-        for obs in observation_keys[1:]:
-            sci_filnum, ccalib, fcalib, comparc_ind = self.observations.observations[obs]
-            sci_hdu = self.all_hdus.pop((cam, sci_filnum, 'science', None))
-            if self.twostep_wavecomparc:
-                calib_filnum = fcalib
-            else:
-                calib_filnum = ccalib
-            comparc_data = self.final_calibration_coefs[(cam,calib_filnum)]
-
-            sci_data = Table(sci_hdu.data)
-            out_sci_data = Table()
-            sci_lams = {}
-            skyfibs = list(target_sky_pair.values())
-
-            cards = dict(sci_hdu.header)
-            for key, val in cards.items():
-                if key[:5].upper() == 'FIBER':
-                    if val.strip(' \t').lower() == 'unplugged':
-                        fib = '{}{}'.format(cam, key[5:])
-                        if fib not in self.instrument.deadfibers:
-                            skyfibs.append(fib)
-
-            # fibnames = sci_data.colnames
-            # fibernums = np.array([(int(fib[1])-1)*16+int(fib[2:]) for fib in fibnames])
-            # first_fib = fibnames[np.argmin(fibernums)]
-            # last_fib = fibnames[np.argmax(fibernums)]
-            # midd_fibs = [fibnames[ind] for ind in np.argsort(np.abs(fibernums)-(5*16))[:2]]
-            #
-            # minlam = np.min([comparc_data[first_fib][0],comparc_data[last_fib][0]])
-            #
-            # a, b, c, d, e, f = comparc_data[midd_fibs[0]]
-            # npixels = len(pixels)
-            # maxlam1 = a + b * npixels + c * npixels*npixels + d * npixels*npixels*npixels + \
-            #           e * npixels*npixels*npixels*npixels + f * npixels*npixels*npixels*npixels*npixels
-            # a, b, c, d, e, f = comparc_data[midd_fibs[1]]
-            # npixels = len(pixels)
-            # maxlam2 = a + b * npixels + c * npixels*npixels + d * npixels*npixels*npixels + \
-            #           e * npixels*npixels*npixels*npixels + f * npixels*npixels*npixels*npixels*npixels
-            # maxlam = np.max([maxlam1,maxlam2])
-            # del maxlam1,maxlam2
-
-            skyfits = {}
-            plt.figure()
-            mins,maxs=[],[]
-
-            #HACK!
-            skyfibs = comparc_data.colnames
-            for skyfib in skyfibs:
-                a, b, c, d, e, f = comparc_data[skyfib]
-                skylams = a + b * pixels + c * pix2 + d * pix3 + e * pix4 + f * pix5
-                skyflux = np.array(sci_data[skyfib])#medfilt(sci_data[skyfib] - medfilt(sci_data[skyfib], 371), 3)
-                skyflux[np.isnan(skyflux)] = 0.
-                plt.plot(skylams, skyflux, label=skyfib,alpha=0.4)
-                skyfit = CubicSpline(x=skylams, y=skyflux, extrapolate=False)
-                skyfits[skyfib] = skyfit
-
-                mins.append(skylams.min())
-                maxs.append(skylams.max())
-
-            skyllams = np.arange(np.min(mins),np.max(maxs),0.1).astype(np.float64)
-            del mins,maxs
-
-            master_skies = []
-            meds = []
-            for skyfib in skyfibs:
-                skyfit = skyfits[skyfib]
-                outskyflux = skyfit(skyllams)
-                outskyflux[np.isnan(outskyflux)] = 0.
-                # outskyflux[np.isnan(outskyflux)] = 0.
-                med = np.nanmedian(outskyflux)
-                meds.append(med)
-                #corrected = smooth_and_dering(outskyflux)
-                master_skies.append(outskyflux/med)
-
-            # median_master_sky = np.median(master_skies, axis=0)
-            # mean_master_sky = np.mean(master_skies, axis=0)
-            # master_sky = np.zeros_like(mean_master_sky)
-            # master_sky[:300] = mean_master_sky[:300]
-            # master_sky[-300:] = mean_master_sky[-300:]
-            # master_sky[300:-300] = median_master_sky[300:-300]
-            master_sky = np.nanmedian(master_skies, axis=0)
-            master_sky[np.isnan(master_sky)] = 0.
-            medmed = np.median(meds)
-            master_sky *= medmed
-            del meds,medmed
-
-            masterfit = CubicSpline(x=skyllams, y=master_sky, extrapolate=False)
-            plt.plot(skyllams, master_sky, 'k-',label='master',linewidth=4)
-            plt.legend(loc='best')
-            plt.show()
-            nonzeros = np.where(master_sky>0.)[0]
-            first_nonzero_lam = skyllams[nonzeros[0]]
-            last_nonzero_lam = skyllams[nonzeros[-1]]
-            del nonzeros
-
-            bin_by_tet = True
-            if bin_by_tet:
-                median_arrays1 = {int(i): [] for i in range(1, 9)}
-                median_arrays2 = {int(i): [] for i in range(1, 9)}
-
-                for ii, name in enumerate(skyfibs):
-                    tet = int(name[1])
-                    fib = int(name[2:4])
-                    if fib > 8:
-                        median_arrays2[tet].append(master_skies[ii])
-                    else:
-                        median_arrays1[tet].append(master_skies[ii])
-
-                plt.figure()
-                for (key1, arr1), (key2, arr2) in zip(median_arrays1.items(), median_arrays2.items()):
-                    if len(arr1)>0:
-                        med1 = np.nanmedian(np.asarray(arr1), axis=0)
-                        plt.plot(skyllams, med1, label="{}_1".format(key1), alpha=0.4)
-                    if len(arr2)>0:
-                        med2 = np.nanmedian(np.asarray(arr2), axis=0)
-                        plt.plot(skyllams, med2, label="{}_2".format(key2), alpha=0.4)
-                plt.legend(loc='best')
-                plt.show()
-
-            for galfib,skyfib in target_sky_pair.items():
-                a, b, c, d, e, f = comparc_data[galfib]
-                gallams = a + b * pixels + c * pix2 + d * pix3 + e * pix4 + f * pix5
-                galflux = np.asarray(sci_data[galfib])
-                galflux[np.isnan(galflux)] = 0.
-
-                lamcut = np.where((gallams < first_nonzero_lam) | (gallams > last_nonzero_lam))[0]
-                galflux[lamcut] = 0.
-                galflux[np.isnan(galflux)] = 0.
-
-                skyflux = masterfit(gallams)
-                skyflux[np.isnan(skyflux)] = 0.
-                skyflux[lamcut] = 0.
-
-                gcont = medfilt(galflux, 371)
-                scont = medfilt(skyflux, 371)
-                gal_contsub = galflux - gcont
-                sky_contsub = skyflux - scont
-
-
-                s_peak_inds, s_peak_props = find_peaks(sky_contsub, height=(sky_contsub.max() / 10, None), width=(0.5, 8), \
-                                                       threshold=(None, None),
-                                                       prominence=(sky_contsub.max() / 5, None), wlen=24)
-
-                g_peak_inds, g_peak_props = find_peaks(sky_contsub, height=(gal_contsub.max() / 10, None), width=(0.5, 8), \
-                                                       threshold=(None, None),
-                                                       prominence=(gal_contsub.max() / 5, None), wlen=24)
-
-                g_peak_inds_matched = []
-                for peak in s_peak_inds:
-                    ind = np.argmin(np.abs(gallams[g_peak_inds] - gallams[peak]))
-                    g_peak_inds_matched.append(g_peak_inds[ind])
-
-                g_peak_inds_matched = np.asarray(g_peak_inds_matched).astype(int)
-
-                # s_peak_fluxes = sky_contsub[s_peak_inds]
-                # g_peak_fluxes = gal_contsub[g_peak_inds_matched]
-                s_peak_fluxes = skyflux[s_peak_inds]
-                g_peak_fluxes = galflux[g_peak_inds_matched]
-                # differences = g_peak_fluxes - s_peak_fluxes
-                # normd_diffs = differences/s_peak_fluxes
-                # median_normd_diff = np.median(normd_diffs)
-                peak_ratio = g_peak_fluxes / s_peak_fluxes
-                median_ratio = np.median(peak_ratio)
-                # print(peak_ratio, median_ratio)
-
-                ## Physically the gal+sky shouldn't be less than sky
-                # if median_ratio < 1.0:
-                #     median_ration = 1.0
-                sky_contsub *= median_ratio
-
-                s_peak_inds, s_peak_props = find_peaks(sky_contsub, height=(30, None), width=(0.1, 10), \
-                                                       threshold=(None, None),
-                                                       prominence=(10, None), wlen=101)
-                g_peak_inds, g_peak_props = find_peaks(gal_contsub, height=(30, None), width=(0.1, 10), \
-                                                       threshold=(None, None),
-                                                       prominence=(10, None), wlen=101)
-
-                continuum_ratio = np.median(gcont[300:800]/scont[300:800])-0.1
-                #continuum_ratio = np.median(galflux[:400] / skyflux[:400])-0.1
-                remaining_sky = medfilt(continuum_ratio*skyflux.copy(),3)
-                scont = continuum_ratio*scont
-                outgal = gal_contsub.copy()
-                line_pairs = []
-                for ii in range(len(s_peak_inds)):
-                    pair = {}
-
-                    lam1 = gallams[s_peak_inds[ii]]
-                    ind1 = np.argmin(np.abs(gallams[g_peak_inds] - lam1))
-
-                    if np.abs(gallams[g_peak_inds[ind1]]-gallams[s_peak_inds[ii]])>3.0:
-                        continue
-
-                    pair['gal'] = {'peak':g_peak_inds[ind1],'left':g_peak_props['left_ips'][ind1],\
-                                    'right':g_peak_props['right_ips'][ind1] + 1, 'height':g_peak_props['peak_heights'][ind1],\
-                                    'wheight':g_peak_props['width_heights'][ind1]}
-                    pair['sky'] = {'peak':s_peak_inds[ii], 'left':s_peak_props['left_ips'][ii], \
-                                    'right':s_peak_props['right_ips'][ii] + 1, 'height':s_peak_props['peak_heights'][ii], \
-                                    'wheight':s_peak_props['width_heights'][ii]}
-
-                    line_pairs.append(pair)
-
-                sky_smthd_contsub = np.convolve(sky_contsub,[1/15.,3/15.,7/15.,3/15.,1/15.],'same')
-                gal_smthd_contsub = np.convolve(gal_contsub, [1 / 15., 3 / 15., 7 / 15., 3 / 15., 1 / 15.], 'same')
-                for pair in line_pairs:
-                    g1_peak = pair['gal']['peak']
-                    s1_peak = pair['sky']['peak']
-
-                    itterleft = int(s1_peak)
-                    keep_going = True
-                    nextset = np.arange(1, 4).astype(int)
-                    while keep_going:
-                        if itterleft == 0:
-                            g_select = False
-                            s_select = False
-                        elif itterleft > 2:
-                            g_select = np.any(gal_smthd_contsub[itterleft - nextset] < gal_smthd_contsub[itterleft])
-                            s_select = np.any(sky_smthd_contsub[itterleft - nextset] < sky_smthd_contsub[itterleft])
-                        else:
-                            to_start = itterleft
-                            endcut = -3+to_start
-                            g_select = np.any(
-                                gal_smthd_contsub[itterleft - nextset[:endcut]] < gal_smthd_contsub[itterleft])
-                            s_select = np.any(
-                                sky_smthd_contsub[itterleft - nextset[:endcut]] < sky_smthd_contsub[itterleft])
-
-                        over_zero_select = ((gal_smthd_contsub[itterleft] > -10.) & (sky_smthd_contsub[itterleft] > -10.))
-                        if g_select and s_select and over_zero_select:
-                            itterleft -= 1
-                        else:
-                            keep_going = False
-
-                    itterright = int(s1_peak)
-                    keep_going = True
-                    nextset = np.arange(1, 4).astype(int)
-                    while keep_going:
-                        if (len(pixels) - itterright) == 1:
-                            g_select = False
-                            s_select = False
-                        elif (len(pixels) - itterright) > 3:
-                            g_select = np.any(gal_smthd_contsub[itterright+nextset] < gal_smthd_contsub[itterright])
-                            s_select = np.any(sky_smthd_contsub[itterright+nextset] < sky_smthd_contsub[itterright])
-                        else:
-                            to_end = len(pixels) - itterright
-                            endcut = -4+to_end
-                            g_select = np.any(gal_smthd_contsub[itterright + nextset[:endcut]] < gal_smthd_contsub[itterright])
-                            s_select = np.any(sky_smthd_contsub[itterright + nextset[:endcut]] < sky_smthd_contsub[itterright])
-
-                        over_zero_select = ((gal_smthd_contsub[itterright] > -10.) & (sky_smthd_contsub[itterright] > -10.))
-                        if g_select and s_select and over_zero_select:
-                            itterright += 1
-                        else:
-                            keep_going = False
-
-                    slower_wave_ind = int(itterleft)
-                    supper_wave_ind = int(itterright) + 1
-                    extended_lower_ind = np.clip(slower_wave_ind - 10, 0, npixels - 1)
-                    extended_upper_ind = np.clip(supper_wave_ind + 10, 0, npixels - 1)
-
-                    g_distrib = gal_contsub[slower_wave_ind:supper_wave_ind].copy()
-                    min_g_distrib = g_distrib.min()
-                    g_distrib = g_distrib-min_g_distrib+0.00001
-                    # g_lams = gallams[slower_wave_ind:supper_wave_ind]
-                    # g_dlams = gallams[slower_wave_ind+1:supper_wave_ind+1]-\
-                    #           gallams[slower_wave_ind:supper_wave_ind]
-                    # integral_g = np.dot(g_distrib,g_dlams)
-                    integral_g = np.sum(g_distrib)
-                    normd_g_distrib = g_distrib / integral_g
-
-                    s_distrib = sky_contsub[slower_wave_ind:supper_wave_ind].copy()
-                    min_s_distrib = s_distrib.min()
-                    s_distrib = s_distrib-min_s_distrib+0.00001
-                    # s_lams = gallams[slower_wave_ind:supper_wave_ind]
-                    # s_dlams = gallams[slower_wave_ind+1:supper_wave_ind+1]-\
-                    #           gallams[slower_wave_ind:supper_wave_ind]
-                    # integral_s = np.dot(s_distrib,s_dlams)
-                    integral_s = np.sum(s_distrib)
-
-                    if integral_s > (30.0+integral_g):
-                        integral_s = (30.0+integral_g)
-
-                    if integral_s > (1.1*integral_g):
-                        integral_s = (1.1*integral_g)
-
-                    if integral_g > (60.0+integral_s):
-                        integral_s = integral_g - 60.0
-
-                    sky_g_distrib = normd_g_distrib * integral_s
-                    if len(sky_g_distrib)>3:
-                        removedlineflux = np.convolve(gal_contsub[slower_wave_ind:supper_wave_ind].copy() - sky_g_distrib,\
-                                    [1 / 5., 3 / 5., 1 / 5.], 'same')
-                    else:
-                        removedlineflux = gal_contsub[slower_wave_ind:supper_wave_ind].copy() - sky_g_distrib
-
-                    doplots = False
-                    dips_low = np.any((gal_contsub[slower_wave_ind:supper_wave_ind] - sky_g_distrib) < (-60))
-                    all_above = np.all((gal_contsub[slower_wave_ind:supper_wave_ind]) > (-60))
-                    if doplots:# or (dips_low and all_above):
-                        speaks,sheights,swheights = gallams[int(s1_peak)],pair['sky']['height'],pair['sky']['wheight']
-                        gpeaks, gheights, gwheights = gallams[int(g1_peak)], pair['gal']['height'], pair['gal']['wheight']
-                        slefts,glefts = gallams[int(pair['sky']['left'])], gallams[int(pair['gal']['left'])]
-                        srights,grights = gallams[int(pair['sky']['right'])], gallams[int(pair['gal']['right'])]
-
-                        plt.subplots(1, 3)
-
-                        plt.subplot(131)
-                        plt.plot(gallams[extended_lower_ind:extended_upper_ind],\
-                                 sky_contsub[extended_lower_ind:extended_upper_ind], label='sky', alpha=0.4)
-                        plt.plot(speaks, sheights, 'k*', label='peaks')
-                        plt.plot(slefts, swheights, 'k>')
-                        plt.plot(srights, swheights, 'k<')
-                        plt.xlim(gallams[extended_lower_ind],gallams[extended_upper_ind])
-
-                        ymin,ymax = plt.ylim()
-                        plt.vlines(gallams[slower_wave_ind],ymin,ymax)
-                        plt.vlines(gallams[supper_wave_ind-1],ymin,ymax)
-                        plt.legend(loc='best')
-
-                        plt.subplot(132)
-                        plt.plot(gallams[extended_lower_ind:extended_upper_ind],\
-                                 gal_contsub[extended_lower_ind:extended_upper_ind], label='gal', alpha=0.4)
-                        plt.plot(gpeaks, gheights, 'k*', label='peaks')
-                        plt.plot(glefts, gwheights, 'k>')
-                        plt.plot(grights, gwheights, 'k<')
-                        plt.xlim(gallams[extended_lower_ind], gallams[extended_upper_ind])
-                        ymin,ymax = plt.ylim()
-                        plt.vlines(gallams[slower_wave_ind],ymin,ymax)
-                        plt.vlines(gallams[supper_wave_ind-1],ymin,ymax)
-                        ymin,ymax = plt.ylim()
-                        plt.legend(loc='best')
-
-                        plt.subplot(133)
-                        plt.plot(gallams[slower_wave_ind:supper_wave_ind], gal_contsub[slower_wave_ind:supper_wave_ind] - sky_g_distrib, label='new sub',
-                                 alpha=0.4)
-                        plt.plot(gallams[slower_wave_ind:supper_wave_ind], removedlineflux, label='new smth sub',  alpha=0.4)
-
-                        plt.plot(gallams[slower_wave_ind:supper_wave_ind],sky_g_distrib,alpha=0.4,label='transformed sky')
-                        plt.plot(gallams[extended_lower_ind:extended_upper_ind], gal_contsub[extended_lower_ind:extended_upper_ind],alpha=0.2,label='gal')
-                        plt.plot(gallams[slower_wave_ind:supper_wave_ind],s_distrib,alpha=0.4,label='sky')
-
-                        plt.plot(speaks, sheights, 'k*', label='sky peak')
-                        plt.plot(slefts, swheights, 'k>')
-                        plt.plot(srights, swheights, 'k<')
-
-                        plt.plot(gpeaks, gheights, 'c*', label='gal peak')
-                        plt.plot(glefts, gwheights, 'c>')
-                        plt.plot(grights, gwheights, 'c<')
-                        # plt.plot(lams,gauss(lams,*gfit_coefs),label='galfit')
-                        plt.xlim(gallams[extended_lower_ind],gallams[extended_upper_ind])
-                        ymin,ymax = plt.ylim()
-                        plt.vlines(gallams[slower_wave_ind],ymin,ymax)
-                        plt.vlines(gallams[supper_wave_ind-1],ymin,ymax)
-                        #min1,min2 = plt.ylim()
-                        #plt.ylim(min1,ymax)
-                        plt.legend(loc='best')
-
-                        plt.show()
-                        if (dips_low and all_above):
-                            print("That didn't go well")
-                    # 1/np.sqrt(2*np.pi*sig*sig)
-                    # print(*gfit_coefs,*sfit_coefs)
-                    outgal[slower_wave_ind:supper_wave_ind] = removedlineflux
-                    ## remove the subtracted sky from that remaining in the skyflux
-                    remaining_sky[slower_wave_ind:supper_wave_ind] = scont[slower_wave_ind:supper_wave_ind]
-
-                outgal = outgal + gcont - remaining_sky
-                if np.any(outgal > 1000.):
-                    plt.subplots(1, 2)
-                    plt.subplot(121)
-                    plt.plot(gallams, outgal, label='output', alpha=0.4)
-                    plt.plot(gallams, remaining_sky, label='remaining_sky', alpha=0.4)
-                    plt.plot(gallams, gcont, label='gcont', alpha=0.4)
-                    plt.legend(loc='best')
-                    ymin, ymax = plt.ylim()
-                    plt.subplot(122)
-                    plt.plot(gallams, skyflux, label='sky', alpha=0.4)
-                    plt.plot(gallams, galflux, label='gal', alpha=0.4)
-                    plt.plot(gallams, outgal, label='outgal', alpha=0.4)
-                    # plt.plot(gallams, gal_contsub, label='gal_contsub',alpha=0.4)
-                    plt.legend(loc='best')
-                    #plt.ylim(ymin, ymax)
-                    plt.show()
-                    print("bad")
-
-                doplots = False
-                if doplots:
-                    plt.subplots(1,2)
-                    plt.subplot(121)
-                    plt.plot(gallams,outgal,label='output',alpha=0.4)
-                    plt.plot(gallams, remaining_sky, label='remaining_sky',alpha=0.4)
-                    plt.plot(gallams, gcont, label='gcont',alpha=0.4)
-                    plt.legend(loc='best')
-                    ymin,ymax = plt.ylim()
-                    plt.subplot(122)
-                    plt.plot(gallams,galflux-skyflux,label='basic',alpha=0.4)
-                    plt.plot(gallams, outgal, label='outgal',alpha=0.4)
-                    #plt.plot(gallams, gal_contsub, label='gal_contsub',alpha=0.4)
-                    plt.legend(loc='best')
-                    #plt.ylim(ymin,ymax)
-                    plt.show()
-                doplots = False
-                out_sci_data.add_column(Table.Column(name=galfib,data=outgal))
-                sci_lams[galfib] = gallams
-
-
-            scis[obs] = (out_sci_data.copy(),sci_lams.copy(),sci_filnum)
-            self.all_hdus[(cam, sci_filnum, 'science', None)] = fits.BinTableHDU(data=out_sci_data,header=sci_hdu.header,name='flux')
-
-    def investigate_app_naming(self, cam):
-
-        from scipy.signal import medfilt
-
-        if len(self.final_calibration_coefs.keys()) == 0:
-            self.get_final_wavelength_coefs()
-        observation_keys = list(self.observations.observations.keys())
-        first_obs = observation_keys[0]
-        sci_filnum, throw, throw1, throw2 = self.observations.observations[first_obs]
-        npixels = len(self.all_hdus[(cam, sci_filnum, 'science', None)].data)
-        pixels = np.arange(npixels).astype(np.float64)
-        pix2 = pixels * pixels
-        pix3 = pix2 * pixels
-        pix4 = pix3 * pixels
-        pix5 = pix4 * pixels
-        target_sky_pair = self.targeting_sky_pairs[cam]
-        ##hack!
-        scis = {}
-        for obs in observation_keys[1:]:
-            sci_filnum, ccalib, fcalib, comparc_ind = self.observations.observations[obs]
-            sci_hdu = self.all_hdus.pop((cam, sci_filnum, 'science', None))
-
-            if obs == observation_keys[1]:
-                combined_table = Table(sci_hdu.data).copy()
-                if self.twostep_wavecomparc:
-                    calib_filnum = fcalib
-                else:
-                    calib_filnum = ccalib
-                comparc_data = self.final_calibration_coefs[(cam, calib_filnum)]
-                header = sci_hdu.header
-            else:
-                itter_tab = Table(sci_hdu.data)
-                for col in itter_tab.colnames:
-                    combined_table[col] += itter_tab[col]
-
-
-        sci_data = combined_table
-        skyfibs = list(np.unique((list(target_sky_pair.values()))))
-
-        cards = dict(header)
-        for key, val in cards.items():
-            if key[:5].upper() == 'FIBER':
-                if val.strip(' \t').lower() == 'unplugged':
-                    fib = '{}{}'.format(cam, key[5:])
-                    if fib not in self.instrument.deadfibers:
-                        skyfibs.append(fib)
-
-        skyfits = {}
-        plt.figure()
-        mins, maxs = [], []
-
-        # HACK!
-        skyfibs = comparc_data.colnames
-        for skyfib in skyfibs:
-            a, b, c, d, e, f = comparc_data[skyfib]
-            skylams = a + b * pixels + c * pix2 + d * pix3 + e * pix4 + f * pix5
-            skyflux = np.array(
-                sci_data[skyfib])  # medfilt(sci_data[skyfib] - medfilt(sci_data[skyfib], 371), 3)
-            skyflux[np.isnan(skyflux)] = 0.
-            plt.plot(skylams, skyflux, label=skyfib, alpha=0.4)
-            skyfit = CubicSpline(x=skylams, y=skyflux, extrapolate=False)
-            skyfits[skyfib] = skyfit
-
-            mins.append(skylams.min())
-            maxs.append(skylams.max())
-
-        skyllams = np.arange(np.min(mins), np.max(maxs), 0.1).astype(np.float64)
-        del mins, maxs
-
-        master_skies = []
-        meds = []
-        for skyfib in skyfibs:
-            skyfit = skyfits[skyfib]
-            outskyflux = skyfit(skyllams)
-            outskyflux[np.isnan(outskyflux)] = 0.
-            # outskyflux[np.isnan(outskyflux)] = 0.
-            med = np.nanmedian(outskyflux)
-            meds.append(med)
-            # corrected = smooth_and_dering(outskyflux)
-            master_skies.append(outskyflux)
-
-        # median_master_sky = np.median(master_skies, axis=0)
-        # mean_master_sky = np.mean(master_skies, axis=0)
-        # master_sky = np.zeros_like(mean_master_sky)
-        # master_sky[:300] = mean_master_sky[:300]
-        # master_sky[-300:] = mean_master_sky[-300:]
-        # master_sky[300:-300] = median_master_sky[300:-300]
-        master_sky = np.nanmedian(master_skies, axis=0)
-        master_sky[np.isnan(master_sky)] = 0.
-        #medmed = np.median(meds)
-        #master_sky *= medmed
-        #del meds, medmed
-
-        masterfit = CubicSpline(x=skyllams, y=master_sky, extrapolate=False)
-        plt.plot(skyllams, master_sky, 'k-', label='master', linewidth=4)
-        plt.legend(loc='best')
-        plt.show()
-        nonzeros = np.where(master_sky > 0.)[0]
-        first_nonzero_lam = skyllams[nonzeros[0]]
-        last_nonzero_lam = skyllams[nonzeros[-1]]
-        del nonzeros
-
-        bin_by_tet = True
-        if bin_by_tet:
-            median_arrays1 = {int(i): [] for i in range(1, 9)}
-            median_arrays2 = {int(i): [] for i in range(1, 9)}
-
-            for ii, name in enumerate(skyfibs):
-                tet = int(name[1])
-                fib = int(name[2:4])
-                if fib > 8:
-                    median_arrays2[tet].append(master_skies[ii])
-                else:
-                    median_arrays1[tet].append(master_skies[ii])
-
-            plt.figure()
-            for (key1, arr1), (key2, arr2) in zip(median_arrays1.items(), median_arrays2.items()):
-                if len(arr1) > 0:
-                    med1 = np.nanmedian(np.asarray(arr1), axis=0)
-                    plt.plot(skyllams, med1, label="{}_1".format(key1), alpha=0.4)
-                if len(arr2) > 0:
-                    med2 = np.nanmedian(np.asarray(arr2), axis=0)
-                    plt.plot(skyllams, med2, label="{}_2".format(key2), alpha=0.4)
-            plt.legend(loc='best')
-            plt.show()
-
-        print("\n\n\n\n\n")
-        sums = []
-        gal_is_sky = 0.
-        sky_is_gal = 0.
-        unp_is_sky = 0.
-        unp_is_gal = 0.
-        correct_s, correct_g = 0., 0.
-        cutlow = 3161840
-        cuthigh = 3161840
-        for skyfib, spec in zip(skyfibs, master_skies):
-            subs = spec[((skyllams > 5660) & (skyllams < 5850))]
-            # subs = subs[np.bitwise_not(np.isnan(subs))]
-            # subs = subs[subs>0.]
-            summ = np.sum(subs)
-            sums.append(summ)
-            truename = "FIBER{}{:02d}".format(9 - int(skyfib[1]), 17 - int(skyfib[2:]))
-            objname = sci_hdu.header[truename]
-            if summ < cutlow:
-                print(truename, skyfib, summ, 'sky', objname)
-                if 'GAL' == objname[:3]:
-                    gal_is_sky += 1
-                elif objname[0] == 'u':
-                    unp_is_sky += 1
-                else:
-                    correct_s += 1
-            elif summ > cuthigh:
-                print(truename, skyfib, summ, 'gal', objname)
-                if 'SKY' == objname[:3]:
-                    sky_is_gal += 1
-                elif objname[0] == 'u':
-                    unp_is_gal += 1
-                else:
-                    correct_g += 1
-
-        sums = np.array(sums)
-        plt.figure()
-        plt.hist(sums, bins=60)
-        plt.show()
-        print(len(sums))
-        print(np.where(sums < cutlow)[0].size, np.where(sums > cuthigh)[0].size)
-        print(len(np.unique(list(target_sky_pair.values()))))
-        print(gal_is_sky, unp_is_sky, correct_s, gal_is_sky + unp_is_sky + correct_s)
-        print(sky_is_gal, unp_is_gal, correct_g, sky_is_gal + unp_is_gal + correct_g)
-        for galfib, skyfib in target_sky_pair.items():
-            a, b, c, d, e, f = comparc_data[galfib]
-            gallams = a + b * pixels + c * pix2 + d * pix3 + e * pix4 + f * pix5
-            galflux = np.asarray(sci_data[galfib])
-            galflux[np.isnan(galflux)] = 0.
-
-            lamcut = np.where((gallams < first_nonzero_lam) | (gallams > last_nonzero_lam))[0]
-            galflux[lamcut] = 0.
-            galflux[np.isnan(galflux)] = 0.
-
-            skyflux = masterfit(gallams)
-            skyflux[np.isnan(skyflux)] = 0.
-            skyflux[lamcut] = 0.
-
-            gcont = medfilt(galflux, 371)
-            scont = medfilt(skyflux, 371)
-            gal_contsub = galflux - gcont
-            sky_contsub = skyflux - scont
-
-
-
-def fit_redshfits(self,cam):
-    from fit_redshifts import fit_redshifts
-    waves = Table(self.all_hdus[(cam,'combined_wavelengths','science',None)].data)
-    fluxes = Table(self.all_hdus[(cam, 'combined_fluxes', 'science', None)].data)
-    if (cam, 'combined_mask', 'science', None) in self.all_hdus.keys():
-        mask = Table(self.all_hdus[(cam, 'combined_mask', 'science', None)].data)
-    else:
-        mask = None
-
-    sci_data = OrderedDict()
-    for ap in fluxes.colnames:
-        if mask is None:
-            current_mask = np.ones(len(waves[ap])).astype(bool)
+        self.all_skies[cam] = all_skies
+        self.all_gals[cam] = scis
+
+
+    def fit_redshfits(self,cam):
+        from fit_redshifts import fit_redshifts
+        waves = Table(self.all_hdus[(cam,'combined_wavelengths','science',None)].data)
+        fluxes = Table(self.all_hdus[(cam, 'combined_fluxes', 'science', None)].data)
+        if (cam, 'combined_mask', 'science', None) in self.all_hdus.keys():
+            mask = Table(self.all_hdus[(cam, 'combined_mask', 'science', None)].data)
         else:
-            current_mask = mask[ap]
-        sci_data[ap] = (waves[ap],fluxes[ap],current_mask)
+            mask = None
 
-    header = self.all_hdus[(cam, 'combined_fluxes', 'science', None)].header
-    results = fit_redshifts(sci_data,mask_name=self.filemanager.maskname, run_auto=True)
-    self.fit_data[cam] = fits.BinTableHDU(data=results, header=header, name='zfits')
+        sci_data = OrderedDict()
+        for ap in fluxes.colnames:
+            if mask is None:
+                current_mask = np.ones(len(waves[ap])).astype(bool)
+            else:
+                current_mask = mask[ap]
+            sci_data[ap] = (waves[ap],fluxes[ap],current_mask)
+
+        header = self.all_hdus[(cam, 'combined_fluxes', 'science', None)].header
+        results = fit_redshifts(sci_data,mask_name=self.filemanager.maskname, savetemplate_func=self.filemanager.get_saveplot_template, run_auto=True)
+        return fits.BinTableHDU(data=results, header=header, name='zfits')
 

@@ -14,7 +14,7 @@ from matplotlib.widgets import Slider, Button
 from astropy.table import Table
 
 from scipy.signal import medfilt
-
+from scipy.signal import find_peaks
 import numpy as np
 from scipy.signal import argrelmax
 
@@ -127,11 +127,11 @@ def run_interactive_slider_calibration(coarse_comp, complinelistdict, default_va
 
     return Table(all_coefs)
 
-
 def run_automated_calibration(coarse_comp, complinelistdict, last_obs=None, print_itters = True):
-    precision = 1e-3
+    precision = 1e-4
     convergence_criteria = 1.0e-5 # change in correlation value from itteration to itteration
-    waves, fluxes = generate_synthetic_spectra(complinelistdict, compnames=['HgAr', 'NeAr'],precision=precision,maxheight=10000.)
+    waves, fluxes = generate_synthetic_spectra(complinelistdict, compnames=['HgAr', 'NeAr','Xe'],precision=precision,\
+                                               maxheight=10000.,minwave=3400,maxwave=7500)
 
     ## Make sure the information is in astropy table format
     coarse_comp = Table(coarse_comp)
@@ -144,7 +144,21 @@ def run_automated_calibration(coarse_comp, complinelistdict, last_obs=None, prin
 
     ## Loop over fiber names (strings e.g. 'r101')
     ##hack!
-    fibernames = coarse_comp.colnames
+    cam = coarse_comp.colnames[0][0]
+
+    if cam =='b':
+        numerics = np.asarray([(16 * (9 - int(fiber[1]))) + int(fiber[2:]) for fiber in coarse_comp.colnames])
+    else:
+        numerics = np.asarray([(16 * int(fiber[1])) + int(fiber[2:]) for fiber in coarse_comp.colnames])
+
+    sorted = np.argsort(numerics)
+    fibernames = np.array(coarse_comp.colnames)[sorted]
+
+    if cam == 'r' and int(fibernames[0][1]) > 3:
+        fibernames = fibernames[::-1]
+    elif cam =='b' and int(fibernames[0][1]) < 6:
+        fibernames = fibernames[::-1]
+
     for fiber_identifier in fibernames:#['r101','r408','r409','r608','r816']:
         counter += 1
         #print("\n\n", fiber_identifier)
@@ -152,14 +166,18 @@ def run_automated_calibration(coarse_comp, complinelistdict, last_obs=None, prin
         ## Get the spectra (column with fiber name as column name)
         comp_spec = np.asarray(coarse_comp[fiber_identifier])
 
-        ## create pixel array for mapping to wavelength
-        pixels = np.arange(len(comp_spec))
+        ## Find just the peaks in the calibration spectrum
+        c_peak_inds, c_peak_props = find_peaks(comp_spec, height=(400, None), width=(0.1, 20), \
+                                               threshold=(None, None),
+                                               prominence=(200, None), wlen=101)
 
-        pix1 = pixels
-        pix2 = pixels*pixels
-        subset = np.arange(0, len(pixels), 2).astype(int)
-        subset_comp = comp_spec[subset]
-        subpix1 = pix1[subset]
+        ## create pixel array for mapping to wavelength
+        c_peak_inds = np.asarray(c_peak_inds)
+        pix1 = np.append(c_peak_inds,[c_peak_inds-1,c_peak_inds+1,c_peak_inds-2,c_peak_inds+2])
+        pix1 = np.unique(np.sort(pix1))
+        pix1 = pix1[pix1<len(comp_spec)]
+        comp_spec = comp_spec[pix1]
+        comp_spec[pix1<400] *= 100.
 
         abest, bbest, cbest, corrbest = 0., 0., 0., 0.
         alow, ahigh = 3000, 8000
@@ -171,7 +189,7 @@ def run_automated_calibration(coarse_comp, complinelistdict, last_obs=None, prin
                 cvals = (0., 1., 1.)
                 if print_itters:
                     print("\nItter 1 results, (fixing c to 0.):")
-                abest, bbest, cbest, corrbest = fit_using_crosscorr(pixels=subpix1, raw_spec=subset_comp,
+                abest, bbest, cbest, corrbest = fit_using_crosscorr(pixels=pix1, raw_spec=comp_spec,
                                                                       comp_highres_fluxes=fluxes, \
                                                                       avals=avals, bvals=bvals, cvals=cvals, \
                                                                       calib_wave_start=waves[0],
@@ -186,7 +204,7 @@ def run_automated_calibration(coarse_comp, complinelistdict, last_obs=None, prin
                 cvals = (cbest , cbest+cstep , cstep)
                 if print_itters:
                     print("\nItter 1 results, (fixing b and c to past vals):")
-                abest, trashb, trashc, corrbest = fit_using_crosscorr(pixels=subpix1, raw_spec=subset_comp,
+                abest, trashb, trashc, corrbest = fit_using_crosscorr(pixels=pix1, raw_spec=comp_spec,
                                                                     comp_highres_fluxes=fluxes, \
                                                                     avals=avals, bvals=bvals, cvals=cvals, \
                                                                     calib_wave_start=waves[0],
@@ -205,7 +223,7 @@ def run_automated_calibration(coarse_comp, complinelistdict, last_obs=None, prin
         avals = ( abest-awidth, abest+awidth+astep, astep )
         bvals = ( bbest-bwidth, bbest+bwidth+bstep, bstep )
         cvals = ( cbest-cwidth, cbest+cwidth+cstep, cstep )
-        abest, bbest, cbest, corrbest = fit_using_crosscorr(pixels=subpix1, raw_spec=subset_comp, comp_highres_fluxes=fluxes, \
+        abest, bbest, cbest, corrbest = fit_using_crosscorr(pixels=pix1, raw_spec=comp_spec, comp_highres_fluxes=fluxes, \
                                                             avals=avals, bvals=bvals, cvals=cvals, \
                                                             calib_wave_start=waves[0], flux_wave_precision=precision,\
                                                                       print_itters=print_itters)
@@ -223,7 +241,7 @@ def run_automated_calibration(coarse_comp, complinelistdict, last_obs=None, prin
             avals = ( abest-awidth, abest+awidth+astep, astep )
             bvals = ( bbest-bwidth, bbest+bwidth+bstep, bstep )
             cvals = ( cbest-cwidth, cbest+cwidth+cstep, cstep )
-            abest_itt, bbest_itt, cbest_itt, corrbest = fit_using_crosscorr(pixels=pixels, raw_spec=comp_spec, comp_highres_fluxes=fluxes, \
+            abest_itt, bbest_itt, cbest_itt, corrbest = fit_using_crosscorr(pixels=pix1, raw_spec=comp_spec, comp_highres_fluxes=fluxes, \
                                                                 avals=avals, bvals=bvals, cvals=cvals, \
                                                                 calib_wave_start=waves[0], flux_wave_precision=precision,\
                                                                       print_itters=print_itters)
@@ -239,7 +257,6 @@ def run_automated_calibration(coarse_comp, complinelistdict, last_obs=None, prin
         all_flags[fiber_identifier] = corrbest
 
     return Table(all_coefs)
-
 
 def fit_using_crosscorr(pixels, raw_spec, comp_highres_fluxes, avals, bvals, cvals, calib_wave_start, flux_wave_precision,print_itters):
     alow, ahigh, astep = avals
@@ -300,33 +317,43 @@ def gaussian(x0,height,xs):
     fluxes = height*np.exp(-(dx*dx)/twosig2)
     return fluxes
 
-def generate_synthetic_spectra(compdict,compnames=[],precision=1.e-4,maxheight=1000.):
+def generate_synthetic_spectra(compdict,compnames=[],precision=1.e-4,maxheight=10000.,\
+                               minwave = 3400, maxwave = 7500):
     heights,waves = [],[]
 
     for compname in compnames:
         itterwaves,itterheights = compdict[compname]
-        normalized_height = np.asarray(itterheights).astype(np.float64)/np.max(itterheights)
-        waves.extend(np.asarray(itterwaves.astype(np.float64)).tolist())
+        normalized_height = maxheight*np.asarray(itterheights).astype(np.float)/np.max(itterheights)
+        if compname == 'Xe':
+            normalized_height = normalized_height / 100.
+        waves.extend(list(itterwaves))
         heights.extend(normalized_height.tolist())
 
     wave_order = np.argsort(waves)
     heights = np.asarray(heights)[wave_order]
     waves = np.asarray(waves)[wave_order]
+    wavecut = ((waves>minwave)&(waves<maxwave))
+    heights,waves = heights[wavecut],waves[wavecut]
 
-    wavelengths = np.arange(np.floor(waves.min()),np.ceil(waves.max()),precision).astype(np.float64)
-    fluxes = np.zeros(len(wavelengths)).astype(np.float64)
+    minwave,maxwave = np.floor(waves.min()),np.ceil(waves.max())
+    wavelengths = np.arange(minwave,maxwave,precision)
+    fluxes = np.zeros(len(wavelengths)).astype(np.float)
 
-    for center,height in zip(waves,heights):
-        modheight = maxheight*height
-        itterflux = gaussian(center,modheight,wavelengths)
-        fluxes = fluxes + itterflux
+    idxs = ((waves - minwave) / precision).astype(int)
+    idx_width = int(20/precision)
+    for idx,center,height in zip(idxs,waves,heights):
+        itterwaves = wavelengths[idx-idx_width:idx+idx_width+1]
+        itterflux = gaussian(center,height,itterwaves)
+        fluxes[idx-idx_width:idx+idx_width+1] += itterflux
 
     #plt.figure(); plt.plot(wavelengths,fluxes,'r-'); plt.plot(waves,maxheight*heights,'b.'); plt.show()
     return wavelengths,fluxes
 
 def compare_outputs(raw_data,table1,table2):
-    def waves(pixels, a, b, c):
-        return a + (b * pixels) + (c * pixels * pixels)
+    def waves(pixels, a, b, c,d,e,f):
+        return a + (b * pixels) + (c * pixels * pixels)+\
+               (d * np.power(pixels,3)) + (e * np.power(pixels,4))+ \
+               (f * np.power(pixels, 5))
     fib1s = set(table1.colnames)
     fib2s = set(table2.colnames)
     matches = fib1s.intersection(fib2s)
@@ -335,14 +362,15 @@ def compare_outputs(raw_data,table1,table2):
         pixels = np.arange(len(raw_data[match])).astype(np.float64)
         a1,b1,c1,d1,e1,f1 = table1[match]
         a2, b2, c2, d2, e2, f2 = table2[match]
-        waves1 = waves(pixels, a1, b1, c1)
-        waves2 = waves(pixels, a2, b2, c2)
+        waves1 = waves(pixels, a1,b1,c1,d1,e1,f1)
+        waves2 = waves(pixels, a2, b2, c2, d2, e2, f2)
         dwaves = waves1-waves2
         print("\n"+match)
         print("--> Max deviation: {}  mean: {}  median: {}".format(dwaves[np.argmax(np.abs(dwaves))], np.mean(np.abs(dwaves)), np.median(np.abs(dwaves))))
         plt.figure()
         plt.plot(pixels, dwaves, 'r-')
         plt.show()
+    return matches
 
 def automated_calib_wrapper_script(input_dict):
     return run_automated_calibration(**input_dict)
@@ -712,7 +740,7 @@ def pix_to_wave_fifthorder(xs, coefs):
            coefs[5] * np.power(xs, 5)
 
 
-def iterate_fib(fib):
+def iterate_fib(fib,cam):
     tetn = int(fib[1])
     fibn = int(fib[2:])
     if tetn == 8 and fibn >= 8:
@@ -732,10 +760,10 @@ def ensure_match(fib, allfibs, subset, cam):
     print(fib)
     outfib = fib
     if outfib not in allfibs:
-        outfib = iterate_fib(outfib)
+        outfib = iterate_fib(outfib,cam)
         outfib = ensure_match(outfib, allfibs, subset, cam)
     if outfib in subset:
-        outfib = iterate_fib(outfib)
+        outfib = iterate_fib(outfib,cam)
         outfib = ensure_match(outfib, allfibs, subset, cam)
     return outfib
 

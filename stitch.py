@@ -12,13 +12,14 @@ def stitch_all_images(all_hdus,date):
         hdu_opamp_dict[(camera, filenum, imtype)][opamp] = hdu
 
     for (camera, filenum, imtype),opampdict in hdu_opamp_dict.items():
-        outhdu = stitch_these_camera_data(opampdict , date)
+        outhdu = stitch_these_camera_data(opampdict)
+        outhdu.header.add_history("Stitched 4 opamps by quickreduce on {}".format(date))
         stitched_hdu_dict[(camera, filenum, imtype, None)] = outhdu
 
     return stitched_hdu_dict
 
 
-def stitch_these_camera_data(hdudict,date):
+def stitch_these_camera_data(hdudict):
     xorients = {-1: 'l', 1: 'r'}
     yorients = {-1: 'b', 1: 'u'}
 
@@ -81,9 +82,6 @@ def stitch_these_camera_data(hdudict,date):
     for key in ['OPAMP']:#, 'CHOFFX', 'CHOFFY']:
         header.remove(key)
 
-    header.add_history("Stitched 4 opamps by quickreduce on {}".format(date))
-
-    plt.figure(); plt.imshow(merged,origin='lower'); plt.show()
     ## Save data and header to working memory
     outhdu = fits.PrimaryHDU(data=merged, header=header)
 

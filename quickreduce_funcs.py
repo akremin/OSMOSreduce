@@ -130,7 +130,7 @@ def plot_skies(axi,minlam,maxlam):
     shortlist_bool = (shortlist_fluxes & shortlist_skylines)
 
     select_table = skys[shortlist_bool]
-    from calibrations import air_to_vacuum
+    from calibration_funcs import air_to_vacuum
     shortlist_skylines = air_to_vacuum(select_table['WAVE_AIR'])
     fluxes = select_table['FLUX']
     log_flux = np.log(fluxes-np.min(fluxes)+1.01)

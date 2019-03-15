@@ -25,7 +25,7 @@ def fifth_order_poly(p_x, zeroth, first, second, third, fourth, fifth):
 
 
 class LineBrowser:
-    def __init__(self, wm, fm, f_x, coefs, all_wms, bounds=None,edge_line_distance=0.):
+    def __init__(self, wm, fm, f_x, coefs, all_wms, bounds=None,edge_line_distance=0.,initiate=True, fibname=''):
         self.bounds = bounds
         self.coefs = np.asarray(coefs,dtype=np.float64)
 
@@ -81,14 +81,15 @@ class LineBrowser:
         self.peaks_h = fypeak
         self.line_matches = line_matches
         self.mindist_el, = np.where(self.peaks_w == self.line_matches['peaks_w'][self.j])
-
+        self.fibname = fibname
 
         self.last = {'j':[],'lines':[],'peaks_h':[],'peaks_w':[],'peaks_p':[],'vlines':[],'wm':[],'fm':[]}
-        self.initiate_browser()
+        if initiate:
+            self.initiate_browser()
 
     def initiate_browser(self):
-        fig, ax = plt.subplots(1)
-
+        fig, ax = plt.subplots(1,frameon=False)
+        plt.title(self.fibname)
         # maximize window
         figManager = plt.get_current_fig_manager()
         figManager.window.showMaximized()
@@ -367,13 +368,14 @@ class LineBrowser:
             plottitle = savename.split('\\')[-1]
         else:
             plottitle = savename
-        fig.suptitle(plottitle.replace('_',' '),fontsize=30)
-        fig.savefig('{}.png'.format(savename), dpi=600)
+        if '.png' in plottitle:
+            plottitle = plottitle.split('.')[0]
+        plottitle.replace('_',' ')
+
+        fig.suptitle(plottitle,fontsize=24)
+        fig.savefig(savename, dpi=600)
         plt.close()
         del fig
-
-
-
 
 
     def create_saveplot_var(self, coefs, cov, savename):
@@ -454,8 +456,12 @@ class LineBrowser:
             plottitle = savename.split('\\')[-1]
         else:
             plottitle = savename
+        if '.png' in plottitle:
+            plottitle = plottitle.split('.')[0]
+        plottitle.replace('_',' ')
+
         fig.suptitle(plottitle,fontsize=24)
-        fig.savefig('{}.png'.format(savename), dpi=600)
+        fig.savefig(savename, dpi=600)
         plt.close()
         del fig
 

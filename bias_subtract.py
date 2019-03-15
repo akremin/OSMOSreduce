@@ -2,37 +2,51 @@ import numpy as np
 from astropy.io import fits
 import matplotlib.pyplot as plt
 
-def bias_subtract(all_hdus,date,strategy='median',convert_adu_to_e=True):
+def bias_subtract(all_hdus,date,strategy='median',convert_adu_to_e=True,\
+                  save_plots=False,show_plots=True,savetemplate='{}{}{}{}{}.png'):
     biases = {}
     headers = {}
     for (camera, filenum, imtype, opamp),hdu in all_hdus.items():
         if imtype == 'bias':
             converted_hdu = remove_bias_lines(cur_hdu=hdu,use_bias_cols=True,convert_adu_to_e=convert_adu_to_e)
+            if camera not in headers.keys():
+                headers[camera] = {}
             if (camera,opamp) not in biases.keys():
                 biases[(camera,opamp)] = []
-                headers[(camera,opamp)] = converted_hdu.header
+                headers[camera][opamp] = converted_hdu.header
             biases[(camera,opamp)].append(converted_hdu.data)
 
     merged_biases = {}
     all_out_hdus = {}
 
     if strategy == 'median':
-        for (camera,opamp),bias_array_list in biases.items():
-            bias_3d_array = np.asarray(bias_array_list)
-            median_2d_array = np.median(bias_3d_array,axis=0)
-            merged_biases[(camera,opamp)] = median_2d_array
-            outheader = headers[(camera,opamp)]
-            outheader.add_history("Median Master Bias done by quickreduce on {}".format(date))
-            outhdu = fits.PrimaryHDU(data=median_2d_array ,header=outheader)
-            all_out_hdus[(camera, 'master', 'bias', opamp)] = outhdu
-            dat = outhdu.data
-            dat = dat - dat.min() + 1
-            logdat = np.log(dat)
-            plt.figure()
-            plt.imshow(logdat, 'gray', origin='lowerleft')
-            plt.title("Master Bias")
-            plt.tight_layout()
-            plt.show()
+        for camera,opampdict in headers.items():
+            plt.subplots(2,2)
+            for opamp,header in opampdict.items():
+                bias_array_list = biases[(camera,opamp)]
+                bias_3d_array = np.asarray(bias_array_list)
+                median_2d_array = np.median(bias_3d_array,axis=0)
+                merged_biases[(camera,opamp)] = median_2d_array
+                outheader = header
+                outheader.add_history("Median Master Bias done by quickreduce on {}".format(date))
+                outhdu = fits.PrimaryHDU(data=median_2d_array ,header=outheader)
+                all_out_hdus[(camera, 'master', 'bias', opamp)] = outhdu
+                dat = outhdu.data
+                dat = dat - dat.min() + 1
+                logdat = np.log(dat)
+                subplot_int = 220+int(header['OPAMP'])
+                if save_plots or show_plots:
+                    plt.subplot(subplot_int)
+                    plt.imshow(logdat, 'gray', origin='lowerleft')
+                    plt.title('opamp: '+str(header['OPAMP']))
+                    plt.tight_layout()
+            if save_plots or show_plots:
+                plt.suptitle("Median Master Biases for: "+str(camera))
+            if save_plots:
+                plt.savefig(savetemplate(cam=camera,ap='',imtype='master_bias',step='debias',comment=''),dpi=200)
+            if show_plots:
+                plt.show()
+            plt.close()
     else:
         raise(TypeError,"The only bias strategy currently supported in median")
 

@@ -11,11 +11,10 @@ from zestipy.plotting_tools import summary_plot
 
 
 
-def fit_redshifts(sky_subd_sciences,mask_name,run_auto=True,prior = None):
-    savedir = os.path.join(os.curdir, 'zfits', mask_name)
+def fit_redshifts(sky_subd_sciences,mask_name,run_auto=True,prior = None,savetemplate_func=None):
 
-    R = z_est(lower_w=4200.0, upper_w=6400.0, lower_z=0.05, upper_z=0.6, \
-              z_res=3.0e-5, prior_width=0.02, use_zprior=False, \
+    R = z_est(lower_w=4200.0, upper_w=6400.0, lower_z=0.16, upper_z=0.6, \
+              z_res=3.0e-6, prior_width=0.02, use_zprior=False, \
               skip_initial_priors=True, \
               auto_pilot=True)
 
@@ -58,8 +57,8 @@ def fit_redshifts(sky_subd_sciences,mask_name,run_auto=True,prior = None):
         SNavg = np.average(np.array([HSN, KSN, GSN]))
         SNHKmin = np.min(np.array([HSN, KSN]))
         # Create a summary plot of the best z-fit
-        savestr = 'redEst_%s_Tmplt%s.png' % (test_waveform.name, redshift_outputs.template.name)
-        plt_name = os.path.join(savedir, savestr)
+        comment = 'redEst_{}_Tmplt{}'.format(test_waveform.name, redshift_outputs.template.name)
+        plt_name = savetemplate_func(cam='',ap=ap,imtype='science',step='zfit',comment=comment)
         summary_plot(test_waveform.wave, test_waveform.flux, redshift_outputs.template.wave, \
                      redshift_outputs.template.flux, redshift_outputs.best_zest, redshift_outputs.ztest_vals, \
                  redshift_outputs.corr_vals, plt_name, test_waveform.name, None)
