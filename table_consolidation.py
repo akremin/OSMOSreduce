@@ -12,20 +12,22 @@ from astropy.cosmology import Planck13
 from astroquery.vizier import Vizier
 
 
-ra_clust,dec_clust,z_clust = 210.25864,2.87847,0.252
+
+mask = 'A04'#'A02'
+z_clust = 0.2198#0.252
 kpc_p_amin = Planck13.kpc_comoving_per_arcmin(z_clust)
-cluster = SkyCoord(ra=ra_clust*u.deg,dec=dec_clust*u.deg)
+
 
 
 #apperature, redshift_est, cor, template
 #ID,FIBNAME,sdss_SDSS12,RA,DEC,sdss_zsp,sdss_zph,sdss_rmag,MAG
-zfit_path = os.path.abspath(os.path.join(os.curdir,'..', '..','OneDrive - umich.edu','Research','M2FSReductions','A02','zfits'))
+zfit_path = os.path.abspath(os.path.join(os.curdir,'..', '..','OneDrive - umich.edu','Research','M2FSReductions',mask,'zfits'))
 zfits_template = '{cam}_zfits_{maskname}_combined_1d_bcwfs.fits'
-zfit_file = os.path.join( zfit_path, zfits_template.format(cam='r',maskname='A02') )
-zfit_file1 = os.path.join( zfit_path, zfits_template.format(cam='b',maskname='A02') )
+zfit_file = os.path.join( zfit_path, zfits_template.format(cam='r',maskname=mask) )
+zfit_file1 = os.path.join( zfit_path, zfits_template.format(cam='b',maskname=mask) )
 
-mtlzfile = os.path.abspath(os.path.join(os.curdir,'..','..', 'OneDrive - umich.edu','Research','M2FSReductions','catalogs','merged_target_lists', 'mtlz_M2FS16_A02_full.csv'))
-outfile = os.path.abspath(os.path.join(os.curdir,'..','..', 'OneDrive - umich.edu','Research','M2FSReductions','catalogs','merged_target_lists', 'mtlz_M2FS16_A02_full.csv'.replace('mtlz','allzs_plus_mtlz')))
+mtlzfile = os.path.abspath(os.path.join(os.curdir,'..','..', 'OneDrive - umich.edu','Research','M2FSReductions','catalogs','merged_target_lists', 'mtlz_M2FS16_{}_full.csv'.format(mask)))
+outfile = os.path.abspath(os.path.join(os.curdir,'..','..', 'OneDrive - umich.edu','Research','M2FSReductions','catalogs','merged_target_lists', 'allzs_plus_mtlz_M2FS16_{}_full.csv'.format(mask)))
 
 tabler = Table.read(zfit_file,format='fits')
 tableb = Table.read(zfit_file1,format='fits')
@@ -78,47 +80,64 @@ time = Time(full_table.meta['MJD'],format='mjd')
 location = EarthLocation(lon=full_table.meta['SITELONG']*u.deg, lat=full_table.meta['SITELAT']*u.deg,\
                          height=full_table.meta['SITEALT']*u.meter)
 cord = SkyCoord(ra=full_table.meta['RA-D']*u.deg,dec=full_table.meta['DEC-D']*u.deg)
-hc_cor = cord.radial_velocity_correction(kind='heliocentric',obstime=time,location=location)
+hc_cor = cord.radial_velocity_correction(kind='barycentric',obstime=time,location=location)
 dz = hc_cor/consts.c
 
-full_table.add_column(Table.Column(data=full_table['redshift_est']+dz,name='z_est_helio'))
+full_table.add_column(Table.Column(data=full_table['redshift_est']+dz,name='z_est_bary'))
 
 
-
+cluster = cord
 all_coords = SkyCoord(ra=full_table['RA']*u.deg,dec=full_table['DEC']*u.deg)
 seps = cluster.separation(all_coords)
 full_table.add_column(Table.Column(data=seps.to(u.arcsec).value,name='Proj_R_asec'))
 full_table.add_column(Table.Column(data=(kpc_p_amin*seps).to(u.Mpc).value,name='Proj_R_Comoving_Mpc'))
 
+
+corcut = 0.4
 spec_overlap = full_table[np.logical_not(full_table['sdss_zsp'].mask)]
-spec_overlap = spec_overlap[((spec_overlap['cor']>0.6))]
+spec_overlap = spec_overlap[((spec_overlap['cor']>corcut))]
+deviations = spec_overlap['z_est_bary']-spec_overlap['sdss_zsp']
+meandev,meddev = np.mean(deviations),np.median(deviations)
 
-
-deviations = spec_overlap['z_est_helio']-spec_overlap['sdss_zsp']
-full_table.add_column(Table.Column(data=full_table['redshift_est']+dz-np.median(deviations),name='z_est_helio_debiased'))
-dvs = (3.0e5)*(z_clust-full_table['z_est_helio_debiased'])/(1.+z_clust)
+dvs = consts.c.to(u.km/u.s).value*(z_clust-full_table['z_est_bary'])/(1.+z_clust)
 full_table.add_column(Table.Column(data=dvs,name='velocity'))
 
-for cname in ['sdss_q_mode', 'sdss_m_SDSS12']:
-    convert = []
-    for val in full_table[cname]:
-        if val:
-            convert.append(1)
-        else:
-            convert.append(0)
 
-    full_table.remove_column(cname)
-    full_table.add_column(Table.Column(data=convert, name=cname))
+blue_cam = np.array([fib[0]=='b' for fib in spec_overlap['FIBNAME']])
+red_cam = np.bitwise_not(blue_cam)
 
-convert = []
-for val in full_table['template']:
-    if val:
-        convert.append(str(val))
-    else:
-        convert.append('')
+plt.figure()
+plt.hist(full_table['z_est_bary'],bins=300);
+plt.title("A02 hist",fontsize=18)
+plt.xlabel("Bary Redshift",fontsize=18)
+ymin,ymax = plt.ylim()
+plt.vlines(.252,ymin,ymax,'k','--')
 
-full_table.remove_column('template')
-full_table.add_column(Table.Column(data=convert, name='template'))
+
+plt.figure()
+plt.plot(spec_overlap['z_est_bary'],spec_overlap['sdss_zsp'],'b.')
+plt.plot([0,1],[0,1],'k--')
+plt.title("A02",fontsize=18)
+plt.xlabel('z_est_bary',fontsize=18)
+plt.ylabel('sdss_zsp',fontsize=18)
+
+plt.figure()
+plt.plot(spec_overlap['z_est_bary'][blue_cam],deviations[blue_cam]*consts.c.to(u.km/u.s).value,'b.',markersize=18)
+plt.plot(spec_overlap['z_est_bary'][red_cam],deviations[red_cam]*consts.c.to(u.km/u.s).value,'r.',markersize=18)
+plt.title("A02 median={} mean={}".format(meddev,meandev),fontsize=18)
+plt.xlabel("Bary Redshift",fontsize=18)
+plt.ylabel("c*dz/(1+zclust)",fontsize=18)
+xmin,xmax = plt.xlim()
+plt.hlines(0.,xmin,xmax,'k','--',label='zero')
+plt.legend(loc='best');
+
+plt.figure(); plt.hist(deviations,bins=20)
+plt.title("A02 hist",fontsize=18)
+plt.xlabel("This Work - SDSS",fontsize=18)
+plt.vlines(meandev,0,4,colors='k',label='mean')
+plt.vlines(meddev,0,4,colors='g',label='median')
+plt.legend(loc='best')
+
 
 
 
@@ -130,105 +149,55 @@ res_tab = result[0]
 
 if np.all(res_tab['zsp'].mask):
     if np.all(res_tab['zph'].mask):
-        out_tab = res_tab
+        sdss_archive_table = res_tab
     else:
         cut_tab = res_tab[np.where(~res_tab['zph'].mask)]
-        out_tab = cut_tab[np.where(cut_tab['zph'] > -99)]
+        sdss_archive_table = cut_tab[np.where(cut_tab['zph'] > -99)]
 else:
-    out_tab = res_tab[np.where(~res_tab['zsp'].mask)]
-
-#out_tab = out_tab[((out_tab['zsp']>0.24)&(out_tab['zsp']<0.26))]
-
-for cname in ['q_mode','m_SDSS12']:
-    convert = []
-    for val in out_tab[cname]:
-        if val:
-            convert.append(1)
-        else:
-            convert.append(0)
-
-    out_tab.remove_column(cname)
-    out_tab.add_column(Table.Column(data=convert,name=cname))
+    sdss_archive_table = res_tab[np.where(~res_tab['zsp'].mask)]
 
 
 
+for col in sdss_archive_table.colnames:
+    sdss_archive_table.rename_column(col, 'sdss_' + col)
 
-for col in out_tab.colnames:
-    out_tab.rename_column(col, 'sdss_' + col)
+for ii in np.arange(len(sdss_archive_table))[::-1]:
+    if sdss_archive_table['sdss_SDSS12'][ii] in full_table['sdss_SDSS12']:
+        print("Removing: {}".format(sdss_archive_table['sdss_SDSS12'][ii]))
+        sdss_archive_table.remove_row(ii)
 
-for ii in np.arange(len(out_tab))[::-1]:
-    if out_tab['sdss_SDSS12'][ii] in full_table['sdss_SDSS12']:
-        print("Removing: {}".format(out_tab['sdss_SDSS12'][ii]))
-        out_tab.remove_row(ii)
+sdss_archive_table.add_column(Table.Column(data=sdss_archive_table['sdss_RA_ICRS'],name='RA'))
+sdss_archive_table.add_column(Table.Column(data=sdss_archive_table['sdss_DE_ICRS'],name='DEC'))
+sdss_archive_table.add_column(Table.Column(data=['T']*len(sdss_archive_table),name='TYPE'))
+sdss_archive_table.add_column(Table.Column(data=[2000.0]*len(sdss_archive_table),name='EPOCH'))
 
-out_tab.add_column(Table.Column(data=out_tab['sdss_RA_ICRS'],name='RA'))
-out_tab.add_column(Table.Column(data=out_tab['sdss_DE_ICRS'],name='DEC'))
-out_tab.add_column(Table.Column(data=['T']*len(out_tab),name='TYPE'))
-out_tab.add_column(Table.Column(data=[2000.0]*len(out_tab),name='EPOCH'))
-
-all_sdss_coords = SkyCoord(ra=out_tab['sdss_RA_ICRS'],dec=out_tab['sdss_DE_ICRS'])
+all_sdss_coords = SkyCoord(ra=sdss_archive_table['sdss_RA_ICRS'],dec=sdss_archive_table['sdss_DE_ICRS'])
 seps = cluster.separation(all_sdss_coords)
-out_tab.add_column(Table.Column(data=seps.to(u.arcsec).value,name='Proj_R_asec'))
-out_tab.add_column(Table.Column(data=(kpc_p_amin*seps).to(u.Mpc).value,name='Proj_R_Comoving_Mpc'))
-out_tab.add_column(Table.Column(data=out_tab['sdss_zsp'],name='z_est_helio_debiased'))
-dvs = (3.0e5)*(z_clust-out_tab['z_est_helio_debiased'])/(1.+z_clust)
-out_tab.add_column(Table.Column(data=dvs,name='velocity'))
-
-
-
-mega_table = vstack([full_table,out_tab])
-for col in mega_table.columns:
-    if type(mega_table[col].fill_value) in [str,np.str_,np.bytes_]:
-        continue
-    if np.isnan(mega_table[col].fill_value):
-        mega_table[col].fill_value = -999
-
-mega_table.write(outfile.replace('csv','fits'),format='fits',overwrite=True)
-
-# filled = mega_table.filled()
-# filled.write(outfile,format='ascii.csv',overwrite=True)
-
-
-
-# plt.figure(); plt.hist(good_vals['z_est_helio'],bins=300); plt.xlim(0.22,0.32);
-# ymin,ymax = plt.ylim()
-# plt.vlines(.252,ymin,ymax,'k','--')
-# plt.figure(); plt.plot(spec_overlap['z_est_helio'],spec_overlap['sdss_zsp'],'b.'); plt.plot([0,1],[0,1],'k--');
-# deviations = spec_overlap['z_est_helio']-spec_overlap['sdss_zsp']
-# meandev,meddev = np.mean(deviations),np.median(deviations)
+sdss_archive_table.add_column(Table.Column(data=seps.to(u.arcsec).value,name='Proj_R_asec'))
+sdss_archive_table.add_column(Table.Column(data=(kpc_p_amin*seps).to(u.Mpc).value,name='Proj_R_Comoving_Mpc'))
+sdss_archive_table.add_column(Table.Column(data=sdss_archive_table['sdss_zsp'],name='z_est_bary'))
+dvs = consts.c.to(u.km/u.s).value*(z_clust-sdss_archive_table['z_est_bary'])/(1.+z_clust)
+sdss_archive_table.add_column(Table.Column(data=dvs,name='velocity'))
 #
-# plt.figure(); plt.plot(spec_overlap['z_est_helio'],deviations,'b.');
-# xmin,xmax = plt.xlim()
-# plt.hlines(0.,xmin,xmax,'k','--',label='zero')
-# plt.hlines(meddev,xmin,xmax,'g','--',label='median')
-# plt.hlines(meandev,xmin,xmax,'c','--',label='mean')
-# plt.legend(loc='best');
 #
-# plt.figure(); plt.hist(deviations,bins=20);
-# plt.vlines(meandev,0,4,colors='k',label='mean');
-# plt.vlines(meddev,0,4,colors='g',label='median');
-# plt.legend(loc='best');
-#
-plt.figure()
-plt.plot(mega_table['Proj_R_Comoving_Mpc'],mega_table['velocity'],'b.')
-plt.xlabel("Projected Radius [Comoving Mpc]")
-plt.ylabel('dv [km/s]')
-xmin,xmax = plt.xlim()
-ymin,ymax = -5000,5000
-plt.ylim(ymin,ymax)
-plt.hlines(0.,xmin,xmax,'k','--',label='zero')
+full_table.add_column(Table.Column(data=[False]*len(full_table),name='SDSS_only'))
+sdss_archive_table.add_column(Table.Column(data=[True]*len(sdss_archive_table),name='SDSS_only'))
+
+
+sdss_archive_table.convert_bytestring_to_unicode()
+convert = []
+for row in sdss_archive_table['sdss_q_mode']:
+    convert.append(float(row.strip(' ')=='+'))
+
+new_sdssq_col = Table.Column(data=convert,name='sdss_q_mode')
+sdss_archive_table.replace_column('sdss_q_mode',new_sdssq_col)
+
+mega_table = vstack([full_table,sdss_archive_table])
+
+mega_table.write(outfile.replace('.csv','.fits'),format='fits')
+
+mega_table.meta['comments'] = []
+mega_table.write(outfile,format='ascii.csv')
+
+
 plt.show()
-# #plt.legend(loc='best');
-#
-#
-# plt.show()
-
-
-# for row in spec_overlap:
-#     bests = np.argsort(np.abs(good_vals['redshift_est']-row['sdss_zsp']))
-#     ap = (row['FIBNAME'])[0]
-#     all_aps = np.asarray([(good_vals['FIBNAME'][itterrow])[0] for itterrow in bests])
-#     first_match = np.where(all_aps==ap)[0][0]
-#     best = bests[first_match]
-#     if np.abs(row['sdss_zsp']-good_vals['redshift_est'][best])<0.001:
-#         print('true: ',row['sdss_rmag'],row['sdss_zsp'],row['FIBNAME'],'\tmatch: ',good_vals['cor'][best],good_vals['redshift_est'][best],good_vals['FIBNAME'][best],'\t',row['sdss_zsp']-good_vals['redshift_est'][best])

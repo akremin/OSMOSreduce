@@ -128,7 +128,7 @@ def detCos(image,  out_mask, out_clean,  rdnoise, sigma_det=5, rlim=1.2, iter=5,
 		cpus = 1
 	# start iteration
 	if verbose:
-	  print('Start the detection process using {} CPU cores.'.format(cpus))
+		print('Start the detection process using {} CPU cores.'.format(cpus))
 	for i in range(iterations):
 		if verbose:
 			print('Start iteration {}'.format(i+1))
@@ -143,32 +143,33 @@ def detCos(image,  out_mask, out_clean,  rdnoise, sigma_det=5, rlim=1.2, iter=5,
 			fine_norm = out/fine
 			select_neg = fine_norm<0
 			fine_norm.setData(data=0, select=select_neg)
-			pool = Pool(cpus)
-			result.append(pool.apply_async(out.subsampleImg, args=()))
-			result.append(pool.apply_async(fine_norm.subsampleImg, args=()))
-			pool.close()
-			pool.join()
-			sub = result[0].get()
-			sub_norm = result[1].get()
-			pool.terminate()
-			pool = Pool(cpus)
-			result[0]=pool.apply_async(sub.convolveImg, args=([LA_kernel]))
-			result[1]=pool.apply_async(sub_norm.convolveImg, args=([LA_kernel]))
-			pool.close()
-			pool.join()
-			conv = result[0].get()
-			select_neg = conv<0
-			conv.setData(data=0, select=select_neg)  # replace all negative values with 0
-			Lap2 = result[1].get()
-			pool.terminate()
-			pool = Pool(cpus)
-			result[0]=pool.apply_async(conv.rebin, args=(2, 2))
-			result[1]=pool.apply_async(Lap2.rebin, args=(2, 2))
-			pool.close()
-			pool.join()
-			Lap = result[0].get()
-			Lap2 = result[1].get()
-			pool.terminate()
+			with Pool(cpus,initializer=None) as pool:
+				result.append(pool.apply_async(out.subsampleImg, args=()))
+				result.append(pool.apply_async(fine_norm.subsampleImg, args=()))
+				pool.close()
+				pool.join()
+				sub = result[0].get()
+				sub_norm = result[1].get()
+				pool.terminate()
+			with Pool(cpus,initializer=None) as pool:
+				result[0]=pool.apply_async(sub.convolveImg, args=([LA_kernel]))
+				result[1]=pool.apply_async(sub_norm.convolveImg, args=([LA_kernel]))
+				pool.close()
+				pool.join()
+				conv = result[0].get()
+				select_neg = conv<0
+				conv.setData(data=0, select=select_neg)  # replace all negative values with 0
+				Lap2 = result[1].get()
+				pool.terminate()
+			with Pool(cpus,initializer=None) as pool:
+				result[0]=pool.apply_async(conv.rebin, args=(2, 2))
+				result[1]=pool.apply_async(Lap2.rebin, args=(2, 2))
+				pool.close()
+				pool.join()
+				Lap = result[0].get()
+				Lap2 = result[1].get()
+				pool.terminate()
+
 			S = Lap/(noise*2) # normalize Laplacian image by the noise
 			S_prime = S-S.medianImg((5, 5)) # cleaning of the normalized Laplacian image
 		else:

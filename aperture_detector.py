@@ -80,7 +80,7 @@ def cutout_twod_apperatures(image,apperatures):
     return cutout_dict
 
 
-def find_apperatures(image,badfibs,cam='r',height=5e4,prominence=1e3,\
+def find_apperatures(image,badfibs,cam='r',height=5e4,prominence=1.e3,\
                      show_plots=True,save_plots=False,\
                      save_template='outfile_{}.png'):
     tetris = np.arange(1,9)
@@ -135,8 +135,9 @@ def get_all_tetris_edges(image, show_plots, save_plots, save_template):
 
     medfiltd = medfilt(normd_sum, 11)
     ntetri = 10.
+    widths = np.array([10])
     threshold = 0.5
-    while ntetri > 8:
+    while ntetri > 8 or np.any(widths < 100):
         binary = (medfiltd > threshold).astype(int)
         grad = np.gradient(binary)
         starts = np.where(grad > 0)[0]
@@ -144,6 +145,7 @@ def get_all_tetris_edges(image, show_plots, save_plots, save_template):
         starts = starts[::2] - 4
         ends = ends[::2] + 4
         ntetri = len(starts)
+        widths = ends-starts
         threshold -= 0.05
 
     widths = ends - starts
@@ -202,16 +204,22 @@ def find_peak_inds(image,height,prominence):
 
     def get_peak_array(inds,nrows,pixels,row_lens,ncols,binwidth):
         peak_array = np.zeros(shape=(nrows,ncols))
+        #full_inds = np.where((np.array(row_lens) == nrows))[0]
+        valid_locations= []
+        for ii in range(len(pixels)):
+            if (row_lens[ii] == nrows) and np.all(np.diff(inds[ii])> 4.):
+                valid_locations.append(ii)
+        first_good_ind = int(np.min(valid_locations))
         for ii,(pixel, rowl) in enumerate(zip(pixels,row_lens)):
             if rowl != nrows:
-                if pixel == 0:
-                    first_good_ind = np.where((np.array(row_lens)==nrows))[0][0]
+                if ii == 0:
                     peak_array[:,pixel] = inds[first_good_ind]
                 else:
                     peak_array[:,pixel] = peak_array[:,pixel - 1]
             else:
                 peak_array[:, pixel] = inds[ii]
 
+        ## For the first and last few pixels, set them equal to the last valid pixel
         for pix in np.arange(binwidth):
             peak_array[:,pix] = peak_array[:,binwidth]
             peak_array[:, -1*(pix+1)] = peak_array[:, -1*(binwidth+1)]
@@ -220,7 +228,6 @@ def find_peak_inds(image,height,prominence):
     peak_array = get_peak_array(inds,nrows, pixels, row_lens, image.shape[1], binwidth)
     left_array = get_peak_array(lefts,nrows, pixels, row_lens, image.shape[1], binwidth)
     right_array = get_peak_array(rights, nrows, pixels, row_lens, image.shape[1], binwidth)
-
 
     deviations = np.zeros(shape=(nrows,))
     for row in np.arange(nrows):

@@ -20,28 +20,38 @@ from astropy.io import fits
 ## User defined variables
 
 vizier_catalogs = ['sdss12'] #'panstarrs','sdss'
-field_prefix,semester,fieldnum = 'M2FS16','A','02'
-plate_name = 'Kremin_2017A_A02_07_08_11.plate'
-data_filenum = '0614'  # as a 0 offset string of a4 digit number  ex '0614'
-overwrite_field = True
-overwrite_redshifts = True
+field_prefix,semester,fieldnum = 'M2FS16','A','04'
+
 
 field = semester+fieldnum
+plate_name = None#'Kremin_2017A_A02_07_08_11.plate'
+field_name = 'kremin_{}{}{}.field'.format(field_prefix,semester,fieldnum)
+
 catalog_path = os.path.abspath('../../OneDrive - umich.edu/Research/M2FSReductions/catalogs')
 data_path =  os.path.abspath('../../OneDrive - umich.edu/Research/M2FSReductions/'+field+'/raw_data')
+
+overwrite_field = True  # Ignored if the field is defined in place of a plate above
+
+data_filenum = '0904'  # as a 0 offset string of a4 digit number  ex '0614'
+
+overwrite_redshifts = False
+
+
 
 
 ## Assuming standard format outputs, nothing below this point should need to be changed
 dataname = '{cam}'+data_filenum+'c1.fits'
 plate_path = os.path.join(catalog_path,'plates')
+field_path = os.path.join(catalog_path,'fields')
 
-field_name = field_prefix+field
-drilled_field_name_template = '{}_field_drilled.csv'
-drilled_field_name = drilled_field_name_template.format(field_name)
-drilled_field_path = os.path.join(catalog_path,'fields')
-
+if field_name is None:
+    if plate_name is None:
+        raise (IOError, "Either a drilled file or a target file must be supplied")
+    field_name_template = '{}_field_drilled.csv'
+    field_name = field_name_template.format(field_prefix+field)
+    
+    
 fieldtarget_path = os.path.join(catalog_path,'fields')
-additional_fielddata_name = None
 
 targeting_name = None
 targeting_path = os.path.join(catalog_path,'labelmapping')
@@ -100,8 +110,8 @@ def create_drilled_field_file(plate_pathname,drilled_field_name_template,
                                          unit=(u.hourangle, u.deg))
                     outtab.remove_column('ra')
                     outtab.remove_column('dec')
-                    racol = table.Column(data=skycoords.ra.deg, name='RA_drilled')
-                    deccol = table.Column(data=skycoords.dec.deg, name='DEC_drilled')
+                    racol = table.Column(data=skycoords.ra.deg, name='RA_targeted')
+                    deccol = table.Column(data=skycoords.dec.deg, name='DEC_targeted')
                     outtab.add_columns([racol, deccol])
                     outname = drilled_field_name_template.format(fielddict['header']['name'])
                     drill_field_pathname = os.path.join(drilled_field_path,outname)
@@ -135,8 +145,8 @@ def get_vizier_matches(mtl,vizier_catalogs=['sdss12']):
     if 'RA' in mtl.colnames:
         short_mtl = mtl[~mtl['RA'].mask]
     else:
-        mtl.add_column(table.Table.Column(data=mtl['RA_drilled'].data,name='RA'))
-        mtl.add_column(table.Table.Column(data=mtl['DEC_drilled'].data,name='DEC'))
+        mtl.add_column(table.Table.Column(data=mtl['RA_targeted'].data,name='RA'))
+        mtl.add_column(table.Table.Column(data=mtl['DEC_targeted'].data,name='DEC'))
         short_mtl = mtl
 
     skies = [('SKY' in name) for name in short_mtl['ID']]
@@ -210,51 +220,33 @@ def load_merged_target_list(field_prefix='M2FS16',field='A02',catalog_path=os.pa
 
 if __name__ == '__main__':
     ## Housekeeping to make sure all the specified things are there to run
-    paths = [plate_path, drilled_field_path, fieldtarget_path, targeting_path, redshifts_path, mtlz_path]
-    names = [plate_name, drilled_field_name, additional_fielddata_name, targeting_name, redshifts_name, mtlz_name]
+    paths = [plate_path, field_path, targeting_path, redshifts_path, mtlz_path]
+    names = [plate_name, field_name, targeting_name, redshifts_name, mtlz_name]
     for path, filename in zip(paths, names):
         if filename is not None:
             if not os.path.exists(path):
                 os.makedirs(path)
     del paths, names
-
-    if drilled_field_name is None and additional_fielddata_name is None:
-        raise(IOError,"Either a drilled file or a target file must be supplied")
+        
 
     ## Get fiber info
     fiber_table = create_m2fs_fiber_info_table(data_path, dataname, cams=['r', 'b'])
 
     ## Mine plate file for drilling info
-    if drilled_field_name is None or plate_name is None:
-        observed_field_table = fiber_table
-    else:
-        drilled_field_pathname = os.path.join(drilled_field_path,drilled_field_name)
-        plate_pathname = os.path.join(plate_path,plate_name)
-        if not os.path.exists(drilled_field_pathname) or overwrite_field:
-            create_drilled_field_file(plate_pathname, drilled_field_name_template=drilled_field_name_template, drilled_field_path=drilled_field_path, overwrite_file=overwrite_field)
-        drilled_field_table = table.Table.read(drilled_field_pathname)
-        ## Merge fiber and drill info
-        observed_field_table = table.join(fiber_table,drilled_field_table,keys='ID',join_type='left')
+    field_pathname = os.path.join(field_path,field_name)
+    if plate_name is not None:
+        if not os.path.exists(field_pathname) or overwrite_field:
+            plate_pathname = os.path.join(plate_path, plate_name)
+            create_drilled_field_file(plate_pathname, drilled_field_name_template=field_name_template, drilled_field_path=field_path, overwrite_file=overwrite_field)
 
-    ## Merge in the rest of the submitted field data
-    if additional_fielddata_name is not None:
-        field_pathname = os.path.join(fieldtarget_path, additional_fielddata_name)
-        add_field_table = load_additional_field_data(field_pathname,format='ascii.basic',header_start=1)
-        joined_field_table = table.join(left=observed_field_table,right=add_field_table,
-                                    keys='ID',join_type='left',table_names= ['1','2'])
-        if 'EPOCH' in observed_field_table.colnames:
-            for row in joined_field_table:
-                if row['EPOCH_1'] != row['EPOCH_2']:
-                    raise(TypeError,"Row EPOCH didn't match! breaking")
-                if row['TYPE_1'] != row['TYPE_2']:
-                    raise(TypeError,"Row TYPE didn't match! breaking")
-            joined_field_table.remove_column('EPOCH_2')
-            joined_field_table.remove_column('TYPE_2')
-            joined_field_table.rename_column('EPOCH_1','EPOCH')
-            joined_field_table.rename_column('TYPE_1','TYPE')
+        field_table = table.Table.read(field_pathname)
     else:
-        joined_field_table = observed_field_table
+        field_table = table.Table.read(field_pathname,header_start=1,format='ascii.tab')
+        field_table.rename_column('RA','RA_targeted')
+        field_table.rename_column('DEC','DEC_targeted')
 
+    ## Merge fiber and drill info
+    observed_field_table = table.join(fiber_table,field_table,keys='ID',join_type='left')
 
     ## If there is targeting information, merge that in as well
     if targeting_name is not None:
@@ -263,9 +255,9 @@ if __name__ == '__main__':
             raise(IOError,"The targeting file doesn't exist")
         else:
             targeting = table.Table.read(full_pathname,format='ascii.csv')
-            mtl = table.join(joined_field_table,targeting,keys='ID',join_type='left')
+            mtl = table.join(observed_field_table,targeting,keys='ID',join_type='left')
     else:
-        mtl = joined_field_table
+        mtl = observed_field_table
 
 
     ## If there is a separate redshifts file, merge that in
@@ -278,7 +270,7 @@ if __name__ == '__main__':
         matches = get_vizier_matches(mtl,vizier_catalogs)
         #print(len(fiber_table),len(drilled_field_table),len(observed_field_table),len(joined_field_table),len(mtl),len(matches))
         if matches is not None:
-            full_pathname = os.path.join(redshifts_path, field_name+'redshifts_'+vizier_catalogs[0]+'.csv')
+            full_pathname = os.path.join(redshifts_path, field_prefix+field+'_redshifts_'+vizier_catalogs[0]+'.csv')
             matches.write(full_pathname, format='ascii.csv',overwrite='True')
             mtlz = table.join(mtl,matches,keys='ID',join_type='left')
         else:
@@ -296,6 +288,7 @@ if __name__ == '__main__':
     ## Save the completed merged target list as a csv
     outname = os.path.join(mtlz_path,mtlz_name)
 
+    mtlz.meta['comments'] = []
     subtable = mtlz[final_order]
     subtable.write(outname+'_selected.csv',format='ascii.csv',overwrite=True)
 

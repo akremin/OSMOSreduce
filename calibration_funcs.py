@@ -127,7 +127,7 @@ def run_interactive_slider_calibration(coarse_comp, complinelistdict, default_va
 
     return Table(all_coefs)
 
-def run_automated_calibration(coarse_comp, complinelistdict, last_obs=None, print_itters = True):
+def run_automated_calibration(coarse_comp, complinelistdict, last_obs=None, print_itters = True, only_use_peaks = True):
     precision = 1e-4
     convergence_criteria = 1.0e-5 # change in correlation value from itteration to itteration
     waves, fluxes = generate_synthetic_spectra(complinelistdict, compnames=['HgAr', 'NeAr','Xe'],precision=precision,\
@@ -135,6 +135,9 @@ def run_automated_calibration(coarse_comp, complinelistdict, last_obs=None, prin
 
     ## Make sure the information is in astropy table format
     coarse_comp = Table(coarse_comp)
+    # for fib in ['r209','r711','r808']:
+    #     if fib in coarse_comp.colnames:
+    #         coarse_comp.remove_column(fib)
     ## Define loop params
     counter = 0
 
@@ -166,18 +169,22 @@ def run_automated_calibration(coarse_comp, complinelistdict, last_obs=None, prin
         ## Get the spectra (column with fiber name as column name)
         comp_spec = np.asarray(coarse_comp[fiber_identifier])
 
-        ## Find just the peaks in the calibration spectrum
-        c_peak_inds, c_peak_props = find_peaks(comp_spec, height=(400, None), width=(0.1, 20), \
-                                               threshold=(None, None),
-                                               prominence=(200, None), wlen=101)
 
-        ## create pixel array for mapping to wavelength
-        c_peak_inds = np.asarray(c_peak_inds)
-        pix1 = np.append(c_peak_inds,[c_peak_inds-1,c_peak_inds+1,c_peak_inds-2,c_peak_inds+2])
-        pix1 = np.unique(np.sort(pix1))
-        pix1 = pix1[pix1<len(comp_spec)]
-        comp_spec = comp_spec[pix1]
-        comp_spec[pix1<400] *= 100.
+        if only_use_peaks:
+            ## Find just the peaks in the calibration spectrum
+            c_peak_inds, c_peak_props = find_peaks(comp_spec, height=(400, None), width=(0.1, 20), \
+                                                   threshold=(None, None),
+                                                   prominence=(200, None), wlen=101)
+
+            ## create pixel array for mapping to wavelength
+            c_peak_inds = np.asarray(c_peak_inds)
+            pix1 = np.append(c_peak_inds,[c_peak_inds-1,c_peak_inds+1,c_peak_inds-2,c_peak_inds+2])
+            pix1 = np.unique(np.sort(pix1))
+            pix1 = pix1[pix1<len(comp_spec)]
+            comp_spec = comp_spec[pix1]
+            comp_spec[pix1<400] *= 100.
+        else:
+            pix1 = np.arange(len(comp_spec))
 
         abest, bbest, cbest, corrbest = 0., 0., 0., 0.
         alow, ahigh = 3000, 8000
@@ -196,9 +203,30 @@ def run_automated_calibration(coarse_comp, complinelistdict, last_obs=None, prin
                                                                       flux_wave_precision=precision,\
                                                                       print_itters=print_itters)
             else:
-                last_fiber = fibernames[counter-2]
-                [trasha, bbest, cbest, trash1, trash2, trash3] = all_coefs[last_fiber]
-                astep,bstep,cstep = 1,1,1
+                # if len(all_flags) > 0:
+                #     fibs,cors = [],[]
+                #     for ii,(fib,corr) in enumerate(all_flags.items()):
+                #         fibs.append(fib)
+                #         cors.append(corr)
+                #     fibs,cors = np.array(fibs),np.array(cors)
+                #     nearest_goodfits = np.where(cors>(0.8*np.median(cors)))[0]
+                #
+                #     if len(nearest_goodfits)>0:
+                #         nearest_goodfit = nearest_goodfits[-1]
+                #         compare_fiber = fibs[nearest_goodfit]
+                #         print(compare_fiber, 0.8*np.median(cors), cors[nearest_goodfit])
+                #     else:
+                #         compare_fiber = fibernames[counter - 2]
+                #         print(compare_fiber, np.median(cors))
+                # else:
+                #     compare_fiber = fibernames[counter-2]
+                #     print(compare_fiber)
+                compare_fiber = fibernames[counter - 2]
+                [trasha, bbest, cbest, trash1, trash2, trash3] = all_coefs[compare_fiber]
+                #if bbest < 0.96:
+                bbest = 1.0
+                cbest = 0.
+                astep,bstep,cstep = 4, 0.04, 8.0e-6
                 avals = (alow,   ahigh+astep,  astep)
                 bvals = (bbest , bbest+bstep , bstep)
                 cvals = (cbest , cbest+cstep , cstep)
@@ -235,7 +263,7 @@ def run_automated_calibration(coarse_comp, complinelistdict, last_obs=None, prin
             if print_itters:
                 print("\nItter {:d} results:".format(itter+2))
             last_corrbest = corrbest
-            incremental_res_div = 2.
+            incremental_res_div = 4.
             astep, bstep, cstep = astep/incremental_res_div, bstep/incremental_res_div, cstep/incremental_res_div
             awidth,bwidth,cwidth = awidth/incremental_res_div,bwidth/incremental_res_div,cwidth/incremental_res_div
             avals = ( abest-awidth, abest+awidth+astep, astep )
@@ -282,10 +310,12 @@ def fit_using_crosscorr(pixels, raw_spec, comp_highres_fluxes, avals, bvals, cva
                 indoffset = int((a - calib_wave_start) * prec_multiplier)
                 synthwaveinds = pixinds + indoffset
                 cut_comp_spec = raw_spec
-                if synthwaveinds[-40] < 0. or synthwaveinds[40] >= len(comp_highres_fluxes):
+                if len(synthwaveinds) == 0:
+                    continue
+                elif len(synthwaveinds)>40 and (synthwaveinds[-40] < 0. or synthwaveinds[40] >= len(comp_highres_fluxes)):
                     continue
                 elif synthwaveinds[0] < 0. or synthwaveinds[-1] >= len(comp_highres_fluxes):
-                    waverestrict_cut = np.argwhere(((synthwaveinds >= 0) & (synthwaveinds < len(comp_highres_fluxes))))[0]
+                    waverestrict_cut = np.where(((synthwaveinds >= 0) & (synthwaveinds < len(comp_highres_fluxes))))[0]
                     synthwaveinds = synthwaveinds[waverestrict_cut]
                     cut_comp_spec = raw_spec[waverestrict_cut]
                 synthflux = comp_highres_fluxes[synthwaveinds]
@@ -349,7 +379,7 @@ def generate_synthetic_spectra(compdict,compnames=[],precision=1.e-4,maxheight=1
     #plt.figure(); plt.plot(wavelengths,fluxes,'r-'); plt.plot(waves,maxheight*heights,'b.'); plt.show()
     return wavelengths,fluxes
 
-def compare_outputs(raw_data,table1,table2):
+def compare_outputs(raw_data,table1,table2,save_template='{fiber}.png',save_plots=True,show_plots=False):
     def waves(pixels, a, b, c,d,e,f):
         return a + (b * pixels) + (c * pixels * pixels)+\
                (d * np.power(pixels,3)) + (e * np.power(pixels,4))+ \
@@ -369,7 +399,14 @@ def compare_outputs(raw_data,table1,table2):
         print("--> Max deviation: {}  mean: {}  median: {}".format(dwaves[np.argmax(np.abs(dwaves))], np.mean(np.abs(dwaves)), np.median(np.abs(dwaves))))
         plt.figure()
         plt.plot(pixels, dwaves, 'r-')
-        plt.show()
+        plt.title("{}  max dev={}".format(match,np.max(np.abs(dwaves))))
+        plt.ylabel("Fit 1 - Fit 2 [Angstrom]")
+        plt.xlabel("Pixel")
+        if save_plots:
+            plt.savefig(save_template.format(fiber=match))
+        if show_plots:
+            plt.show()
+        plt.close()
     return matches
 
 def automated_calib_wrapper_script(input_dict):

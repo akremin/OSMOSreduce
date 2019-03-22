@@ -43,11 +43,18 @@ class DirectoryManager:
                             }
 
         self.step = 'bias'
+        self.verify_files_exist()
         self.update_dirs_for()
 
         if not os.path.exists(self.calibration_dir):
             os.makedirs(self.calibration_dir)
             print("Calibration folder created: {}".format(self.calibration_dir))
+
+    def verify_files_exist(self):
+        for dirnam in self.dirnames.values():
+            fullname = os.path.join(self.data_product_loc, dirnam)
+            if not os.path.exists(fullname):
+                os.mkdir(fullname)
 
     def update_dirs_for(self,step=None):
         if step is None:

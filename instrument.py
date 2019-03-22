@@ -6,7 +6,8 @@ class InstrumentState:
         if obs_config is None:
              self.cameras=['r','b']
              self.opamps=[1,2,3,4]
-             self.deadfibers=None
+             self.deadfibers=[]
+             self.swapped_fibers=[]
              self.binning='2x2'
              self.readout='Slow'
              self.resolution='LowRes'
@@ -23,6 +24,7 @@ class InstrumentState:
             self.cameras =  self.str_listify(obs_config['CCDS']['cameras'],expected_type=str)
             self.opamps =  self.str_listify(obs_config['CCDS']['opamps'],expected_type=int)
             self.deadfibers = self.str_listify(obs_config['INSTRUMENT']['deadfibers'],expected_type=str)
+            self.swapped_fibers = self.str_listify(obs_config['INSTRUMENT']['replacements'],expected_type=str)
             self.coarse_lamp_names = self.str_listify(obs_config['LAMPS']['coarse_lamp_names'],expected_type=str)
             self.fine_lamp_names = self.str_listify(obs_config['LAMPS']['fine_lamp_names'],expected_type=str)
 

@@ -1,4 +1,4 @@
-#!/C/Users/kremin/Anaconda3/python.exe
+#!/C/Users/kremin/Anaconda3/python3.exe
 # coding: utf-8
 
 # Basic Walkthrough:
@@ -44,7 +44,7 @@ def pipeline(maskname=None,obs_config_name=None,io_config_name=None, pipe_config
             io_config_name=None     (becomes 'io_{}.ini'.format(maskname) if None)
             pipe_config_name='pipeline_config.ini'
 
-    * Requires EITHER maskname or (obs_config_name and io_config_name)
+    *
       - If maskname specified, the filenames of obs_* and io_* must have the format
         mentioned above
       - If just filenames specified, maskname will be taken from config files
@@ -54,23 +54,32 @@ def pipeline(maskname=None,obs_config_name=None,io_config_name=None, pipe_config
        should be present
 
     """
-    if maskname is None and (obs_config_name is None or io_config_name is None):
-        raise(IOError,"I don't know the necessary configuration file information. Exiting")
-    if obs_config_name is None:
-        obs_config_name = './configs/obs_{}.ini'.format(maskname)
-    elif '/configs' not in obs_config_name and not os.path.exists(obs_config_name):
-        obs_config_name = './configs/{}'.format(obs_config_name)
-
-    if io_config_name is None:
-        io_config_name = './configs/io_{}.ini'.format(maskname)
-    elif '/configs' not in io_config_name and not os.path.exists(io_config_name):
-        io_config_name = './configs/{}'.format(io_config_name)
-
     if '/configs' not in pipe_config_name and not os.path.exists(pipe_config_name):
         pipe_config_name = './configs/{}'.format(pipe_config_name)
 
-    pipe_config = configparser.ConfigParser()
+    pipe_config = configparser.ConfigParser(interpolation=configparser.ExtendedInterpolation())
     pipe_config.read(pipe_config_name)
+
+
+    if maskname is None:
+        try:
+            maskname = pipe_config['GENERAL']['mask_name']
+        except:
+            raise (IOError, "I don't know the necessary configuration file information. Exiting")
+    if obs_config_name is None:
+        if 'obsconf' in pipe_config['CONFS'].keys():
+            obs_config_name = pipe_config['CONFS']['obsconf']
+        else:
+            obs_config_name = './configs/obs_{}.ini'.format(maskname)
+    if '/configs' not in obs_config_name and not os.path.exists(obs_config_name):
+        obs_config_name = './configs/{}'.format(obs_config_name)
+    if io_config_name is None:
+        if 'ioconf' in pipe_config['CONFS'].keys():
+            io_config_name = pipe_config['CONFS']['ioconf']
+        else:
+            io_config_name = './configs/io_{}.ini'.format(maskname)
+    if '/configs' not in io_config_name and not os.path.exists(io_config_name):
+        io_config_name = './configs/{}'.format(io_config_name)
 
     obs_config = configparser.ConfigParser()
     obs_config.read(obs_config_name)
@@ -161,5 +170,5 @@ if __name__ == '__main__':
     if len(sys.argv)>1:
         input_variables = parse_command_line()
     else:
-        input_variables = {'maskname': 'A02'}
+        input_variables = {}
     pipeline(**input_variables)

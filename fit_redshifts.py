@@ -14,7 +14,7 @@ from zestipy.plotting_tools import summary_plot
 def fit_redshifts(sky_subd_sciences,mask_name,run_auto=True,prior = None,savetemplate_func=None):
 
     R = z_est(lower_w=4200.0, upper_w=6400.0, lower_z=0.16, upper_z=0.6, \
-              z_res=3.0e-6, prior_width=0.02, use_zprior=False, \
+              z_res=3.0e-5, prior_width=0.02, use_zprior=False, \
               skip_initial_priors=True, \
               auto_pilot=True)
 

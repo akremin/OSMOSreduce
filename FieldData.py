@@ -25,6 +25,8 @@ class FieldData:
         self.single_core = (str(pipeline_options['single_core']).lower()=='true')
         self.save_plots = (str(pipeline_options['save_plots']).lower()=='true')
         self.show_plots = (str(pipeline_options['show_plots']).lower()=='true')
+        self.only_peaks_in_coarse_cal = (str(pipeline_options['only_peaks_in_coarse_cal']).lower()=='true')
+
         self.check_parameter_flags()
 
         self.twostep_wavecomparc = (len(list(filenumbers['fine_comp']))>0)
@@ -36,6 +38,7 @@ class FieldData:
 
         self.filenumbers = filenumbers
 
+        self.swapped_fibers_corrected = False
         self.data_stitched = False
         self.fibersplit = False
         self.current_data_saved = False
@@ -65,6 +68,8 @@ class FieldData:
         self.mtlz = self.filemanager.get_matched_target_list()
         self.all_skies = {}
         self.all_gals = {}
+        if self.reduction_order[startstep] > self.reduction_order['stitch']:
+            self.correct_swapped_fibers()
 
     def check_parameter_flags(self):
         if self.twod_to_oned != 'simple':
@@ -100,6 +105,70 @@ class FieldData:
     def proceed_to(self,step):
         if step != self.step:
             self.update_step(step)
+
+    def correct_swapped_fibers(self):
+        if self.swapped_fibers_corrected or len(self.instrument.swapped_fibers)==0:
+            self.swapped_fibers_corrected = True
+            return
+
+        scifil = self.filenumbers['science'][0]
+        self.swapped_fibers_corrected = True
+        for camera in self.instrument.cameras:
+            header = self.all_hdus[(camera, scifil, 'science', None)].header
+            if 'swpdfibs' in header.keys() and header['swpdfibs'].lower() == 'true':
+                continue
+            else:
+                self.swapped_fibers_corrected = False
+
+        if self.swapped_fibers_corrected:
+            return
+
+        deads = np.asarray(self.instrument.deadfibers)
+        swaps = np.asarray(self.instrument.swapped_fibers)
+        fiber_targets = {}
+
+        for camera in self.instrument.cameras:
+            header = self.all_hdus[(camera, scifil, 'science', None)].header.copy()
+            for key,val in dict(header).items():
+                if 'FIBER' in key:
+                    outkey = key.replace('FIBER',camera)
+                    fiber_targets[outkey] = val
+                    if outkey in swaps and 'unplugged' not in val:
+                        raise(TypeError,"The swapped fiber was originally assigned another target! {}: {}".format(outkey,val))
+
+        fibermask = []
+        for swap,dead in zip(swaps,deads):
+            bad = False
+            if dead not in fiber_targets.keys():
+                print("The dead fiber wasn't in the header target list: {}".format(dead))
+                bad=True
+            if swap not in fiber_targets.keys():
+                print("The dead fiber wasn't in the header target list: {}".format(dead))
+                bad=True
+            fibermask.append(bad)
+
+        fibermask = np.asarray(fibermask)
+        deads,swaps = deads[fibermask],swaps[fibermask]
+
+        for (camera, filenum, imtype, opamp), outhdu in self.all_hdus.items():
+            if imtype in ['fibmap','bias']:
+                continue
+
+            header_keys = list(outhdu.header.keys())
+            if 'swpdfibs' in header_keys and outhdu.header['swpdfibs'].lower() == 'true':
+                continue
+            else:
+                for dead,new in zip(deads,swaps):
+                    if camera in new:
+                        hnew = new.replace(camera, 'FIBER')
+                        outhdu.header[hnew] = fiber_targets[dead]
+                    if camera in dead:
+                        hdead = dead.replace(camera, 'FIBER')
+                        outhdu.header[hdead] = 'dead'
+
+                outhdu.header['swpdfibs'] = 'True'
+        self.swapped_fibers_corrected = True
+
 
     def read_crashed_filedata(self,returndata=False):
         self.all_hdus = self.filemanager.read_crashed_filedata()
@@ -196,7 +265,11 @@ class FieldData:
                 maskfile = writefile.replace('.fits', '.crmask.fits')
                 print("\nFor image type: {}, shoe: {},   filenum: {}".format(imtype, camera, filenum))
 
-                PyCosmic.detCos(readfile, maskfile, writefile, rdnoise='ENOISE',parallel=False,\
+                if self.single_core:
+                    PyCosmic.detCos(readfile, maskfile, writefile, rdnoise='ENOISE',parallel=False,\
+                                                              sigma_det=8, gain='EGAIN', verbose=True, return_data=False)
+                else:
+                    PyCosmic.detCos(readfile, maskfile, writefile, rdnoise='ENOISE',parallel=True,\
                                                               sigma_det=8, gain='EGAIN', verbose=True, return_data=False)
 
                 if imtype == 'science':
@@ -226,7 +299,8 @@ class FieldData:
                 self.populate_calibrations()
 
             for camera in self.instrument.cameras:
-               self.comparcs[camera].run_initial_calibrations(skip_coarse = self.skip_coarse_calib)
+               self.comparcs[camera].run_initial_calibrations(skip_coarse = self.skip_coarse_calib,\
+                                                              only_use_peaks=self.only_peaks_in_coarse_cal)
 
             for camera in self.instrument.cameras:
                 self.comparcs[camera].run_final_calibrations()
@@ -268,7 +342,7 @@ class FieldData:
             comparc = Calibrations(camera, self.comparc_lampsc, self.comparc_lampsf, comparc_cs, self.filemanager, \
                                  config=self.instrument.configuration, fine_calibrations=comparc_fs,\
                                  pairings=comparc_pairs, load_history=True, trust_after_first=False,\
-                                 single_core=self.single_core,\
+                                 single_core=self.single_core,show_plots=self.show_plots,\
                                  save_plots=self.save_plots,savetemplate_funcs=self.filemanager.get_saveplot_template)
 
             self.comparcs[camera] = comparc

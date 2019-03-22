@@ -21,7 +21,7 @@ class Calibrations:
     def __init__(self, camera, lamptypesc, lamptypesf, coarse_calibrations, filemanager, config, \
                  fine_calibrations=None, pairings=None, load_history=True, trust_after_first=False,\
                  default_fit_key='cross correlation',use_selected_calib_lines=False, \
-                 single_core=False, save_plots=False, savetemplate_funcs=None\
+                 single_core=False, save_plots=False, savetemplate_funcs=None,show_plots=False\
                  ):
 
         self.imtype = 'comp'
@@ -37,6 +37,7 @@ class Calibrations:
         self.trust_after_first = trust_after_first
         self.single_core = single_core
         self.save_plots = save_plots
+        self.show_plots = show_plots
 
         #self.linelistc,selected_linesc,all_linesc = filemanager.load_calibration_lines_dict(lamptypesc,use_selected=use_selected_calib_lines)
         self.linelistc,all_linesc = filemanager.load_calibration_lines_dict(lamptypesc,use_selected=use_selected_calib_lines)
@@ -131,8 +132,8 @@ class Calibrations:
                     calib_tab = calib
                 self.history_calibration_coefs[pairnum] = calib_tab
 
-
-    def run_initial_calibrations(self,skip_coarse=False):
+    #TODO Use all initial comps (Average) if more than one is paired to a single final comp
+    def run_initial_calibrations(self,skip_coarse=False,only_use_peaks = True):
         for pairnum,(cc_filnum, throwaway) in self.pairings.items():
             if skip_coarse and self.history_calibration_coefs[pairnum] is not None:
                 self.coarse_calibration_coefs[pairnum] = self.history_calibration_coefs[pairnum].copy()
@@ -146,7 +147,7 @@ class Calibrations:
                     histories = self.history_calibration_coefs[pairnum]
                     obs1 = {
                         'coarse_comp': comp_data, 'complinelistdict': self.linelistc,
-                        'print_itters': False, 'last_obs': histories
+                        'print_itters': False, 'last_obs': histories,'only_use_peaks': only_use_peaks
                     }
 
                     out_calib = automated_calib_wrapper_script(obs1)
@@ -162,9 +163,9 @@ class Calibrations:
                     coarse_comp_data_hist = None
                     # coarse_comp_data_hist = Table.read("out_coefs_{}.fits".format(filenum_hist),format='fits')
                     obs1 = {'coarse_comp': comp_data[fib1s.tolist()], 'complinelistdict': self.linelistc,
-                        'print_itters': False,'last_obs': hist1}
+                        'print_itters': False,'last_obs': hist1,'only_use_peaks': only_use_peaks}
                     obs2 = {'coarse_comp': comp_data[fib2s.tolist()], 'complinelistdict': self.linelistc,
-                        'print_itters': False,'last_obs':hist2}
+                        'print_itters': False,'last_obs':hist2,'only_use_peaks': only_use_peaks}
 
                     all_obs = [obs1, obs2]
                     if len(all_obs) < 4:
@@ -176,7 +177,10 @@ class Calibrations:
                         tabs = pool.map(automated_calib_wrapper_script, all_obs)
                     print(tabs)
 
-                    matches = compare_outputs(comp_data, tabs[0], tabs[1])
+                    template = self.savetemplate_funcs(cam=str(cc_filnum) + '_', ap='{fiber}', imtype='coarse_calib',
+                                                       step='calib_comparison', comment='auto')
+                    matches = compare_outputs(comp_data, tabs[0], tabs[1],save_template=template,\
+                                              save_plots=self.save_plots,show_plots=self.show_plots)
 
                     tabs[1] = tabs[1][fib2s[::-1].tolist()]
                     tabs[0].remove_column(fibernames[int(len(fibernames) / 2)])
@@ -204,16 +208,16 @@ class Calibrations:
         initial_coef_table = self.coarse_calibration_coefs[0].copy()
         for pairnum,filnums in self.pairings.items():
             filenum = filnums[filenum_ind]
-            # if int(filenum) == 627:
-            #     continue
-            # else:
-            #     full_hdulist,typ = self.filemanager.locate_calib_dict(fittype='full-ThAr',camera=self.camera,config='11C',filenum=627)
-            #     self.final_calibrated_hdulists[self.pairnums[0]] = full_hdulist
-            #     initial_coef_table = Table(full_hdulist['calib coefs'].data)
+            if int(filenum) == 903:
+                self.load_most_recent_coefs()
+                self.fine_calibration_coefs[pairnum] = self.history_calibration_coefs[pairnum]
+                initial_coef_table = self.history_calibration_coefs[pairnum].copy()
+                continue
 
             ## Note that if there isn't a fine calibration, fine_calibrations
             ## has already been set equal to coarse_calibrations hdus
             data = Table(self.fine_calibrations[filenum].data)
+
             linelist = self.selected_lines
 
             if pairnum == 0:
@@ -233,7 +237,7 @@ class Calibrations:
                 for i, fib in enumerate(specific_set):
                     outfib = ensure_match(fib, data.colnames, hand_fit_subset, cam)
                     hand_fit_subset.append(outfib)
-                seed = 10294
+                seed = int(filenum)
                 np.random.seed(seed)
                 randfibs = ['{:02d}'.format(x) for x in np.random.randint(1, 16, 4)]
                 for tetn, fibn in zip([2, 3, 6, 7], randfibs):
@@ -253,70 +257,14 @@ class Calibrations:
             else:
                 pass
 
-            ##HACK!
-            #hand_fit_subset = ['r101','r501','r816']
-            # if pairnum == 0:
-            #     initial_coef_table['r101'] = np.array([
-            #         4523.504744632997,
-            #         0.9902037692462855,
-            #         1.4071420505508765e-05, -6.979096736950242e-09,
-            #         7.908223828274561e-13,
-            #         2.2433639953608495e-17])
-            #     initial_coef_table['r816'] = np.array([
-            #         4514.86823165337,
-            #         0.9907796853939725,
-            #         1.4522149312033485e-05, - 1.0180443805589069e-08,
-            #         3.5183279664920133e-12, - 6.237549641776653e-16])
-            #     initial_coef_table['r416'] = np.array([
-            #         4415.155901868451,
-            #         0.9965498614121288,
-            #         1.065962334220239e-05, - 5.649854509530727e-09,
-            #         1.389048126534454e-12, - 3.224284231664944e-16])
-            #     initial_coef_table['r501'] = np.array([
-            #         4413.27277779815,
-            #         0.9994133629898564,
-            #         2.8578853365659992e-06,
-            #         3.784654125473248e-09, - 3.930783306988635e-12,
-            #         7.951258577595027e-16])
-            #     initial_coef_table['r206'] = np.array([
-            #         4464.674375043897,
-            #         0.9966509051374907, - 3.921030756659404e-07,
-            #         1.0631796071319008e-08, - 8.224253883585533e-12,
-            #         1.6842647107028991e-15])
-            #     initial_coef_table['r312'] = np.array([
-            #         4427.358912135707,
-            #         0.9972462295080241,
-            #         6.441033474266637e-06,
-            #         2.7865837626636373e-10, - 2.418619027130886e-12,
-            #         5.67632107463266e-16])
-            #
-            #     initial_coef_table['r614'] = np.array([
-            #         4432.768653184016,
-            #         0.9956306772256991,
-            #         7.438262933933016e-06,
-            #         2.0668268797365688e-09, - 4.489941474187922e-12,
-            #         1.1076626596976758e-15])
-            #     initial_coef_table['r702'] = np.array([4445.791403090819, 0.9948188048627493,
-            #                     8.991491512149804e-06, - 1.6508591330365725e-09, - 1.5410561084851273e-12,
-            #                     3.815737707484089e-16])
-
-
             hand_fit_subset = np.asarray(hand_fit_subset)
             out_calib_h, out_linelist_h, lambdas_h, pixels_h, variances_h, wm, fm  = \
                                     self.wavelength_fitting_by_line_selection(data, linelist, \
                                     self.all_lines, initial_coef_table,select_lines=select_lines,\
                                     filenum=filenum,subset=hand_fit_subset)#bounds=None)
-            ##HACK!
-            # print("\n\n\n\n\n\n")
-            # print(wm)
-            # print("\n")
-            # print(fm)
-            # print("\n\n\n\n\n\n")
-            # if pairnum == 0:
-            #     initial_coef_table = self.coarse_calibration_coefs[0].copy()
 
             if self.single_core:
-                out_calib, lambdas, pixels, variances = \
+                out_calib, outlinelist, lambdas, pixels, variances = \
                     auto_wavelength_fitting_by_lines(data, self.all_lines, initial_coef_table, wm, fm,\
                                                           out_calib_h, user_input=user_input,filenum=filenum, \
                                                           save_plots=self.save_plots, savetemplate_funcs=self.savetemplate_funcs)
@@ -360,7 +308,11 @@ class Calibrations:
                     variances[key] = variances_h[key]
                     out_linelist[key] = out_linelist_h[key]
 
-                matches = compare_outputs(data, Table(out_calib), Table(out_calib_a2))
+                template = self.savetemplate_funcs(cam=str(filenum) + '_', ap='{fiber}', imtype='fine_calib', step='wavecalib',
+                                                   comment='fit_comparison')
+
+                matches = compare_outputs(data, Table(out_calib), Table(out_calib_a2),save_template=template,\
+                                          save_plots=self.save_plots,show_plots=self.show_plots)
 
                 for key in out_calib_a2.keys():
                     if key in matches:
@@ -443,6 +395,8 @@ class Calibrations:
 
             self.final_calibrated_hdulists[pairnum] = hdulist
             self.filemanager.save_full_calib_dict(hdulist, self.lampstr_f, self.camera, self.config, filenum=filenum)
+
+            plt.close('all')
 
 
     def create_calibration_default(self,save=True):
@@ -563,14 +517,15 @@ class Calibrations:
                 iteration_wm, iteration_fm = wm.copy(), fm.copy()
             else:
                 iteration_wm, iteration_fm = selectedlistdict[fiber]
-            if len(all_coefs.keys())>0:
-                coef_devs = np.zeros(len(coefs)).astype(np.float64)
-                for key,key_coefs in all_coefs.items():
-                    dev = np.asarray(key_coefs)-np.asarray(coef_table[key])
-                    coef_devs += dev
-                coef_devs /= len(all_coefs.keys())
 
-                updated_coefs = coefs+coef_devs
+            if len(all_coefs)>0:
+                coef_devs = np.zeros(shape=(len(all_coefs),6)).astype(np.float64)
+                for ii,(key,key_coefs) in enumerate(all_coefs.items()):
+                    dev = np.asarray(key_coefs)-np.asarray(coef_table[key])
+                    coef_devs[ii,:] = dev
+                coef_dev_med = np.median(coef_devs,axis=0)
+
+                updated_coefs = coefs+coef_dev_med
             else:
                 updated_coefs = coefs
 
@@ -656,7 +611,12 @@ class Calibrations:
         if not select_lines:
             app_specific_linelists = None
             wm,fm = iteration_wm, iteration_fm
+
+        plt.close('all')
         return all_coefs, app_specific_linelists, app_fit_lambs, app_fit_pix, variances, wm, fm
+
+
+
 
     def run_interactive_slider_calibration(self,coarse_comp, complinelistdict, default_vals=None,history_vals=None,\
                                        steps = None, default_key = None, trust_initial = False):

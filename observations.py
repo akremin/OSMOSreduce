@@ -4,7 +4,7 @@ from collections import OrderedDict
 
 
 
-
+#TODO Use all initial comps (Average) if more than one is paired to a single final comp
 class Observations:
     def __init__(self,filenumbers,obs_pairing_strategy):
         self.comparc_cs = filenumbers['coarse_comp']
