@@ -878,9 +878,6 @@ if __name__ == '__main__':
                      default_dict=default_dict, steps=steps, default_key=default_key)
 
 
-
-
-
 def air_to_vacuum(airwl, nouvconv=True):
     """
     Returns vacuum wavelength of the provided air wavelength array or scalar.

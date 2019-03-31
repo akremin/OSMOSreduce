@@ -1,5 +1,6 @@
 
 import pickle as pkl
+import gc
 from collections import OrderedDict
 from multiprocessing import Pool
 
@@ -18,7 +19,7 @@ from linebrowser import LineBrowser
 
 
 class Calibrations:
-    def __init__(self, camera, lamptypesc, lamptypesf, coarse_calibrations, filemanager, config, \
+    def __init__(self, camera, instrument, lamptypesc, lamptypesf, coarse_calibrations, filemanager, config, \
                  fine_calibrations=None, pairings=None, load_history=True, trust_after_first=False,\
                  default_fit_key='cross correlation',use_selected_calib_lines=False, \
                  single_core=False, save_plots=False, savetemplate_funcs=None,show_plots=False\
@@ -27,6 +28,7 @@ class Calibrations:
         self.imtype = 'comp'
 
         self.camera = camera
+        self.instrument = instrument
         self.filemanager = filemanager
         self.config = config
         self.lamptypesc = lamptypesc
@@ -47,6 +49,11 @@ class Calibrations:
 
         self.ncalibs = len(coarse_calibrations.keys())
         self.do_fine_calib = (fine_calibrations is not None)
+
+        if self.do_fine_calib:
+            self.filenum_ind = 1
+        else:
+            self.filenum_ind = 0
 
         self.lampstr_c = 'basic'
         self.lampstr_f = 'full'
@@ -152,8 +159,8 @@ class Calibrations:
 
                     out_calib = automated_calib_wrapper_script(obs1)
                 else:
-                    fib1s = fibernames[:int(len(fibernames) / 2) + 1]
-                    fib2s = fibernames[int(len(fibernames) / 2) - 1:][::-1]
+                    fib1s = np.append(self.instrument.lower_half_fibs[self.camera],self.instrument.overlapping_fibs[self.camera][1])
+                    fib2s = np.append(self.instrument.upper_half_fibs[self.camera],self.instrument.overlapping_fibs[self.camera][0])
                     histories = self.history_calibration_coefs[pairnum]
                     if histories is not None:
                         hist1 = histories[fib1s.tolist()]
@@ -175,19 +182,22 @@ class Calibrations:
 
                     with Pool(NPROC) as pool:
                         tabs = pool.map(automated_calib_wrapper_script, all_obs)
-                    print(tabs)
 
                     template = self.savetemplate_funcs(cam=str(cc_filnum) + '_', ap='{fiber}', imtype='coarse_calib',
                                                        step='calib_comparison', comment='auto')
                     matches = compare_outputs(comp_data, tabs[0], tabs[1],save_template=template,\
                                               save_plots=self.save_plots,show_plots=self.show_plots)
 
-                    tabs[1] = tabs[1][fib2s[::-1].tolist()]
-                    tabs[0].remove_column(fibernames[int(len(fibernames) / 2)])
-                    tabs[1].remove_column(fibernames[int(len(fibernames) / 2) - 1])
+                    if np.sort(self.instrument.overlapping_fibs[self.camera]) != np.sort(matches):
+                        print("The overlaps returned from the matching didn't match the overlaps")
+                        print("that were explicitly defined: {}  {}".format(matches, self.instrument.overlapping_fibs[
+                            self.camera]))
+
+                    tabs[0].remove_column(self.instrument.overlapping_fibs[self.camera][1])
+                    tabs[1].remove_column(self.instrument.overlapping_fibs[self.camera][0])
 
                     out_calib = hstack([tabs[0], tabs[1]])
-
+                    out_calib = out_calib[self.instrument.full_fibs[self.camera].tolist()]
 
                 self.coarse_calibration_coefs[pairnum] = out_calib.copy()
 
@@ -196,23 +206,20 @@ class Calibrations:
 
     def run_final_calibrations(self):
         if not self.do_fine_calib:
-            print("There doesn't seem to be a fine calibration defined. Using the supplied calibc's")
+            print("There doesn't seem to be a fine calibration defined. Using the supplied coarse calibs")
         select_lines = True
-        if self.do_fine_calib:
-            filenum_ind = 1
-        else:
-            filenum_ind = 0
 
         dev_allowance = 1.
         devs = 2.
         initial_coef_table = self.coarse_calibration_coefs[0].copy()
         for pairnum,filnums in self.pairings.items():
-            filenum = filnums[filenum_ind]
-            if int(filenum) == 903:
-                self.load_most_recent_coefs()
-                self.fine_calibration_coefs[pairnum] = self.history_calibration_coefs[pairnum]
-                initial_coef_table = self.history_calibration_coefs[pairnum].copy()
-                continue
+            filenum = filnums[self.filenum_ind]
+            ##HACK!!
+            # if int(filenum) == 903:
+            #     self.load_most_recent_coefs()
+            #     self.fine_calibration_coefs[pairnum] = self.history_calibration_coefs[pairnum]
+            #     initial_coef_table = self.history_calibration_coefs[pairnum].copy()
+            #     continue
 
             ## Note that if there isn't a fine calibration, fine_calibrations
             ## has already been set equal to coarse_calibrations hdus
@@ -273,9 +280,11 @@ class Calibrations:
                     pixels[key] = pixels_h[key]
                     variances[key] = variances_h[key]
             else:
-                fibernames = np.sort(np.array(data.colnames))
-                fib1s = fibernames[:int(len(fibernames) / 2) + 1]
-                fib2s = fibernames[int(len(fibernames) / 2) - 1:][::-1]
+                # fibernames = self.instrument.full_fibs[self.camera]
+                fib1s = np.append(self.instrument.lower_half_fibs[self.camera],
+                                  self.instrument.overlapping_fibs[self.camera][1])
+                fib2s = np.append(self.instrument.upper_half_fibs[self.camera],
+                                  self.instrument.overlapping_fibs[self.camera][0])
                 obs1 = {
                     'comp': data[fib1s.tolist()], 'fulllinelist': self.all_lines,
                     'coef_table': initial_coef_table, 'wm':wm,'fm':fm,\
@@ -313,6 +322,10 @@ class Calibrations:
 
                 matches = compare_outputs(data, Table(out_calib), Table(out_calib_a2),save_template=template,\
                                           save_plots=self.save_plots,show_plots=self.show_plots)
+
+                if np.sort(self.instrument.overlapping_fibs[self.camera])!=np.sort(matches):
+                    print("The overlaps returned from the matching didn't match the overlaps")
+                    print("that were explicitly defined: {}  {}".format(matches,self.instrument.overlapping_fibs[self.camera]))
 
                 for key in out_calib_a2.keys():
                     if key in matches:
@@ -370,8 +383,7 @@ class Calibrations:
             lambdas_tab = Table()
             pixels_tab = Table()
 
-            sorted = np.sort(list(out_calib.keys()))
-            for key in sorted:
+            for key in self.instrument.full_fibs[self.camera]:
                 out_calib_table.add_column(Table.Column(data=out_calib[key],name=key))
                 variances_tab.add_column(Table.Column(data=variances[key],name=key))
                 lambdas_tab.add_column(Table.Column(data=lambdas[key],name=key))
@@ -397,6 +409,7 @@ class Calibrations:
             self.filemanager.save_full_calib_dict(hdulist, self.lampstr_f, self.camera, self.config, filenum=filenum)
 
             plt.close('all')
+            gc.collect()
 
 
     def create_calibration_default(self,save=True):

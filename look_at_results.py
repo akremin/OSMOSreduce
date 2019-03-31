@@ -21,7 +21,7 @@ scalar_c = consts.c.to(u.km/u.s).value
 
 
 prefix, target = 'M2FS16', 'A04'
-outfile = os.path.abspath(os.path.join(os.curdir,'..','..', 'OneDrive - umich.edu','Research','M2FSReductions','catalogs','merged_target_lists', 'allzs_plus_mtlz_{}_{}_full.fits'.format(prefix,target)))
+outfile = os.path.abspath(os.path.join(os.curdir,'..','..', 'OneDrive - umich.edu','Research','M2FSReductions','catalogs','merged_target_lists', 'mtlz_{}_{}_full.fits'.format(prefix,target)))
 
 
 complete_table = Table.read(outfile,format='fits')

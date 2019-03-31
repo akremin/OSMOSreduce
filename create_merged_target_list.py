@@ -125,7 +125,12 @@ def create_m2fs_fiber_info_table(datapath,dataname,cams=['r','b']):
     datapathname = os.path.join(datapath,dataname)
     od = {'ID': [], 'FIBNAME': [], 'm2fs_fiberID': [], 'm2fs_fab': [], 'm2fs_CH': []}
     for cam in cams:
-        hdr = fits.getheader(datapathname.format(cam=cam))
+        fulldatapathname = datapathname.format(cam=cam)
+
+        if not os.path.exists(fulldatapathname):
+            continue
+
+        hdr = fits.getheader(fulldatapathname)
         fibs = [key for key in hdr.keys() if 'FIBER' in key]
         for fib in fibs:
             id = hdr[fib]
@@ -218,80 +223,288 @@ def load_merged_target_list(field_prefix='M2FS16',field='A02',catalog_path=os.pa
         return None
 
 
-if __name__ == '__main__':
+def create_mtl(io_config,science_filenum,vizier_catalogs,overwrite_field,overwrite_redshifts):
+    data_path = io_config['PATHS']['raw_data_loc']
+    dataname = io_config['FILETEMPLATES']['raw'].format(cam='{cam}',filenum=science_filenum,opamp='1')
+    dataname = dataname + '.fits'
+
+    plate_path = io_config['PATHS']['plate_loc']
+    plate_name = io_config['SPECIALFILES']['plate']
+    if plate_name == 'None':
+        plate_name = None
+
+    field_path = io_config['PATHS']['field_loc']
+    field_name = io_config['SPECIALFILES']['field']
+    if field_name == 'None':
+        field_name = None
+
+    redshifts_path = io_config['PATHS']['redshifts_loc']
+    redshifts_name = io_config['SPECIALFILES']['redshifts']
+    if redshifts_name == 'None':
+        redshifts_name == None
+
+    targeting_path, targeting_name = None, None
+
+    mtl_path = io_config['PATHS']['mtlz_path']
+    mtl_name = io_config['SPECIALFILES']['mtl']
+
+
     ## Housekeeping to make sure all the specified things are there to run
-    paths = [plate_path, field_path, targeting_path, redshifts_path, mtlz_path]
-    names = [plate_name, field_name, targeting_name, redshifts_name, mtlz_name]
+    paths = [plate_path, field_path, targeting_path, redshifts_path, mtl_path]
+    names = [plate_name, field_name, targeting_name, redshifts_name, mtl_name]
     for path, filename in zip(paths, names):
         if filename is not None:
             if not os.path.exists(path):
                 os.makedirs(path)
     del paths, names
-        
 
     ## Get fiber info
     fiber_table = create_m2fs_fiber_info_table(data_path, dataname, cams=['r', 'b'])
 
     ## Mine plate file for drilling info
-    field_pathname = os.path.join(field_path,field_name)
+    field_pathname = os.path.join(field_path, field_name)
     if plate_name is not None:
         if not os.path.exists(field_pathname) or overwrite_field:
             plate_pathname = os.path.join(plate_path, plate_name)
-            create_drilled_field_file(plate_pathname, drilled_field_name_template=field_name_template, drilled_field_path=field_path, overwrite_file=overwrite_field)
+            create_drilled_field_file(plate_pathname, drilled_field_name_template=field_name_template,
+                                      drilled_field_path=field_path, overwrite_file=overwrite_field)
 
         field_table = table.Table.read(field_pathname)
     else:
-        field_table = table.Table.read(field_pathname,header_start=1,format='ascii.tab')
-        field_table.rename_column('RA','RA_targeted')
-        field_table.rename_column('DEC','DEC_targeted')
+        field_table = table.Table.read(field_pathname, header_start=1, format='ascii.tab')
+        field_table.rename_column('RA', 'RA_targeted')
+        field_table.rename_column('DEC', 'DEC_targeted')
 
     ## Merge fiber and drill info
-    observed_field_table = table.join(fiber_table,field_table,keys='ID',join_type='left')
+    observed_field_table = table.join(fiber_table, field_table, keys='ID', join_type='left')
 
     ## If there is targeting information, merge that in as well
     if targeting_name is not None:
-        full_pathname = os.path.join(targeting_path,targeting_name)
+        full_pathname = os.path.join(targeting_path, targeting_name)
         if not os.path.exists(full_pathname):
-            raise(IOError,"The targeting file doesn't exist")
+            raise (IOError, "The targeting file doesn't exist")
         else:
-            targeting = table.Table.read(full_pathname,format='ascii.csv')
-            mtl = table.join(observed_field_table,targeting,keys='ID',join_type='left')
+            targeting = table.Table.read(full_pathname, format='ascii.csv')
+            ml = table.join(observed_field_table, targeting, keys='ID', join_type='left')
     else:
-        mtl = observed_field_table
-
+        ml = observed_field_table
 
     ## If there is a separate redshifts file, merge that in
     ## Else query vizier (either sdss or panstarrs) to get redshifts and merge that in
-    if redshifts_name is not None and os.path.exists(os.path.join(redshifts_path, redshifts_name)) and not overwrite_redshifts:
+    if redshifts_name is not None and os.path.exists(
+            os.path.join(redshifts_path, redshifts_name)) and not overwrite_redshifts:
         full_pathname = os.path.join(redshifts_path, redshifts_name)
         redshifts = table.Table.read(full_pathname, format='ascii.csv')
-        mtlz = table.join(mtl, redshifts, keys='ID', join_type='left')
+        mtl = table.join(ml, redshifts, keys='ID', join_type='left')
     else:
-        matches = get_vizier_matches(mtl,vizier_catalogs)
-        #print(len(fiber_table),len(drilled_field_table),len(observed_field_table),len(joined_field_table),len(mtl),len(matches))
+        matches = get_vizier_matches(ml, vizier_catalogs)
+        # print(len(fiber_table),len(drilled_field_table),len(observed_field_table),len(joined_field_table),len(mtl),len(matches))
         if matches is not None:
-            full_pathname = os.path.join(redshifts_path, field_prefix+field+'_redshifts_'+vizier_catalogs[0]+'.csv')
-            matches.write(full_pathname, format='ascii.csv',overwrite='True')
-            mtlz = table.join(mtl,matches,keys='ID',join_type='left')
+            full_pathname = os.path.join(redshifts_path,
+                                         field_prefix + field + '_redshifts_' + vizier_catalogs[0] + '.csv')
+            matches.write(full_pathname, format='ascii.csv', overwrite='True')
+            mtl = table.join(ml, matches, keys='ID', join_type='left')
         else:
-            mtlz = mtl
+            mtl = ml
 
-    all_most_interesting = ['ID','TARGETNAME','FIBNAME','sdss_SDSS12','RA','DEC','sdss_zsp','sdss_zph','sdss_rmag','MAG']
-    all_cols = mtlz.colnames
+    all_most_interesting = ['ID', 'TARGETNAME', 'FIBNAME', 'sdss_SDSS12', 'RA', 'DEC', 'sdss_zsp', 'sdss_zph',
+                            'sdss_rmag', 'MAG']
+    all_cols = mtl.colnames
     final_order = []
     for name in all_most_interesting:
         if name in all_cols:
             final_order.append(name)
             all_cols.remove(name)
 
-
     ## Save the completed merged target list as a csv
-    outname = os.path.join(mtlz_path,mtlz_name)
+    outname = os.path.join(mtl_path, mtl_name)
 
-    mtlz.meta['comments'] = []
-    subtable = mtlz[final_order]
-    subtable.write(outname+'_selected.csv',format='ascii.csv',overwrite=True)
+    mtl.meta['comments'] = []
+    subtable = mtl[final_order]
+    subtable.write(outname + '_selected.csv', format='ascii.csv', overwrite=True)
 
     final_order.extend(all_cols)
-    fulltable = mtlz[final_order]
+    fulltable = mtl[final_order]
     fulltable.write(outname + '_full.csv', format='ascii.csv', overwrite=True)
+
+
+def make_mtlz(mtl_table, hdus, find_more_redshifts=False,outfile='mtlz.csv',\
+              vizier_catalogs = ['sdss12']):
+    from astropy import units as u
+    from astropy.time import Time
+    from astropy.coordinates import EarthLocation, SkyCoord
+    import astropy.constants as consts
+    from astropy.cosmology import Planck13
+    from astroquery.vizier import Vizier
+    from astropy.table import Table, vstack, join
+
+    hdu1, hdu2 = hdus
+
+    # apperature, redshift_est, cor, template
+    # ID,FIBNAME,sdss_SDSS12,RA,DEC,sdss_zsp,sdss_zph,sdss_rmag,MAG
+
+    tabler = Table(hdu1.data)
+
+    headerr = hdu1.header
+
+    mtl = Table(mtl_table)
+    tabler.rename_column('apperature', 'FIBNAME')
+
+    ra_clust,dec_clust = headerr['RA_TARG'],headerr['DEC_TARG']
+    cluster = SkyCoord(ra=ra_clust * u.deg, dec=dec_clust * u.deg)
+    z_clust = headerr['Z_TARG']
+    kpc_p_amin = Planck13.kpc_comoving_per_arcmin(z_clust)
+
+    if hdu2 is not None:
+        tableb = Table(hdu2.data)
+        headerb = hdu2.header
+        tableb.rename_column('apperature', 'FIBNAME')
+
+    fibermap = {}
+    for key, val in dict(headerr).items():
+        if key[:5] == 'FIBER':
+            fibermap['{}{}'.format('r', key[5:])] = val.strip(' \t')
+
+    for t in range(1, 9):
+        for f in range(1, 17):
+            testkey = 'FIBER{:d}{:02d}'.format(t, f)
+            replacekey = 'r{:d}{:02d}'.format(t, f)
+            if testkey in tabler.meta.keys():
+                tabler.meta[replacekey] = tabler.meta[testkey]
+                tabler.meta.pop(testkey)
+
+    if hdu2 is not None:
+        for key, val in dict(headerb).items():
+            if key[:5] == 'FIBER':
+                fibermap['{}{}'.format('b', key[5:])] = val.strip(' \t')
+        for t in range(1, 9):
+            for f in range(1, 17):
+                testkey = 'FIBER{:d}{:02d}'.format(t, f)
+                replacekey = 'b{:d}{:02d}'.format(t, f)
+                if testkey in tableb.meta.keys():
+                    tableb.meta[replacekey] = tableb.meta[testkey]
+                    tableb.meta.pop(testkey)
+
+        for ii in range(len(mtl)):
+            id = mtl['ID'][ii]
+            fbnm = mtl['FIBNAME'][ii]
+            if fbnm not in fibermap.keys():
+                print("{} not in fibermap!".format(fbnm))
+            elif fibermap[fbnm].upper() != id:
+                print(ii, fbnm, fibermap[fbnm], id)
+
+        combined_table = vstack([tabler, tableb])
+    else:
+        combined_table = tabler
+
+    full_table = join(combined_table, mtl, 'FIBNAME', join_type='inner')
+
+    ## Add additional information
+    time = Time(headerr['MJD'], format='mjd')
+    location = EarthLocation(lon=headerr['SITELONG'] * u.deg, lat=headerr['SITELAT'] * u.deg, \
+                             height=headerr['SITEALT'] * u.meter)
+    hc_cor = cluster.radial_velocity_correction(kind='barycentric', obstime=time, location=location)
+    dz = hc_cor / consts.c
+
+    full_table.add_column(Table.Column(data=full_table['redshift_est'] + dz, name='z_est_bary'))
+
+    all_coords = SkyCoord(ra=full_table['RA'] * u.deg, dec=full_table['DEC'] * u.deg)
+    seps = cluster.separation(all_coords)
+    full_table.add_column(Table.Column(data=seps.to(u.arcsec).value, name='Proj_R_asec'))
+    full_table.add_column(Table.Column(data=(kpc_p_amin * seps).to(u.Mpc).value, name='Proj_R_Comoving_Mpc'))
+
+    dvs = consts.c.to(u.km / u.s).value * (z_clust - full_table['z_est_bary']) / (1. + z_clust)
+    full_table.add_column(Table.Column(data=dvs, name='velocity'))
+
+    if find_more_redshifts:
+        radius = 5 * u.Mpc / kpc_p_amin
+        Vizier.ROW_LIMIT = -1
+        result = Vizier.query_region(cluster, radius=radius, catalog=vizier_catalogs)
+        res_tab = result[0]
+
+        if np.all(res_tab['zsp'].mask):
+            if np.all(res_tab['zph'].mask):
+                sdss_archive_table = res_tab
+            else:
+                cut_tab = res_tab[np.where(~res_tab['zph'].mask)]
+                sdss_archive_table = cut_tab[np.where(cut_tab['zph'] > -99)]
+        else:
+            sdss_archive_table = res_tab[np.where(~res_tab['zsp'].mask)]
+
+        for col in sdss_archive_table.colnames:
+            sdss_archive_table.rename_column(col, 'sdss_' + col)
+
+        for ii in np.arange(len(sdss_archive_table))[::-1]:
+            if sdss_archive_table['sdss_SDSS12'][ii] in full_table['sdss_SDSS12']:
+                print("Removing: {}".format(sdss_archive_table['sdss_SDSS12'][ii]))
+                sdss_archive_table.remove_row(ii)
+
+        sdss_archive_table.add_column(Table.Column(data=sdss_archive_table['sdss_RA_ICRS'], name='RA'))
+        sdss_archive_table.add_column(Table.Column(data=sdss_archive_table['sdss_DE_ICRS'], name='DEC'))
+        sdss_archive_table.add_column(Table.Column(data=['T'] * len(sdss_archive_table), name='TYPE'))
+        sdss_archive_table.add_column(Table.Column(data=[2000.0] * len(sdss_archive_table), name='EPOCH'))
+
+        all_sdss_coords = SkyCoord(ra=sdss_archive_table['sdss_RA_ICRS'], dec=sdss_archive_table['sdss_DE_ICRS'])
+        seps = cluster.separation(all_sdss_coords)
+        sdss_archive_table.add_column(Table.Column(data=seps.to(u.arcsec).value, name='Proj_R_asec'))
+        sdss_archive_table.add_column(Table.Column(data=(kpc_p_amin * seps).to(u.Mpc).value, name='Proj_R_Comoving_Mpc'))
+        sdss_archive_table.add_column(Table.Column(data=sdss_archive_table['sdss_zsp'], name='z_est_bary'))
+        dvs = consts.c.to(u.km / u.s).value * (z_clust - sdss_archive_table['z_est_bary']) / (1. + z_clust)
+        sdss_archive_table.add_column(Table.Column(data=dvs, name='velocity'))
+        #
+        #
+        full_table.add_column(Table.Column(data=[False] * len(full_table), name='SDSS_only'))
+        sdss_archive_table.add_column(Table.Column(data=[True] * len(sdss_archive_table), name='SDSS_only'))
+
+        sdss_archive_table.convert_bytestring_to_unicode()
+        convert = []
+        for row in sdss_archive_table['sdss_q_mode']:
+            convert.append(float(row.strip(' ') == '+'))
+
+        new_sdssq_col = Table.Column(data=convert, name='sdss_q_mode')
+        sdss_archive_table.replace_column('sdss_q_mode', new_sdssq_col)
+
+        mega_table = vstack([full_table, sdss_archive_table])
+
+    else:
+        full_table.add_column(Table.Column(data=[False] * len(full_table), name='SDSS_only'))
+        mega_table = full_table
+
+    for key, val in headerr.items():
+        if 'FIBER' in key:
+            continue
+        elif 'TFORM' in key:
+            continue
+        elif 'TTYPE' in key:
+            continue
+        elif 'NAXIS' in key:
+            continue
+        elif key in ['BITPIX','XTENSION','PCOUNT','GCOUNT','TFIELDS','COMMENT']:
+            continue
+        if key in mega_table.meta.keys() and key != 'HISTORY':
+            print("There was a conflicting key that I've overwritten: {}".format(key))
+            print("Values of the conflict: {}  {}".format(val,mega_table.meta[key]))
+        mega_table.meta[key] = val
+
+    desc = mega_table.meta.pop('description')
+    mega_table.meta['DESCRP'] = desc
+
+
+    if 'full' not in outfile:
+        outfile = outfile + '_full'
+    if '.csv' not in outfile:
+        outfile = outfile + '.csv'
+
+    mega_table.write(outfile.replace('.csv', '.fits'), format='fits', overwrite=True)#,\
+                     #output_verify="fix")
+
+    mega_table.meta['comments'] = []
+    mega_table.write(outfile, format='ascii.csv',overwrite=True)
+
+
+
+if __name__ == '__main__':
+    vizier_catalogs = ['sdss12']  # 'panstarrs','sdss'
+    overwrite_field = True  # Ignored if the field is defined in place of a plate above
+    overwrite_redshifts = False
+    #main(io_config,vizier_catalogs,overwrite_field,overwrite_redshifts)

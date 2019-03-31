@@ -28,9 +28,9 @@ def sncalc(redshift,wave,gal_flux):
     KSN = Kamp/Gnoise
     GSN = Gamp/Gnoise
 
-    print('H S/N:',HSN)
-    print('K S/N:',KSN)
-    print('G S/N:',GSN)
+    # print('H S/N:',HSN)
+    # print('K S/N:',KSN)
+    # print('G S/N:',GSN)
 
     return (HSN,KSN,GSN)
 

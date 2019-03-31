@@ -28,15 +28,15 @@ class DirectoryManager:
         self.lampline_dir    = os.path.abspath(PATHS['lampline'])
         self.plot_dir        = os.path.join(self.data_product_loc,dirnms['save_plots'])
         self.catalog_path    = os.path.abspath(PATHS['catalog_loc'])
-        self.mtlz_path       = os.path.abspath(PATHS['mtlz_path'])
+        self.mtl_path       = os.path.abspath(PATHS['mtlz_path'])
 
         self.dirname_dict = {
                                 'bias':        {'read':dirnms['raw'],      'write':dirnms['debiased']},\
                                 'stitch':      {'read':dirnms['debiased'], 'write':dirnms['stitched']},\
                                 'remove_crs':  {'read':dirnms['stitched'], 'write':dirnms['products']},\
                                 'apcut':       {'read':dirnms['products'], 'write':dirnms['oned']}, \
-                                'wavecalib':   {'read':dirnms['oned'],     'write':dirnms['calibd1d']},\
-                                'flatten':        {'read':dirnms['calibd1d'], 'write':dirnms['calibd1d']}, \
+                                'wavecalib':   {'read':dirnms['oned'],     'write':dirnms['oned']},\
+                                'flatten':     {'read':dirnms['oned'],     'write':dirnms['calibd1d']}, \
                                 'skysub':      {'read':dirnms['calibd1d'], 'write':dirnms['calibd1d']}, \
                                 'combine':     {'read':dirnms['calibd1d'], 'write':dirnms['final1d']},\
                                 'zfit':        {'read':dirnms['final1d'],  'write':dirnms['zfit']}\
@@ -95,7 +95,7 @@ class DirectoryManager:
 class FileManager:
     def __init__(self, conf):
         ## TODO  get the configuration values propogated to here
-        GENERAL, NAMECONVENTIONS = conf['GENERAL'], conf['NAMECONVENTIONS']
+        GENERAL, SPECIALFILES = conf['GENERAL'], conf['SPECIALFILES']
         flnm_tmplt = conf['FILETEMPLATES']
         flnm_tags = conf['FILETAGS']
 
@@ -104,7 +104,7 @@ class FileManager:
 
         self.directory = DirectoryManager(conf)
         self.maskname = GENERAL['mask_name']
-        self.mtlz_name = NAMECONVENTIONS['mtlz']
+        self.mtl_name = SPECIALFILES['mtl']
 
         ## Setup Defaults
         self.current_read_template = None
@@ -135,8 +135,8 @@ class FileManager:
                                 'stitch':      {'read':flnm_tags['debiased'], 'write': flnm_tags['debiased']},\
                                 'remove_crs':  {'read':flnm_tags['debiased'], 'write': flnm_tags['crrmvd']},\
                                 'apcut':       {'read':flnm_tags['crrmvd'],   'write': flnm_tags['crrmvd']}, \
-                                'wavecalib':   {'read':flnm_tags['crrmvd'],   'write': flnm_tags['wavecald']},\
-                                'flatten':        {'read':flnm_tags['wavecald'], 'write': flnm_tags['flatnd']}, \
+                                'wavecalib':   {'read':flnm_tags['crrmvd'],   'write': flnm_tags['crrmvd']},\
+                                'flatten':     {'read':flnm_tags['crrmvd'],   'write': flnm_tags['flatnd']}, \
                                 'skysub':      {'read':flnm_tags['flatnd'],   'write': flnm_tags['skysubd']}, \
                                 'combine':     {'read':flnm_tags['skysubd'],  'write': flnm_tags['skysubd']},\
                                  'zfit':       {'read':flnm_tags['skysubd'],  'write': flnm_tags['skysubd']}\
@@ -376,16 +376,17 @@ class FileManager:
         return selectedlinesdict, np.asarray(all_wms)
 
     def get_matched_target_list(self):
-        full_name = os.path.join(self.directory.mtlz_path,self.mtlz_name)
+        full_name = os.path.join(self.directory.mtl_path,self.mtl_name)
+        full_name = full_name + '_full.csv'
         if os.path.exists(full_name):
             try:
-                mtlz = Table.read(full_name, format='ascii.csv', \
-                                  include_names=['ID', 'TARGETNAME', 'FIBNAME', 'sdss_SDSS12', \
-                                                 'RA', 'DEC', 'RA_drilled', 'DEC_drilled', 'sdss_zsp', 'sdss_zph'])
-                return mtlz
+                mtl = Table.read(full_name, format='ascii.csv', \
+                                  include_names=['ID','TARGETNAME','FIBNAME','sdss_SDSS12','RA','DEC',\
+                                                 'sdss_zsp','sdss_zph','sdss_rmag','MAG'])
+                return mtl
             except:
                 print("Failed to open merged target list, but it did exist")
                 return None
         else:
-            print("Could not find the merged target list file")
+            print("Could not find the merged target list file at: {}".format(full_name))
             return None

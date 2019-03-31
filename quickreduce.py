@@ -105,13 +105,19 @@ def pipeline(maskname=None,obs_config_name=None,io_config_name=None, pipe_config
     ## Load the filemanager and instrument status based on the configuration files
     filemanager = FileManager( io_config )
     instrument = InstrumentState( obs_config )
-
+    obj_info = obs_config['TARGET']
     ## Get specific pipeline options
     pipe_options = dict(pipe_config['PIPE_OPTIONS'])
 
+    if pipe_options['make_mtl'].lower() == 'true' and \
+            io_config['SPECIALFILES']['mtl'].lower() != 'none':
+        from create_merged_target_list import create_mtl
+        create_mtl(io_config,filenumbers['science'][0],vizier_catalogs=['sdss12'], \
+                   overwrite_field=False, overwrite_redshifts = False)
+
     ## Load the data and instantiate the pipeline functions within the data class
     data = FieldData(filenumbers, filemanager=filemanager, instrument=instrument,
-                     startstep=start, pipeline_options=pipe_options)
+                     startstep=start, pipeline_options=pipe_options,obj_info=obj_info)
 
     ## For all steps marked true, run those steps on the data
     for step,do_this_step in steps.items():
@@ -132,7 +138,7 @@ def pipeline(maskname=None,obs_config_name=None,io_config_name=None, pipe_config
 
         ## cosmic ray step autosaves during the process
         ## for other steps, save the results
-        if step != 'cr_remove':
+        if step not in ['cr_remove','wave_calib']:
             try:
                 data.write_all_filedata()#step=step)
             except:
@@ -142,8 +148,39 @@ def pipeline(maskname=None,obs_config_name=None,io_config_name=None, pipe_config
                     pkl.dump(data.all_hdus,crashsave)
                 raise()
 
+    # ##HACK!!
+    # do_this_step = True
+    # zfit_path = os.path.abspath(
+    #     os.path.join(os.curdir, '..', '..', 'OneDrive - umich.edu', 'Research', 'M2FSReductions',maskname, 'zfits'))
+    # zfits_template = '{cam}_zfits_{maskname}_combined_1d_bcwfs.fits'
+    # zfit_file = os.path.join(zfit_path, zfits_template.format(cam='r', maskname='A04'))
+    # zfit_file1 = os.path.join(zfit_path, zfits_template.format(cam='b', maskname='A04'))
+    # from astropy.io import fits
+    # hdur = fits.open(zfit_file)[1]
+    # hdub = fits.open(zfit_file1)[1]
+    # for key,val in obj_info.items():
+    #     hdur.header[key] = float(val)
+    #     hdub.header[key] = float(val)
+    # data.all_hdus = {}
+    # data.all_hdus[('r', None,'zfits',None)] = hdur
+    # data.all_hdus[('b', None, 'zfits', None)] = hdub
+    # ################ End hack
 
-
+    if step == 'zfit' and do_this_step and (str(pipe_options['make_mtlz']).lower()=='true'):
+        find_extra_redshifts = (str(pipe_options['find_extra_redshifts']).lower()=='true')
+        mtlz_path = io_config['PATHS']['mtlz_path']
+        mtlz_name = io_config['SPECIALFILES']['mtlz']
+        outfile = os.path.join(mtlz_path,mtlz_name)
+        from create_merged_target_list import make_mtlz
+        if len(instrument.cameras) == 2:
+            hdur = data.all_hdus[('r', None, 'zfits', None)]
+            hdub = data.all_hdus[('b', None, 'zfits', None)]
+            hdus = [hdur,hdub]
+        else:
+            hdu1 = data.all_hdus[(instrument.cameras[0], None, 'zfits', None)]
+            hdus = [hdu1,None]
+        make_mtlz(data.mtl, hdus, find_extra_redshifts,outfile=outfile,\
+                  vizier_catalogs = ['sdss12'])
 
 
 def parse_command_line(argv):

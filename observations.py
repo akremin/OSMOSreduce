@@ -100,3 +100,12 @@ class Observations:
 
     def return_observation_sets(self):
         return self.observations
+
+    def set_astronomical_object(self,info):
+        self.object = {}
+        for key,val in info.items():
+            if val.isnumeric():
+                outval = float(val)
+            else:
+                outval = val
+            self.object[key] = outval

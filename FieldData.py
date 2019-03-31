@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 
 class FieldData:
     def __init__(self, filenumbers, filemanager, instrument,
-                     startstep='bias', pipeline_options={} ):
+                     startstep='bias', pipeline_options={}, obj_info={} ):
 
         self.obs_pairing_strategy = pipeline_options['pairing_strategy']
         self.twod_to_oned = pipeline_options['twod_to_oned_strategy']
@@ -26,6 +26,7 @@ class FieldData:
         self.save_plots = (str(pipeline_options['save_plots']).lower()=='true')
         self.show_plots = (str(pipeline_options['show_plots']).lower()=='true')
         self.only_peaks_in_coarse_cal = (str(pipeline_options['only_peaks_in_coarse_cal']).lower()=='true')
+
 
         self.check_parameter_flags()
 
@@ -55,6 +56,7 @@ class FieldData:
         ## an aastropy.fits hdu with a header and data attribute
         self.step = None
         self.observations = Observations(self.filenumbers,self.obs_pairing_strategy)
+        self.observations.set_astronomical_object(obj_info)
         self.comparcs = {}
         self.fit_data = {}
         self.targeting_sky_pairs = {}
@@ -65,11 +67,11 @@ class FieldData:
         self.final_calibration_coefs = {}
         if self.reduction_order[startstep]>self.reduction_order['wavecalib']:
             self.get_final_wavelength_coefs()
-        self.mtlz = self.filemanager.get_matched_target_list()
+        self.mtl = self.filemanager.get_matched_target_list()
         self.all_skies = {}
         self.all_gals = {}
         if self.reduction_order[startstep] > self.reduction_order['stitch']:
-            self.correct_swapped_fibers()
+            self.update_headers()
 
     def check_parameter_flags(self):
         if self.twod_to_oned != 'simple':
@@ -86,7 +88,6 @@ class FieldData:
         self.data_stitched = numeric_step_value>self.reduction_order['stitch']
         self.fibersplit    = numeric_step_value>self.reduction_order['apcut']
 
-
         if numeric_step_value > self.reduction_order['bias']:
             self.filenumbers['bias'] = np.array([])
         if numeric_step_value > self.reduction_order['stitch']:
@@ -98,6 +99,9 @@ class FieldData:
             self.filenumbers['fine_comp'] = np.array([])
         if numeric_step_value > self.reduction_order['flatten']:
             self.filenumbers['twiflat'] = np.array([])
+        # if numeric_step_value > self.reduction_order['sky_sub']:
+        #     for cam in self.instrument.cameras:
+        #         self.instrument.full_fibs[self.camera].tolist()
         if numeric_step_value > self.reduction_order['combine']:
             self.filenumbers['science'] = np.array(['combined_fluxes','combined_wavelengths'])
         self.filemanager.update_templates_for(step)
@@ -105,6 +109,37 @@ class FieldData:
     def proceed_to(self,step):
         if step != self.step:
             self.update_step(step)
+
+    def update_headers(self):
+        self.correct_swapped_fibers()
+        self.add_target_information()
+
+    def add_target_information(self):
+        object = self.observations.object
+        scifil = self.filenumbers['science'][0]
+        header = self.all_hdus[(self.instrument.cameras[0], scifil, 'science', None)].header.copy()
+
+        tests = []
+        keys,vals = [],[]
+        for key,val in object.items():
+            outkey = key
+            if 'TARG' not in key.upper():
+                outkey = 'TARG'+key
+            if outkey not in header.keys():
+                keys.append(outkey)
+                vals.append(val)
+
+        if len(keys)==0:
+            return
+
+        for outkey,val in zip(keys,vals):
+            for (camera, filenum, imtype, opamp), outhdu in self.all_hdus.items():
+                if imtype in ['fibmap', 'bias']:
+                    continue
+                elif outkey in outhdu.header.keys():
+                    continue
+                else:
+                    outhdu.header[outkey] = val
 
     def correct_swapped_fibers(self):
         if self.swapped_fibers_corrected or len(self.instrument.swapped_fibers)==0:
@@ -325,7 +360,7 @@ class FieldData:
                 zfit_hdus[(camera,None,'zfits',None)] = self.fit_redshfits(cam=camera)
             self.all_hdus = zfit_hdus
 
-        if self.step != 'remove_crs':
+        if self.step not in ['remove_crs','wave_calib']:
             self.current_data_saved = False
             self.current_data_from_disk = False
 
@@ -339,7 +374,7 @@ class FieldData:
                 comparc_fs = {filnum: self.all_hdus[(camera, filnum, 'fine_comp', None)] for filnum in self.observations.comparc_fs}
             else:
                 comparc_fs = None
-            comparc = Calibrations(camera, self.comparc_lampsc, self.comparc_lampsf, comparc_cs, self.filemanager, \
+            comparc = Calibrations(camera, self.instrument, self.comparc_lampsc, self.comparc_lampsf, comparc_cs, self.filemanager, \
                                  config=self.instrument.configuration, fine_calibrations=comparc_fs,\
                                  pairings=comparc_pairs, load_history=True, trust_after_first=False,\
                                  single_core=self.single_core,show_plots=self.show_plots,\
@@ -394,6 +429,8 @@ class FieldData:
         if return_table:
             return master_fibmap
 
+    ## TODO: Check if the same wavecal is used. If so, add before interpolation
+    ## TODO: Rework to use same code as the combine_sciences?
     def combine_flats(self,camera,return_table=False):
         filnums = self.filenumbers['twiflat']
         all_flats = []
@@ -638,7 +675,7 @@ class FieldData:
                                                                                  header=sci_hdu.header,
                                                                                  name='flux')
 
-
+    ## TODO: Check if the same wavecal is used. If so, add before interpolation
     def combine_science_observations(self, cam):
         if len(self.final_calibration_coefs.keys()) == 0:
             self.get_final_wavelength_coefs()
@@ -727,7 +764,7 @@ class FieldData:
         for key,val in extra_skies.items():
             all_skies[key] = val
 
-        if self.mtlz is None:
+        if self.mtl is None:
             skynums ,skynames = [] ,[]
             for fibname in all_skies.keys():
                 skynames.append(fibname)
@@ -751,32 +788,32 @@ class FieldData:
             skyloc_array = []
             skynames = []
             for fibname, objname in skies.items():
-                fibrow = np.where(self.mtlz['FIBNAME'] == fibname)[0][0]
-                objrow = np.where(self.mtlz['ID'] == objname)[0][0]
+                fibrow = np.where(self.mtl['FIBNAME'] == fibname)[0][0]
+                objrow = np.where(self.mtl['ID'] == objname)[0][0]
                 if fibrow != objrow:
                     print("Fiber and object matched to different rows!")
                     print(fibname, objname, fibrow, objrow)
                     raise ()
-                if self.mtlz['RA'].mask[fibrow]:
-                    ra, dec = self.mtlz['RA_drilled'][fibrow], self.mtlz['DEC_drilled'][fibrow]
+                if self.mtl['RA'].mask[fibrow]:
+                    ra, dec = self.mtl['RA_targeted'][fibrow], self.mtl['DEC_targeted'][fibrow]
                 else:
-                    ra, dec = self.mtlz['RA'][fibrow], self.mtlz['DEC'][fibrow]
+                    ra, dec = self.mtl['RA'][fibrow], self.mtl['DEC'][fibrow]
                 skyloc_array.append([ra, dec])
                 skynames.append(fibname)
             sky_coords = SkyCoord(skyloc_array, unit=u.deg)
 
             target_sky_pair = {}
             for fibname, objname in scis.items():
-                fibrow = np.where(self.mtlz['FIBNAME'] == fibname)[0][0]
-                objrow = np.where(self.mtlz['ID'] == objname)[0][0]
+                fibrow = np.where(self.mtl['FIBNAME'] == fibname)[0][0]
+                objrow = np.where(self.mtl['ID'] == objname)[0][0]
                 if fibrow != objrow:
                     print("Fiber and object matched to different rows!")
                     print(fibname, objname, fibrow, objrow)
                     raise ()
-                if self.mtlz['RA'].mask[fibrow]:
-                    ra, dec = self.mtlz['RA_drilled'][fibrow], self.mtlz['DEC_drilled'][fibrow]
+                if self.mtl['RA'].mask[fibrow]:
+                    ra, dec = self.mtl['RA_targeted'][fibrow], self.mtl['DEC_targeted'][fibrow]
                 else:
-                    ra, dec = self.mtlz['RA'][fibrow], self.mtlz['DEC'][fibrow]
+                    ra, dec = self.mtl['RA'][fibrow], self.mtl['DEC'][fibrow]
                 coord = SkyCoord(ra, dec, unit=u.deg)
                 seps = coord.separation(sky_coords)
                 minsepind = np.argmin(seps)
@@ -788,7 +825,7 @@ class FieldData:
 
 
     def fit_redshfits(self,cam):
-        from fit_redshifts import fit_redshifts
+        from fit_redshifts import fit_redshifts_wrapper
         waves = Table(self.all_hdus[(cam,'combined_wavelengths','science',None)].data)
         fluxes = Table(self.all_hdus[(cam, 'combined_fluxes', 'science', None)].data)
         if (cam, 'combined_mask', 'science', None) in self.all_hdus.keys():
@@ -796,15 +833,58 @@ class FieldData:
         else:
             mask = None
 
-        sci_data = OrderedDict()
-        for ap in fluxes.colnames:
-            if mask is None:
-                current_mask = np.ones(len(waves[ap])).astype(bool)
-            else:
-                current_mask = mask[ap]
-            sci_data[ap] = (waves[ap],fluxes[ap],current_mask)
-
         header = self.all_hdus[(cam, 'combined_fluxes', 'science', None)].header
-        results = fit_redshifts(sci_data,mask_name=self.filemanager.maskname, savetemplate_func=self.filemanager.get_saveplot_template, run_auto=True)
+
+        if self.single_core:
+            sci_data = OrderedDict()
+            for fib in fluxes.colnames:
+                if mask is None:
+                    current_mask = np.ones(len(waves[fib])).astype(bool)
+                else:
+                    current_mask = mask[fib]
+                sci_data[fib] = (waves[fib], fluxes[fib], current_mask)
+            obs1 = {
+                'sky_subd_sciences':sci_data, 'mask_name': self.filemanager.maskname, 'savetemplate_func': self.filemanager.get_saveplot_template, 'run_auto': True
+            }
+            results = fit_redshifts_wrapper(obs1)
+        else:
+            sci_data1 = OrderedDict()
+            fib1s = self.instrument.lower_half_fibs[cam]
+
+            for fib in fib1s:
+                if fib in fluxes.colnames:
+                    if mask is None:
+                        current_mask = np.ones(len(waves[fib])).astype(bool)
+                    else:
+                        current_mask = mask[fib]
+                    sci_data1[fib] = (waves[fib], fluxes[fib], current_mask)
+
+            sci_data2 = OrderedDict()
+            fib2s = self.instrument.upper_half_fibs[cam]
+            for fib in fib2s:
+                if fib in fluxes.colnames:
+                    if mask is None:
+                        current_mask = np.ones(len(waves[fib])).astype(bool)
+                    else:
+                        current_mask = mask[fib]
+                    sci_data2[fib] = (waves[fib], fluxes[fib], current_mask)
+
+            obs1 = {
+                'sky_subd_sciences':sci_data1, 'mask_name': self.filemanager.maskname, 'savetemplate_func': self.filemanager.get_saveplot_template, 'run_auto': True
+            }
+            obs2 = {
+                'sky_subd_sciences':sci_data2, 'mask_name': self.filemanager.maskname, 'savetemplate_func': self.filemanager.get_saveplot_template, 'run_auto': True
+            }
+
+            all_obs = [obs1, obs2]
+            NPROC = len(all_obs)
+
+            from multiprocessing import Pool
+            with Pool(NPROC) as pool:
+                tabs = pool.map(fit_redshifts_wrapper, all_obs)
+
+            from astropy.table import vstack
+            results = vstack([tabs[0], tabs[1]])
+
         return fits.BinTableHDU(data=results, header=header, name='zfits')
 

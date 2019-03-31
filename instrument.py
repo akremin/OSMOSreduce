@@ -32,6 +32,12 @@ class InstrumentState:
             if self.filter.lower() == 'none':
                 self.filter = None
 
+        self.lower_half_fibs,self.upper_half_fibs = {},{}
+        self.full_fibs,self.overlapping_fibs = {},{}
+
+        for camera in self.cameras:
+            self.create_proper_spatial_splits(camera)
+
         if self.opamps is None:
             self.opamps = [None]
 
@@ -72,3 +78,43 @@ class InstrumentState:
         if len(out_num_list) == 1 and out_num_list[0] == '':
             out_num_list = []
         return np.asarray(out_num_list)
+
+    def create_proper_spatial_splits(self,camera):
+        full_fibs = []
+        upper_half_fibs = []
+        lower_half_fibs = []
+
+        if camera == 'b':
+            tet_order = np.arange(8,0,-1)
+        else:
+            tet_order = np.arange(1,9,1)
+
+        tet_order_b = tet_order[:4]
+        tet_order_u = tet_order[4:]
+
+        for tet in tet_order_b:
+            for fib in np.arange(1,17):
+                fibnm = '{}{}{:02d}'.format(camera,tet,fib)
+                if fibnm not in self.deadfibers:
+                    full_fibs.append(fibnm)
+                    lower_half_fibs.append(fibnm)
+
+        for tet in tet_order_u:
+            for fib in np.arange(1, 17):
+                fibnm = '{}{}{:02d}'.format(camera, tet, fib)
+                if fibnm not in self.deadfibers:
+                    full_fibs.append(fibnm)
+                    upper_half_fibs.append(fibnm)
+
+        ## because we want to go from outside-inward, flip the order of the top fibs
+        lower_half_fibs = np.array(lower_half_fibs)
+        upper_half_fibs = np.array(upper_half_fibs)[::-1]
+
+        last_low = lower_half_fibs[-1].copy()
+        last_upper = upper_half_fibs[-1].copy()
+
+        self.lower_half_fibs[camera] = np.append(lower_half_fibs,last_upper)
+        self.upper_half_fibs[camera] = np.append(upper_half_fibs, last_low)
+
+        self.full_fibs[camera] = np.array(full_fibs)
+        self.overlapping_fibs[camera] = np.array([last_low,last_upper])

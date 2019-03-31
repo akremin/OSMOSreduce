@@ -10,11 +10,14 @@ from zestipy.z_est import z_est
 from zestipy.plotting_tools import summary_plot
 
 
+def fit_redshifts_wrapper(input_dict):
+    return fit_redshifts(**input_dict)
+
 
 def fit_redshifts(sky_subd_sciences,mask_name,run_auto=True,prior = None,savetemplate_func=None):
-
+    # 3.0e-5
     R = z_est(lower_w=4200.0, upper_w=6400.0, lower_z=0.16, upper_z=0.6, \
-              z_res=3.0e-5, prior_width=0.02, use_zprior=False, \
+              z_res=1.0e-5, prior_width=0.02, use_zprior=False, \
               skip_initial_priors=True, \
               auto_pilot=True)
 
@@ -46,7 +49,7 @@ def fit_redshifts(sky_subd_sciences,mask_name,run_auto=True,prior = None,savetem
         ztest = redshift_outputs.ztest_vals
         corr_val = redshift_outputs.corr_vals
         template = redshift_outputs.template.name
-        print((redshift_outputs.best_zest, redshift_outputs.max_cor, redshift_outputs.template.name))
+
         if not run_auto:
             qualityval = redshift_outputs.qualityval
         try:
@@ -54,6 +57,16 @@ def fit_redshifts(sky_subd_sciences,mask_name,run_auto=True,prior = None,savetem
                                                test_waveform.continuum_subtracted_flux)
         except ValueError:
             HSN, KSN, GSN = 0.0, 0.0, 0.0
+
+        print("\n\n  {}:".format(ap))
+        names = ['Z Best','Mac Cor','Templt','H S/N', 'K S/N', 'G S/N']
+        vals = [redshift_est, cor, template, HSN, KSN, GSN]
+        for name,val in zip(names,vals):
+            if type(val) in [int,str]:
+                print('---> {}:\t{}'.format(name, val))
+            else:
+                print('---> {}:\t{:06f}'.format(name,val))
+
         SNavg = np.average(np.array([HSN, KSN, GSN]))
         SNHKmin = np.min(np.array([HSN, KSN]))
         # Create a summary plot of the best z-fit
