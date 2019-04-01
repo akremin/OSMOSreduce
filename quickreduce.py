@@ -148,24 +148,6 @@ def pipeline(maskname=None,obs_config_name=None,io_config_name=None, pipe_config
                     pkl.dump(data.all_hdus,crashsave)
                 raise()
 
-    # ##HACK!!
-    # do_this_step = True
-    # zfit_path = os.path.abspath(
-    #     os.path.join(os.curdir, '..', '..', 'OneDrive - umich.edu', 'Research', 'M2FSReductions',maskname, 'zfits'))
-    # zfits_template = '{cam}_zfits_{maskname}_combined_1d_bcwfs.fits'
-    # zfit_file = os.path.join(zfit_path, zfits_template.format(cam='r', maskname='A04'))
-    # zfit_file1 = os.path.join(zfit_path, zfits_template.format(cam='b', maskname='A04'))
-    # from astropy.io import fits
-    # hdur = fits.open(zfit_file)[1]
-    # hdub = fits.open(zfit_file1)[1]
-    # for key,val in obj_info.items():
-    #     hdur.header[key] = float(val)
-    #     hdub.header[key] = float(val)
-    # data.all_hdus = {}
-    # data.all_hdus[('r', None,'zfits',None)] = hdur
-    # data.all_hdus[('b', None, 'zfits', None)] = hdub
-    # ################ End hack
-
     if step == 'zfit' and do_this_step and (str(pipe_options['make_mtlz']).lower()=='true'):
         find_extra_redshifts = (str(pipe_options['find_extra_redshifts']).lower()=='true')
         mtlz_path = io_config['PATHS']['mtlz_path']

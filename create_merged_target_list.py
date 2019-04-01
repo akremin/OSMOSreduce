@@ -19,50 +19,6 @@ from astropy.io import fits
 
 ## User defined variables
 
-vizier_catalogs = ['sdss12'] #'panstarrs','sdss'
-field_prefix,semester,fieldnum = 'M2FS16','A','04'
-
-
-field = semester+fieldnum
-plate_name = None#'Kremin_2017A_A02_07_08_11.plate'
-field_name = 'kremin_{}{}{}.field'.format(field_prefix,semester,fieldnum)
-
-catalog_path = os.path.abspath('../../OneDrive - umich.edu/Research/M2FSReductions/catalogs')
-data_path =  os.path.abspath('../../OneDrive - umich.edu/Research/M2FSReductions/'+field+'/raw_data')
-
-overwrite_field = True  # Ignored if the field is defined in place of a plate above
-
-data_filenum = '0904'  # as a 0 offset string of a4 digit number  ex '0614'
-
-overwrite_redshifts = False
-
-
-
-
-## Assuming standard format outputs, nothing below this point should need to be changed
-dataname = '{cam}'+data_filenum+'c1.fits'
-plate_path = os.path.join(catalog_path,'plates')
-field_path = os.path.join(catalog_path,'fields')
-
-if field_name is None:
-    if plate_name is None:
-        raise (IOError, "Either a drilled file or a target file must be supplied")
-    field_name_template = '{}_field_drilled.csv'
-    field_name = field_name_template.format(field_prefix+field)
-    
-    
-fieldtarget_path = os.path.join(catalog_path,'fields')
-
-targeting_name = None
-targeting_path = os.path.join(catalog_path,'labelmapping')
-
-redshifts_name = field_prefix + '_' + field + '_redshifts_' + vizier_catalogs[0] + '.csv'
-redshifts_path = os.path.join(catalog_path,'redshifts')
-
-mtlz_name = 'mtlz_' + field_prefix + '_' + field
-mtlz_path = os.path.join(catalog_path,'merged_target_lists')
-
-
 def create_drilled_field_file(plate_pathname,drilled_field_name_template,
                               drilled_field_path = os.path.abspath('./'),overwrite_file=False):
     plate_file = {}
@@ -224,28 +180,29 @@ def load_merged_target_list(field_prefix='M2FS16',field='A02',catalog_path=os.pa
 
 
 def create_mtl(io_config,science_filenum,vizier_catalogs,overwrite_field,overwrite_redshifts):
+    catalog_loc = os.path.abspath(io_config['PATHS']['catalog_loc'])
     data_path = io_config['PATHS']['raw_data_loc']
     dataname = io_config['FILETEMPLATES']['raw'].format(cam='{cam}',filenum=science_filenum,opamp='1')
     dataname = dataname + '.fits'
 
-    plate_path = io_config['PATHS']['plate_loc']
+    plate_path = os.path.join(catalog_loc,io_config['DIRS']['plate_loc'])
     plate_name = io_config['SPECIALFILES']['plate']
     if plate_name == 'None':
         plate_name = None
 
-    field_path = io_config['PATHS']['field_loc']
+    field_path = os.path.join(catalog_loc,io_config['DIRS']['field_loc'])
     field_name = io_config['SPECIALFILES']['field']
     if field_name == 'None':
         field_name = None
 
-    redshifts_path = io_config['PATHS']['redshifts_loc']
+    redshifts_path = os.path.join(catalog_loc,io_config['DIRS']['redshifts_loc'])
     redshifts_name = io_config['SPECIALFILES']['redshifts']
     if redshifts_name == 'None':
         redshifts_name == None
 
     targeting_path, targeting_name = None, None
 
-    mtl_path = io_config['PATHS']['mtlz_path']
+    mtl_path = os.path.join(catalog_loc,io_config['DIRS']['mtl'])
     mtl_name = io_config['SPECIALFILES']['mtl']
 
 
@@ -504,6 +461,44 @@ def make_mtlz(mtl_table, hdus, find_more_redshifts=False,outfile='mtlz.csv',\
 
 
 if __name__ == '__main__':
+    vizier_catalogs = ['sdss12']  # 'panstarrs','sdss'
+    field_prefix, semester, fieldnum = 'M2FS16', 'A', '04'
+
+    field = semester + fieldnum
+    plate_name = None  # 'Kremin_2017A_A02_07_08_11.plate'
+    field_name = 'kremin_{}{}{}.field'.format(field_prefix, semester, fieldnum)
+
+    catalog_path = os.path.abspath('../../OneDrive - umich.edu/Research/M2FSReductions/catalogs')
+    data_path = os.path.abspath('../../OneDrive - umich.edu/Research/M2FSReductions/' + field + '/raw_data')
+
+    overwrite_field = True  # Ignored if the field is defined in place of a plate above
+
+    data_filenum = '0904'  # as a 0 offset string of a4 digit number  ex '0614'
+
+    overwrite_redshifts = False
+
+    ## Assuming standard format outputs, nothing below this point should need to be changed
+    dataname = '{cam}' + data_filenum + 'c1.fits'
+    plate_path = os.path.join(catalog_path, 'plates')
+    field_path = os.path.join(catalog_path, 'fields')
+
+    if field_name is None:
+        if plate_name is None:
+            raise (IOError, "Either a drilled file or a target file must be supplied")
+        field_name_template = '{}_field_drilled.csv'
+        field_name = field_name_template.format(field_prefix + field)
+
+    fieldtarget_path = os.path.join(catalog_path, 'fields')
+
+    targeting_name = None
+    targeting_path = os.path.join(catalog_path, 'labelmapping')
+
+    redshifts_name = field_prefix + '_' + field + '_redshifts_' + vizier_catalogs[0] + '.csv'
+    redshifts_path = os.path.join(catalog_path, 'redshifts')
+
+    mtlz_name = 'mtlz_' + field_prefix + '_' + field
+    mtlz_path = os.path.join(catalog_path, 'merged_target_lists')
+
     vizier_catalogs = ['sdss12']  # 'panstarrs','sdss'
     overwrite_field = True  # Ignored if the field is defined in place of a plate above
     overwrite_redshifts = False

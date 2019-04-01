@@ -28,7 +28,7 @@ class DirectoryManager:
         self.lampline_dir    = os.path.abspath(PATHS['lampline'])
         self.plot_dir        = os.path.join(self.data_product_loc,dirnms['save_plots'])
         self.catalog_path    = os.path.abspath(PATHS['catalog_loc'])
-        self.mtl_path       = os.path.abspath(PATHS['mtlz_path'])
+        self.mtl_path       = os.path.join(self.catalog_path,dirnms['mtl'])
 
         self.dirname_dict = {
                                 'bias':        {'read':dirnms['raw'],      'write':dirnms['debiased']},\
