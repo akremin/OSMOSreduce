@@ -6,15 +6,16 @@ def bias_subtract(all_hdus,date,strategy='median',convert_adu_to_e=True,\
                   save_plots=False,show_plots=True,savetemplate='{}{}{}{}{}.png'):
     biases = {}
     headers = {}
-    for (camera, filenum, imtype, opamp),hdu in all_hdus.items():
-        if imtype == 'bias':
-            converted_hdu = remove_bias_lines(cur_hdu=hdu,use_bias_cols=True,convert_adu_to_e=convert_adu_to_e)
-            if camera not in headers.keys():
-                headers[camera] = {}
-            if (camera,opamp) not in biases.keys():
-                biases[(camera,opamp)] = []
-                headers[camera][opamp] = converted_hdu.header
-            biases[(camera,opamp)].append(converted_hdu.data)
+    keys = [(camera, filenum, imtype, opamp) for (camera, filenum, imtype, opamp) in all_hdus.keys() if imtype == 'bias']
+    for (camera, filenum, imtype, opamp) in keys:
+        hdu = all_hdus.pop((camera, filenum, imtype, opamp))
+        converted_hdu = remove_bias_lines(cur_hdu=hdu,use_bias_cols=True,convert_adu_to_e=convert_adu_to_e)
+        if camera not in headers.keys():
+            headers[camera] = {}
+        if (camera,opamp) not in biases.keys():
+            biases[(camera,opamp)] = []
+            headers[camera][opamp] = converted_hdu.header
+        biases[(camera,opamp)].append(converted_hdu.data)
 
     merged_biases = {}
     all_out_hdus = {}

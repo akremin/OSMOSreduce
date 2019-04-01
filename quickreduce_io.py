@@ -215,7 +215,7 @@ class FileManager:
     def read_hdu(self,camera='r', filenum=999,imtype='comp',amp=None,fibersplit=False):
         filename = self.get_read_filename(camera=camera,imtype=imtype,filenum=filenum,amp=amp)
 
-        inhdulist = fits.open(filename)
+        inhdulist = fits.open(filename,memmap=False)
         if len(inhdulist)>1:
             if 'flux' in inhdulist:
                 inhdu = inhdulist['flux']

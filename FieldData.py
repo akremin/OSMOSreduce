@@ -277,7 +277,9 @@ class FieldData:
                 if imtype == 'twiflat' and filenum == self.filenumbers['twiflat'][0]:
                     plt.figure()
                     if self.show_plots or self.save_plots:
-                        plt.imshow(np.array(outhdu.data), origin='lower-left')
+                        outarr = np.array(outhdu.data)
+                        plt.imshow(outarr, origin='lower-left')
+                        plt.clim(outarr.min(),2*np.mean(outarr))
                         plt.title("Stitched {} {} {}".format(camera, filenum, imtype))
                     if self.save_plots:
                         plt.savefig(self.filemanager.get_saveplot_template(cam=camera,ap='',imtype='twilight',step='stitch',comment='_'+str(filenum)),dpi=200)
