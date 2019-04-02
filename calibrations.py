@@ -151,7 +151,7 @@ class Calibrations:
                 #run_interactive_slider_calibration(comp_data, self.linelistc)
 
                 if self.single_core:
-                    histories = self.history_calibration_coefs[pairnum]
+                    histories = None#self.history_calibration_coefs[pairnum]
                     obs1 = {
                         'coarse_comp': comp_data, 'complinelistdict': self.linelistc,
                         'print_itters': False, 'last_obs': histories,'only_use_peaks': only_use_peaks
@@ -161,7 +161,7 @@ class Calibrations:
                 else:
                     fib1s = np.append(self.instrument.lower_half_fibs[self.camera],self.instrument.overlapping_fibs[self.camera][1])
                     fib2s = np.append(self.instrument.upper_half_fibs[self.camera],self.instrument.overlapping_fibs[self.camera][0])
-                    histories = self.history_calibration_coefs[pairnum]
+                    histories = None#self.history_calibration_coefs[pairnum]
                     if histories is not None:
                         hist1 = histories[fib1s.tolist()]
                         hist2 = histories[fib2s.tolist()]
@@ -265,7 +265,8 @@ class Calibrations:
             else:
                 pass
 
-            hand_fit_subset = np.asarray(hand_fit_subset)
+            ##HACK!!
+            hand_fit_subset = np.asarray(hand_fit_subset)[[0,2]]
             out_calib_h, out_linelist_h, lambdas_h, pixels_h, variances_h, wm, fm  = \
                                     self.wavelength_fitting_by_line_selection(data, linelist, \
                                     self.all_lines, initial_coef_table,select_lines=select_lines,\
@@ -584,11 +585,14 @@ class Calibrations:
             plt.close()
             del browser
 
+
+        for w,f in zip(wm,fm):
+
         if len(hand_fit_subset)>0:
             cont = input("\n\n\tDo you need to repeat any? (y or n)")
             if cont.lower() == 'y':
                 fiber = input("\n\tName the fiber")
-                print(fiber)
+                print("Received: '{}'".format(fiber))
                 cam = comp.colnames[0][0]
                 while fiber != '':
                     if cam not in fiber:
@@ -621,6 +625,7 @@ class Calibrations:
                     plt.close()
                     del browser
                     fiber = input("\n\tName the fiber")
+                    print("Received: {}".format(fiber))
 
         if not select_lines:
             app_specific_linelists = None

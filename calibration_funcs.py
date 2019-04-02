@@ -178,7 +178,8 @@ def run_automated_calibration(coarse_comp, complinelistdict, last_obs=None, prin
 
             ## create pixel array for mapping to wavelength
             c_peak_inds = np.asarray(c_peak_inds)
-            pix1 = np.append(c_peak_inds,[c_peak_inds-1,c_peak_inds+1,c_peak_inds-2,c_peak_inds+2])
+            randoms = np.random.randint(low=0,high=len(comp_spec),size=80)
+            pix1 = np.concatenate((c_peak_inds,c_peak_inds-1,c_peak_inds+1,c_peak_inds-2,c_peak_inds+2,randoms))
             pix1 = np.unique(np.sort(pix1))
             pix1 = pix1[pix1<len(comp_spec)]
             comp_spec = comp_spec[pix1]
@@ -202,31 +203,13 @@ def run_automated_calibration(coarse_comp, complinelistdict, last_obs=None, prin
                                                                       calib_wave_start=waves[0],
                                                                       flux_wave_precision=precision,\
                                                                       print_itters=print_itters)
-            else:
-                # if len(all_flags) > 0:
-                #     fibs,cors = [],[]
-                #     for ii,(fib,corr) in enumerate(all_flags.items()):
-                #         fibs.append(fib)
-                #         cors.append(corr)
-                #     fibs,cors = np.array(fibs),np.array(cors)
-                #     nearest_goodfits = np.where(cors>(0.8*np.median(cors)))[0]
-                #
-                #     if len(nearest_goodfits)>0:
-                #         nearest_goodfit = nearest_goodfits[-1]
-                #         compare_fiber = fibs[nearest_goodfit]
-                #         print(compare_fiber, 0.8*np.median(cors), cors[nearest_goodfit])
-                #     else:
-                #         compare_fiber = fibernames[counter - 2]
-                #         print(compare_fiber, np.median(cors))
-                # else:
-                #     compare_fiber = fibernames[counter-2]
-                #     print(compare_fiber)
+            elif counter < 4:
                 compare_fiber = fibernames[counter - 2]
                 [trasha, bbest, cbest, trash1, trash2, trash3] = all_coefs[compare_fiber]
-                #if bbest < 0.96:
-                bbest = 1.0
-                cbest = 0.
-                astep,bstep,cstep = 4, 0.04, 8.0e-6
+                if (bbest < 0.96) or (bbest>1.04):
+                    bbest = 1.0
+                    cbest = 0.
+                astep,bstep,cstep = 1, 0.04, 8.0e-6
                 avals = (alow,   ahigh+astep,  astep)
                 bvals = (bbest , bbest+bstep , bstep)
                 cvals = (cbest , cbest+cstep , cstep)
@@ -238,6 +221,33 @@ def run_automated_calibration(coarse_comp, complinelistdict, last_obs=None, prin
                                                                     calib_wave_start=waves[0],
                                                                     flux_wave_precision=precision,\
                                                                       print_itters=print_itters)
+            else:
+                compare_fiber1 = fibernames[counter - 2]
+                [a1, b1, c1, trash1, trash2, trash3] = all_coefs[compare_fiber1]
+                compare_fiber2 = fibernames[counter - 3]
+                [a2, b2, c2, trash1, trash2, trash3] = all_coefs[compare_fiber2]
+                compare_fiber3 = fibernames[counter - 4]
+                [a3, b3, c3, trash1, trash2, trash3] = all_coefs[compare_fiber3]
+                abest = np.median([a1, a2, a3])
+                bbest = np.median([b1, b2, b3])
+                cbest = np.median([c1, c2, c3])
+
+                if (bbest < 0.96) or (bbest>1.04):
+                    bbest = 1.0
+                    cbest = 0.
+                astep,bstep,cstep = 1, 0.04, 8.0e-6
+                avals = (abest-20,   abest+20+astep,  astep)
+                bvals = (bbest , bbest+bstep , bstep)
+                cvals = (cbest , cbest+cstep , cstep)
+                if print_itters:
+                    print("\nItter 1 results, (fixing b and c to past vals):")
+                abest, trashb, trashc, corrbest = fit_using_crosscorr(pixels=pix1, raw_spec=comp_spec,
+                                                                    comp_highres_fluxes=fluxes, \
+                                                                    avals=avals, bvals=bvals, cvals=cvals, \
+                                                                    calib_wave_start=waves[0],
+                                                                    flux_wave_precision=precision,\
+                                                                      print_itters=print_itters)
+
         else:
             [abest, bbest, cbest, trash1, trash2, trash3] = last_obs[fiber_identifier]
             if print_itters:
@@ -247,7 +257,7 @@ def run_automated_calibration(coarse_comp, complinelistdict, last_obs=None, prin
         if print_itters:
             print("\nItter 2 results:")
         astep,bstep,cstep = 1, 1.0e-3, 4.0e-7
-        awidth, bwidth, cwidth = 20, 0.02, 4.0e-6
+        awidth, bwidth, cwidth = 10, 0.02, 4.0e-6
         avals = ( abest-awidth, abest+awidth+astep, astep )
         bvals = ( bbest-bwidth, bbest+bwidth+bstep, bstep )
         cvals = ( cbest-cwidth, cbest+cwidth+cstep, cstep )
