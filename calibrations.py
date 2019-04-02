@@ -187,8 +187,9 @@ class Calibrations:
                                                        step='calib_comparison', comment='auto')
                     matches = compare_outputs(comp_data, tabs[0], tabs[1],save_template=template,\
                                               save_plots=self.save_plots,show_plots=self.show_plots)
+                    matches = list(matches)
 
-                    if np.sort(self.instrument.overlapping_fibs[self.camera]) != np.sort(matches):
+                    if np.any(np.sort(self.instrument.overlapping_fibs[self.camera]) != np.sort(matches)):
                         print("The overlaps returned from the matching didn't match the overlaps")
                         print("that were explicitly defined: {}  {}".format(matches, self.instrument.overlapping_fibs[
                             self.camera]))

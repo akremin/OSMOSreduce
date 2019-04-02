@@ -74,13 +74,13 @@ def cutout_twod_apperatures(image,apperatures):
             list_bottoms = bottoms[fib].astype(int)
             out_array = np.ndarray(shape=(list_tops[0]-list_bottoms[0]+1,len(list_tops)))
             for ii,(bot,top) in enumerate(zip(list_bottoms,list_tops)):
-                out_array[:,ii] = cut_img[bot:top+1,ii]
+                    out_array[:,ii] = cut_img[bot:top+1,ii]
             cutout_dict[fib] = out_array
 
     return cutout_dict
 
 
-def find_apperatures(image,badfibs,cam='r',height=5e4,prominence=1.e3,\
+def find_apperatures(image,badfibs,cam='r',height=1e4,prominence=1.e3,\
                      show_plots=True,save_plots=False,\
                      save_template='outfile_{}.png'):
     tetris = np.arange(1,9)
@@ -131,12 +131,16 @@ def find_apperatures(image,badfibs,cam='r',height=5e4,prominence=1.e3,\
 
 def get_all_tetris_edges(image, show_plots, save_plots, save_template):
     sumd = image.sum(axis=1)
+    gaus_kern = np.exp(-(np.arange(-5,6))*(np.arange(-5,6))/(2*2.5*2.5))#np.array([1, 3, 7, 13,21,31,21, 13, 7, 3, 1])
+    sumd = np.convolve(sumd, gaus_kern/np.sum(gaus_kern), mode='same')
     normd_sum = sumd / np.max(sumd)
 
     medfiltd = medfilt(normd_sum, 11)
     ntetri = 10.
     widths = np.array([10])
-    threshold = 0.5
+    threshold = 0.4
+    if threshold > medfiltd.max():
+        threshold = medfiltd.max() - 0.01
     while ntetri > 8 or np.any(widths < 100):
         binary = (medfiltd > threshold).astype(int)
         grad = np.gradient(binary)
@@ -146,13 +150,13 @@ def get_all_tetris_edges(image, show_plots, save_plots, save_template):
         ends = ends[::2] + 4
         ntetri = len(starts)
         widths = ends-starts
-        threshold -= 0.05
+        threshold -= 0.01
 
     widths = ends - starts
     med_width = np.median(widths)
     width = min(np.max(widths), med_width + 12)
 
-    changes = widths - width - 10  # 10 is for padding
+    changes = widths - width - 22  # 10 is for padding
     start_changes = np.floor(changes / 2).astype(int)
     end_changes = np.ceil(changes / 2).astype(int)
 

@@ -113,8 +113,8 @@ class InstrumentState:
         last_low = lower_half_fibs[-1].copy()
         last_upper = upper_half_fibs[-1].copy()
 
-        self.lower_half_fibs[camera] = np.append(lower_half_fibs,last_upper)
-        self.upper_half_fibs[camera] = np.append(upper_half_fibs, last_low)
+        self.lower_half_fibs[camera] = lower_half_fibs
+        self.upper_half_fibs[camera] = upper_half_fibs
 
         self.full_fibs[camera] = np.array(full_fibs)
         self.overlapping_fibs[camera] = np.array([last_low,last_upper])
