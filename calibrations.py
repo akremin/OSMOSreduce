@@ -585,9 +585,6 @@ class Calibrations:
             plt.close()
             del browser
 
-
-        for w,f in zip(wm,fm):
-
         if len(hand_fit_subset)>0:
             cont = input("\n\n\tDo you need to repeat any? (y or n)")
             if cont.lower() == 'y':

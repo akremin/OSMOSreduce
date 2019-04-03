@@ -26,7 +26,7 @@ class FieldData:
         self.save_plots = (str(pipeline_options['save_plots']).lower()=='true')
         self.show_plots = (str(pipeline_options['show_plots']).lower()=='true')
         self.only_peaks_in_coarse_cal = (str(pipeline_options['only_peaks_in_coarse_cal']).lower()=='true')
-
+        self.use_selected_calib_lines = (str(pipeline_options['use_selected_calib_lines']).lower()=='true')
 
         self.check_parameter_flags()
 
@@ -380,7 +380,8 @@ class FieldData:
                                  config=self.instrument.configuration, fine_calibrations=comparc_fs,\
                                  pairings=comparc_pairs, load_history=True, trust_after_first=False,\
                                  single_core=self.single_core,show_plots=self.show_plots,\
-                                 save_plots=self.save_plots,savetemplate_funcs=self.filemanager.get_saveplot_template)
+                                 save_plots=self.save_plots,savetemplate_funcs=self.filemanager.get_saveplot_template,\
+                                 use_selected_calib_lines=self.use_selected_calib_lines)
 
             self.comparcs[camera] = comparc
 

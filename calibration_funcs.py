@@ -178,7 +178,7 @@ def run_automated_calibration(coarse_comp, complinelistdict, last_obs=None, prin
 
             ## create pixel array for mapping to wavelength
             c_peak_inds = np.asarray(c_peak_inds)
-            randoms = np.random.randint(low=0,high=len(comp_spec),size=80)
+            randoms = np.random.randint(low=0,high=len(comp_spec),size=120)
             pix1 = np.concatenate((c_peak_inds,c_peak_inds-1,c_peak_inds+1,c_peak_inds-2,c_peak_inds+2,randoms))
             pix1 = np.unique(np.sort(pix1))
             pix1 = pix1[pix1<len(comp_spec)]

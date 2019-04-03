@@ -362,7 +362,7 @@ class FileManager:
                     tab = Table.read(pathname, format='ascii.csv')
                 fm = tab['Intensity'].data
                 wm_vac = air_to_vacuum(tab['Wavelength'].data)
-                boolean = np.array(tab['Use']=='Y').astype(bool)
+                boolean = np.array([val.lower()=='y' for val in tab['Use']]).astype(bool)
                 ## sort lines by wavelength
                 sortd = np.argsort(wm_vac)
                 srt_wm_vac, srt_fm, srt_bl = wm_vac[sortd], fm[sortd],boolean[sortd]
