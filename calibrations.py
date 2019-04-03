@@ -141,6 +141,7 @@ class Calibrations:
 
     #TODO Use all initial comps (Average) if more than one is paired to a single final comp
     def run_initial_calibrations(self,skip_coarse=False,only_use_peaks = True):
+        histories = None
         for pairnum,(cc_filnum, throwaway) in self.pairings.items():
             if skip_coarse and self.history_calibration_coefs[pairnum] is not None:
                 self.coarse_calibration_coefs[pairnum] = self.history_calibration_coefs[pairnum].copy()
@@ -151,7 +152,7 @@ class Calibrations:
                 #run_interactive_slider_calibration(comp_data, self.linelistc)
 
                 if self.single_core:
-                    histories = None#self.history_calibration_coefs[pairnum]
+                    #histories = None#self.history_calibration_coefs[pairnum]
                     obs1 = {
                         'coarse_comp': comp_data, 'complinelistdict': self.linelistc,
                         'print_itters': False, 'last_obs': histories,'only_use_peaks': only_use_peaks
@@ -161,7 +162,7 @@ class Calibrations:
                 else:
                     fib1s = np.append(self.instrument.lower_half_fibs[self.camera],self.instrument.overlapping_fibs[self.camera][1])
                     fib2s = np.append(self.instrument.upper_half_fibs[self.camera],self.instrument.overlapping_fibs[self.camera][0])
-                    histories = None#self.history_calibration_coefs[pairnum]
+                    #histories = None#self.history_calibration_coefs[pairnum]
                     if histories is not None:
                         hist1 = histories[fib1s.tolist()]
                         hist2 = histories[fib2s.tolist()]
@@ -203,6 +204,8 @@ class Calibrations:
                 self.coarse_calibration_coefs[pairnum] = out_calib.copy()
 
                 self.filemanager.save_basic_calib_dict(out_calib, self.lampstr_c, self.camera, self.config, filenum=cc_filnum)
+
+                histories = out_calib
 
 
     def run_final_calibrations(self):
@@ -265,14 +268,11 @@ class Calibrations:
             else:
                 pass
 
-            ## HACK!!
-            hand_fit_subset = np.asarray(hand_fit_subset)[:1]
+            hand_fit_subset = np.asarray(hand_fit_subset)
             out_calib_h, out_linelist_h, lambdas_h, pixels_h, variances_h, wm, fm  = \
                                     self.wavelength_fitting_by_line_selection(data, linelist, \
                                     self.all_lines, initial_coef_table,select_lines=select_lines,\
                                     filenum=filenum,subset=hand_fit_subset)#bounds=None)
-
-            print("Returned to main func")
 
             if self.single_core:
                 out_calib, outlinelist, lambdas, pixels, variances = \
@@ -290,13 +290,13 @@ class Calibrations:
                 fib2s = np.append(self.instrument.upper_half_fibs[self.camera],
                                   self.instrument.overlapping_fibs[self.camera][0])
                 obs1 = {
-                    'comp': data[fib1s.tolist()].copy(), 'fulllinelist': self.all_lines.copy(),
+                    'comp': data[fib1s.tolist()], 'fulllinelist': self.all_lines.copy(),
                     'coef_table': initial_coef_table, 'wm':wm,'fm':fm,\
                     'all_coefs':out_calib_h,'user_input': user_input, 'filenum':filenum,
                     'save_plots':self.save_plots, "savetemplate_funcs":self.savetemplate_funcs
                 }
                 obs2 = {
-                    'comp': data[fib2s.tolist()].copy(), 'fulllinelist': self.all_lines.copy(),
+                    'comp': data[fib2s.tolist()], 'fulllinelist': self.all_lines.copy(),
                     'coef_table': initial_coef_table.copy(), 'wm':wm.copy(),'fm':fm.copy(),\
                     'all_coefs':out_calib_h.copy(),'user_input': user_input, 'filenum':filenum,
                     'save_plots': self.save_plots, "savetemplate_funcs": self.savetemplate_funcs
@@ -309,7 +309,6 @@ class Calibrations:
                     NPROC = 4
 
                 with Pool(NPROC) as pool:
-                    print("initiated pool")
                     tabs = pool.map(auto_wavelength_fitting_by_lines_wrapper, all_obs)
 
                 out_calib, out_linelist,lambdas, pixels, variances = tabs[0]
@@ -608,8 +607,7 @@ class Calibrations:
 
                         plt.close()
                         del browser
-                print("Left loop")
-        print("Left if statement")
+
         if not select_lines:
             app_specific_linelists = None
             wm,fm = iteration_wm, iteration_fm
@@ -722,13 +720,11 @@ class Calibrations:
         return Table(all_coefs)
 
 def auto_wavelength_fitting_by_lines_wrapper(input_dict):
-    print("In wrapper")
     return auto_wavelength_fitting_by_lines(**input_dict)
 
 
 def auto_wavelength_fitting_by_lines(comp, fulllinelist, coef_table, wm,fm,all_coefs,user_input='some',filenum='',\
                                      bounds=None, save_plots = True,  savetemplate_funcs='{}{}{}{}{}'.format):
-    print("In Auto fitting")
     comp = Table(comp)
 
     variances = {}
@@ -767,7 +763,6 @@ def auto_wavelength_fitting_by_lines(comp, fulllinelist, coef_table, wm,fm,all_c
             continue
         if fiber not in coef_table.colnames:
             continue
-        print("Auto fitting: {}".format(fiber))
         coefs = np.asarray(coef_table[fiber])
         f_x = comp[fiber].data
 
@@ -778,13 +773,17 @@ def auto_wavelength_fitting_by_lines(comp, fulllinelist, coef_table, wm,fm,all_c
                 fibern = (16 * int(fiber[1])) + int(fiber[2:])
 
             if len(hand_fit_subset)>1:
-                nearest_fibs = hand_fit_subset[np.argsort(np.abs(fibern-numeric_hand_fit_names))[:2]]
+                dists = np.abs(fibern-numeric_hand_fit_names)
+                closest = np.argsort(dists)[:2]
+                nearest_fibs = hand_fit_subset[closest]
                 diffs_fib1 = np.asarray(all_coefs[nearest_fibs[0]]) - np.asarray(coef_table[nearest_fibs[0]])
                 diffs_fib2 = np.asarray(all_coefs[nearest_fibs[1]]) - np.asarray(coef_table[nearest_fibs[1]])
+                d1,d2 = dists[closest[0]], dists[closest[1]]
+                diffs_hfib = (d2*diffs_fib1 + d1*diffs_fib2)/(d1+d2)
             else:
                 nearest_fibs = hand_fit_subset[np.argsort(np.abs(fibern-numeric_hand_fit_names))]
                 diffs_fib1 = np.asarray(all_coefs[nearest_fibs[0]]) - np.asarray(coef_table[nearest_fibs[0]])
-                diffs_fib2 = diffs_fib1.copy()
+                diffs_hfib = diffs_fib1
 
 
             if last_fiber is None:
@@ -792,7 +791,7 @@ def auto_wavelength_fitting_by_lines(comp, fulllinelist, coef_table, wm,fm,all_c
 
             nearest_fib = np.asarray(all_coefs[last_fiber]) - np.asarray(coef_table[last_fiber])
 
-            diffs_mean = (0.25*diffs_fib1)+(0.25*diffs_fib2)+(0.5*nearest_fib)
+            diffs_mean = (0.75*diffs_hfib)+(0.25*nearest_fib)
 
             adjusted_coefs_guess = coefs+diffs_mean
         else:
@@ -807,25 +806,25 @@ def auto_wavelength_fitting_by_lines(comp, fulllinelist, coef_table, wm,fm,all_c
             browser.initiate_browser()
             browser.create_saveplot(params, covs, template)
 
-        print('\n\n',fiber,'{:.2f}{:.6e}{:.6e}{:.6e}{:.6e}{:.6e}'.format(*params))
         all_coefs[fiber] = params
         variances[fiber] = covs.diagonal()
         outlinelist[fiber] = (wm,fm)
         normd_vars = variances[fiber]/(params*params)
 
-        print("".format(np.sqrt(normd_vars)))
-        print("".format(np.sqrt(np.sum(normd_vars))))
-
         app_fit_pix[fiber] = browser.line_matches['peaks_p']
         app_fit_lambs[fiber] = browser.line_matches['lines']
 
-        plt.close()
-        del browser
-        last_fiber = fiber
-
+        print('\n\n',fiber,'{:.2f} {:.6e} {:.6e} {:.6e} {:.6e} {:.6e}'.format(*params))
         fitlamb = pix_to_wave_fifthorder(np.asarray(app_fit_pix[fiber]), params)
         dlamb = fitlamb - app_fit_lambs[fiber]
-        print("mean={}, median={}, std={}".format(np.mean(dlamb),np.median(dlamb),np.std(dlamb)))
+        print("  ----> mean={}, median={}, std={}, root normd fit var={}".format(np.mean(dlamb),np.median(dlamb),np.std(dlamb),np.sqrt(np.sum(normd_vars))))
+
+        plt.close()
+        del browser
+        if np.std(dlamb) < 0.6:
+            last_fiber = fiber
+
+
 
     return all_coefs, outlinelist, app_fit_lambs, app_fit_pix, variances
 

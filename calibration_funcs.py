@@ -178,18 +178,19 @@ def run_automated_calibration(coarse_comp, complinelistdict, last_obs=None, prin
 
             ## create pixel array for mapping to wavelength
             c_peak_inds = np.asarray(c_peak_inds)
-            randoms = np.random.randint(low=0,high=len(comp_spec),size=120)
+            # randoms = np.random.randint(low=0,high=len(comp_spec),size=120)
+            randoms = np.arange(len(comp_spec))[::2]
             pix1 = np.concatenate((c_peak_inds,c_peak_inds-1,c_peak_inds+1,c_peak_inds-2,c_peak_inds+2,randoms))
             pix1 = np.unique(np.sort(pix1))
             pix1 = pix1[pix1<len(comp_spec)]
             comp_spec = comp_spec[pix1]
-            comp_spec[pix1<400] *= 100.
+            #comp_spec[pix1<400] *= 100.
         else:
             pix1 = np.arange(len(comp_spec))
 
         abest, bbest, cbest, corrbest = 0., 0., 0., 0.
         alow, ahigh = 3000, 8000
-        awidth, bwidth, cwidth = 10, 0.01, 2.0e-6
+        awidth, bwidth, cwidth = 20, 0.02, 4.0e-6
 
         if last_obs is None or fiber_identifier not in last_obs.keys():
             if counter == 1:
@@ -248,25 +249,19 @@ def run_automated_calibration(coarse_comp, complinelistdict, last_obs=None, prin
                                                                     calib_wave_start=waves[0],
                                                                     flux_wave_precision=precision,\
                                                                       print_itters=print_itters)
-                awidth, bwidth, cwidth = 10,min([bwidth,np.max(bbest)-np.min(bbest)]),min([np.max(cbest)-np.min(cbest),cwidth])
+
+                #awidth, bwidth, cwidth = 10,\
+                #                         max([  min([  bwidth,np.max(bbest)-np.min(bbest)  ]),  1.0e-3    ]),\
+                #                         max([  min([  cwidth,np.max(cbest)-np.min(cbest)  ]),  1.0e-7   ])
 
         else:
             [abest, bbest, cbest, trash1, trash2, trash3] = last_obs[fiber_identifier]
+            awidth, bwidth, cwidth = awidth/2., bwidth/2., cwidth/2.
             if print_itters:
                 print("\nItter 1 results:")
                 print("--> Using previous obs value of:   a={:.2f}, b={:.5f}, c={:.2e}".format(abest, bbest, cbest))
 
-        if print_itters:
-            print("\nItter 2 results:")
-        astep,bstep,cstep = 1, 1.0e-3, 4.0e-7
-        avals = ( abest-awidth, abest+awidth+astep, astep )
-        bvals = ( bbest-bwidth, bbest+bwidth+bstep, bstep )
-        cvals = ( cbest-cwidth, cbest+cwidth+cstep, cstep )
-        abest, bbest, cbest, corrbest = fit_using_crosscorr(pixels=pix1, raw_spec=comp_spec, comp_highres_fluxes=fluxes, \
-                                                            avals=avals, bvals=bvals, cvals=cvals, \
-                                                            calib_wave_start=waves[0], flux_wave_precision=precision,\
-                                                                      print_itters=print_itters)
-
+        astep,bstep,cstep = awidth/10., bwidth/10., cwidth/10.
 
         dcorr = 1.
         for itter in range(100):
