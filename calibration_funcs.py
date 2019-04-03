@@ -189,6 +189,7 @@ def run_automated_calibration(coarse_comp, complinelistdict, last_obs=None, prin
 
         abest, bbest, cbest, corrbest = 0., 0., 0., 0.
         alow, ahigh = 3000, 8000
+        awidth, bwidth, cwidth = 10, 0.01, 2.0e-6
 
         if last_obs is None or fiber_identifier not in last_obs.keys():
             if counter == 1:
@@ -235,8 +236,8 @@ def run_automated_calibration(coarse_comp, complinelistdict, last_obs=None, prin
                 if (bbest < 0.96) or (bbest>1.04):
                     bbest = 1.0
                     cbest = 0.
-                astep,bstep,cstep = 1, 0.04, 8.0e-6
-                avals = (abest-20,   abest+20+astep,  astep)
+                astep,bstep,cstep = 0.5, 0.04, 8.0e-6
+                avals = (abest-30,   abest+30+astep,  astep)
                 bvals = (bbest , bbest+bstep , bstep)
                 cvals = (cbest , cbest+cstep , cstep)
                 if print_itters:
@@ -247,6 +248,7 @@ def run_automated_calibration(coarse_comp, complinelistdict, last_obs=None, prin
                                                                     calib_wave_start=waves[0],
                                                                     flux_wave_precision=precision,\
                                                                       print_itters=print_itters)
+                awidth, bwidth, cwidth = 10,min([bwidth,np.max(bbest)-np.min(bbest)]),min([np.max(cbest)-np.min(cbest),cwidth])
 
         else:
             [abest, bbest, cbest, trash1, trash2, trash3] = last_obs[fiber_identifier]
@@ -257,7 +259,6 @@ def run_automated_calibration(coarse_comp, complinelistdict, last_obs=None, prin
         if print_itters:
             print("\nItter 2 results:")
         astep,bstep,cstep = 1, 1.0e-3, 4.0e-7
-        awidth, bwidth, cwidth = 10, 0.02, 4.0e-6
         avals = ( abest-awidth, abest+awidth+astep, astep )
         bvals = ( bbest-bwidth, bbest+bwidth+bstep, bstep )
         cvals = ( cbest-cwidth, cbest+cwidth+cstep, cstep )
@@ -266,10 +267,9 @@ def run_automated_calibration(coarse_comp, complinelistdict, last_obs=None, prin
                                                             calib_wave_start=waves[0], flux_wave_precision=precision,\
                                                                       print_itters=print_itters)
 
-        itter = 0
+
         dcorr = 1.
-        while dcorr > convergence_criteria:
-            itter += 1
+        for itter in range(100):
             if print_itters:
                 print("\nItter {:d} results:".format(itter+2))
             last_corrbest = corrbest
@@ -287,6 +287,8 @@ def run_automated_calibration(coarse_comp, complinelistdict, last_obs=None, prin
                 abest,bbest,cbest = abest_itt, bbest_itt, cbest_itt
 
             dcorr = np.abs(corrbest-last_corrbest)
+            if dcorr < convergence_criteria:
+                break
 
         print("\n\n", fiber_identifier)
         print("--> Results:   a={:.2f}, b={:.5f}, c={:.2e}".format(abest, bbest, cbest))

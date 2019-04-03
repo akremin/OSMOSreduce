@@ -88,11 +88,9 @@ class LineBrowser:
             self.initiate_browser()
 
     def initiate_browser(self):
-        fig, ax = plt.subplots(1,frameon=False)
+        fig, ax = plt.subplots(1)
         plt.title(self.fibname)
-        # maximize window
-        figManager = plt.get_current_fig_manager()
-        figManager.window.showMaximized()
+
         plt.subplots_adjust(right=0.8, left=0.05, bottom=0.20)
 
         for w in self.all_wms:
@@ -119,9 +117,9 @@ class LineBrowser:
         self.selected_peak_line = self.ax.axvline(self.line_matches['lines'][self.j], color='cyan', lw=4, alpha=0.3,
                                                   ymax=0.6, visible=True)
         self.reset_lims()
-        self.update_current()
+        self.update_current(draw=False)
 
-    def update_current(self):
+    def update_current(self,draw=True):
         if self.j >= len(self.line_matches['peaks_w']):
             print('done with plot')
             plt.close()
@@ -137,7 +135,8 @@ class LineBrowser:
         ylim = self.ax.yaxis.get_view_interval()
         if self.line_matches['lines'][self.j] > (xlim[1]-100) or self.line_matches['lines'][self.j] < (xlim[0]+100):
             self.reset_lims()
-        self.fig.canvas.draw()
+        if draw:
+            self.fig.canvas.draw()
 
     def reset_lims(self):
         self.ax.set_xlim(self.line_matches['peaks_w'][self.j] - 100, self.line_matches['peaks_w'][self.j] + 500.0)
@@ -255,6 +254,11 @@ class LineBrowser:
         return
 
     def plot(self):
+        self.update_current()
+        # maximize window
+        figManager = plt.get_current_fig_manager()
+        figManager.window.showMaximized()
+
         self.fig.canvas.mpl_connect('button_press_event', self.onclick)
         self.fig.canvas.mpl_connect('key_press_event', self.onpress)
         finishax = plt.axes([0.83, 0.85, 0.15, 0.1])

@@ -265,12 +265,14 @@ class Calibrations:
             else:
                 pass
 
-            ##HACK!!
-            hand_fit_subset = np.asarray(hand_fit_subset)[[0,2]]
+            ## HACK!!
+            hand_fit_subset = np.asarray(hand_fit_subset)[:1]
             out_calib_h, out_linelist_h, lambdas_h, pixels_h, variances_h, wm, fm  = \
                                     self.wavelength_fitting_by_line_selection(data, linelist, \
                                     self.all_lines, initial_coef_table,select_lines=select_lines,\
                                     filenum=filenum,subset=hand_fit_subset)#bounds=None)
+
+            print("Returned to main func")
 
             if self.single_core:
                 out_calib, outlinelist, lambdas, pixels, variances = \
@@ -288,13 +290,13 @@ class Calibrations:
                 fib2s = np.append(self.instrument.upper_half_fibs[self.camera],
                                   self.instrument.overlapping_fibs[self.camera][0])
                 obs1 = {
-                    'comp': data[fib1s.tolist()], 'fulllinelist': self.all_lines,
+                    'comp': data[fib1s.tolist()].copy(), 'fulllinelist': self.all_lines.copy(),
                     'coef_table': initial_coef_table, 'wm':wm,'fm':fm,\
                     'all_coefs':out_calib_h,'user_input': user_input, 'filenum':filenum,
                     'save_plots':self.save_plots, "savetemplate_funcs":self.savetemplate_funcs
                 }
                 obs2 = {
-                    'comp': data[fib2s.tolist()], 'fulllinelist': self.all_lines,
+                    'comp': data[fib2s.tolist()].copy(), 'fulllinelist': self.all_lines.copy(),
                     'coef_table': initial_coef_table.copy(), 'wm':wm.copy(),'fm':fm.copy(),\
                     'all_coefs':out_calib_h.copy(),'user_input': user_input, 'filenum':filenum,
                     'save_plots': self.save_plots, "savetemplate_funcs": self.savetemplate_funcs
@@ -307,6 +309,7 @@ class Calibrations:
                     NPROC = 4
 
                 with Pool(NPROC) as pool:
+                    print("initiated pool")
                     tabs = pool.map(auto_wavelength_fitting_by_lines_wrapper, all_obs)
 
                 out_calib, out_linelist,lambdas, pixels, variances = tabs[0]
@@ -355,6 +358,7 @@ class Calibrations:
                 self.wavelength_fitting_by_line_selection(data, self.selected_lines, \
                                                           self.all_lines, out_calib, select_lines=False, \
                                                           filenum=filenum, subset=hand_fit_subset)
+
 
             for key in out_calib_h.keys():
                 out_calib[key] = out_calib_h[key]
@@ -461,47 +465,6 @@ class Calibrations:
             wm = wm[ordered]
             fm = fm[ordered]
 
-        ##HACK!
-        # wm = np.array(
-        #     [4020.26501943, 4031.98108118, 4037.18744204, 4044.53236218, 4054.06565493, 4073.15484809, 4081.78799701,
-        #      4105.07030129, 4113.97540313, 4132.88898732, 4159.76353044, 4165.35399608, 4183.06223982, 4191.89385645,
-        #      4199.49995197, 4201.85807071, 4212.10926084, 4260.55898287, 4267.48720313, 4273.37124925, 4278.73375849,
-        #      4301.30969297, 4310.45066658, 4332.41737445, 4334.7794959, 4349.28631311, 4369.05892759, 4371.97828617,
-        #      4380.89663438, 4386.28858427, 4402.22625203, 4427.24384373, 4476.01450225, 4483.06756269, 4494.59460375,
-        #      4546.32625871, 4580.6326604, 4591.18410843, 4610.85860829, 4659.20509254, 4674.96926303, 4705.30629151,
-        #      4728.19034989, 4737.2307438, 4766.19741622, 4779.62997514, 4807.36432528, 4832.47098134, 4849.16440815,
-        #      4881.22691319, 4896.32191854, 4921.18951859, 4966.46554025, 5003.49237633, 5010.73169992, 5018.56238083,
-        #      5046.12570689, 5178.40289522, 5232.61633089, 5259.82357839, 5299.21707542, 5313.45957152, 5328.4578696,
-        #      5345.0672978, 5418.99201469, 5540.80033014, 5560.24572388, 5588.5772925, 5608.28955951, 5616.87885477,
-        #      5641.31138455, 5702.49974282, 5708.68639719, 5721.76989609, 5762.14869657, 5805.75036254, 5854.39640228,
-        #      5975.31976453, 6022.70346022, 6033.7974332, 6044.89640772, 6116.61263234, 6123.57349873, 6184.33249296,
-        #      6205.20939297, 6226.25003754, 6329.02761883, 6344.61380281, 6378.69395251, 6386.48504445, 6459.0645362,
-        #      6492.53152632, 6514.16333795, 6533.14443792, 6579.03176908, 6585.72456784, 6590.35981363, 6595.76126539,
-        #      6606.67419859, 6640.05344122, 6641.57377993, 6645.53464474, 6664.10963854, 6668.19951814, 6679.1236753,
-        #      6686.13556064, 6721.07395565, 6729.3161722, 6754.6974984, 6758.31797217, 6768.4787051, 6780.18385357,
-        #      6782.2844186, 6830.92050254, 6836.81108738, 6863.16197746, 6873.18587472, 6876.6508071, 6881.48110691,
-        #      6890.07441939, 6913.13662585, 6939.57374125, 6945.52534319, 6967.35121816, 6991.58774259, 7002.73674408,
-        #      7020.50552797, 7032.1886736, 7069.1666306, 7109.43947631, 7127.78441722, 7149.01013442, 7170.87602448,
-        #      7208.96628599, 7220.04327038, 7274.9440635, 7313.73051618, 7317.08241955, 7355.31572455, 7374.15080161,
-        #      7386.01449967, 7437.41785765, 7473.21751027, 7486.3910625, 7505.93543287, 7516.72064136, 7569.82356316,
-        #      7587.88043358, 7637.21174083, 7726.33218592, 7791.08025887, 7819.92204309, 7849.69908034, 7893.25083668,
-        #      7950.36225526, 7981.16457198, 8008.35861497, 8016.98994571, 8055.52465197, 8105.92136296, 8117.54240176,
-        #      8145.37792038, 8189.16474855, 8266.79472162, 8332.73954053, 8410.52056088, 8426.9630049, 8448.82991525,
-        #      8480.68952697, 8523.7811756, 8575.47715148, 8608.1439836, 8622.82795388, 8670.32079584, 8711.62796614,
-        #      8750.43546124, 8764.09215474, 8970.10288177, 9050.73569872, 9125.4709225, 9197.1613246, 9221.51581633,
-        #      9227.02940866, 9294.08155826, 9356.78453228, 9660.43475352])
-        #
-        # fm = np.array(
-        #     [129, 70, 100, 296, 150, 508, 90, 200, 90, 400, 704, 70, 150, 200, 400, 500, 150, 522, 200, 300, 1141, 254,
-        #      150, 300, 250, 810, 100, 513, 300, 100, 265, 508, 150, 347, 205, 1013, 469, 703, 1000, 826, 114, 192, 768,
-        #      376, 1504, 200, 676, 150, 315, 1137, 200, 100, 479, 150, 200, 294, 170, 100, 194, 100, 50, 150, 70, 127,
-        #      60, 100, 150, 200, 200, 200, 50, 50, 40, 496, 912, 298, 70, 329, 60, 569, 180, 351, 40, 450, 273, 100, 100,
-        #      184, 70, 193, 464, 70, 80, 265, 110, 700, 600, 650, 180, 100, 60, 249, 304, 100, 739, 200, 60, 80, 1000,
-        #      300, 100, 60, 100, 60, 140, 80, 1056, 50, 40, 60, 573, 529, 227, 26890, 407, 100, 197, 898, 25000, 100,
-        #      400, 3707, 502, 617, 250, 8640, 350, 300, 705, 1719, 40000, 643, 462, 663, 80000, 50000, 350, 350, 100000,
-        #      40000, 150, 200, 273, 528, 30000, 743, 25000, 40000, 578, 40000, 70000, 300, 250, 25000, 319, 35000, 50000,
-        #      494, 312, 20000, 130, 266, 220, 8423, 110, 110, 220, 160, 160, 70000, 350, 350, 15000, 150, 800, 650])
-
         comp = Table(comp)
         counter = 0
         app_specific_linelists = {}
@@ -534,11 +497,21 @@ class Calibrations:
                 iteration_wm, iteration_fm = selectedlistdict[fiber]
 
             if len(all_coefs)>0:
-                coef_devs = np.zeros(shape=(len(all_coefs),6)).astype(np.float64)
-                for ii,(key,key_coefs) in enumerate(all_coefs.items()):
-                    dev = np.asarray(key_coefs)-np.asarray(coef_table[key])
-                    coef_devs[ii,:] = dev
-                coef_dev_med = np.median(coef_devs,axis=0)
+                curtet = int(fiber[1])
+                tets,fibs = [],[]
+                for fib in all_coefs.keys():
+                    tets.append(int(fib[1]))
+                    fibs.append(fib)
+                tets,fibs = np.array(tets),np.array(fibs)
+                if 9-curtet in tets:
+                    key = fibs[np.where((9-curtet)==tets)[0][0]]
+                    coef_dev_med = np.asarray(all_coefs[key])-np.asarray(coef_table[key])
+                else:
+                    coef_devs = np.zeros(shape=(len(all_coefs),6)).astype(np.float64)
+                    for ii,(key,key_coefs) in enumerate(all_coefs.items()):
+                        dev = np.asarray(key_coefs)-np.asarray(coef_table[key])
+                        coef_devs[ii,:] = dev
+                    coef_dev_med = np.median(coef_devs,axis=0)
 
                 updated_coefs = coefs+coef_dev_med
             else:
@@ -546,7 +519,7 @@ class Calibrations:
 
             browser = LineBrowser(iteration_wm,iteration_fm, f_x, updated_coefs, fulllinelist, bounds=bounds, \
                                   edge_line_distance=10.0,fibname=fiber)
-            if np.any((np.asarray(browser.line_matches['lines'])-np.asarray(browser.line_matches['peaks_w']))>0.5):
+            if np.any((np.asarray(browser.line_matches['lines'])-np.asarray(browser.line_matches['peaks_w']))>0.3):
                 browser.plot()
             params,covs = browser.fit()
 
@@ -568,8 +541,18 @@ class Calibrations:
                 wm_sorter = np.argsort(init_deleted_wm)
                 deleted_wm_srt, deleted_fm_srt = init_deleted_wm[wm_sorter], init_deleted_fm[wm_sorter]
                 del init_deleted_fm, init_deleted_wm, wm_sorter
-                if extrema_fiber:
-                    deleted_wm,deleted_fm = deleted_wm_srt, deleted_fm_srt
+                if extrema_fiber and fiber[1] in ['1','8']:
+                    ## If outer extremes, these define the highest possible wavelengths viewed, so they define the upper bound
+                    ## but not the lower bound
+                    mask_wm_nearedge = (deleted_wm_srt>(browser.xspectra[0]+100.0))
+                    deleted_wm = deleted_wm_srt[mask_wm_nearedge]
+                    deleted_fm = deleted_fm_srt[mask_wm_nearedge]
+                elif extrema_fiber and fiber[1] in ['4','5']:
+                    ## If inner extremes, these define the lowest possible wavelengths viewed, so they define the lower bound
+                    ## but not the upper bound
+                    mask_wm_nearedge = (deleted_wm_srt<(browser.xspectra[-1]-100.0))
+                    deleted_wm = deleted_wm_srt[mask_wm_nearedge]
+                    deleted_fm = deleted_fm_srt[mask_wm_nearedge]
                 else:
                     mask_wm_nearedge = ((deleted_wm_srt>(browser.xspectra[0]+100.0)) & (deleted_wm_srt<(browser.xspectra[-1]-100.0)))
                     deleted_wm = deleted_wm_srt[mask_wm_nearedge]
@@ -586,49 +569,51 @@ class Calibrations:
             del browser
 
         if len(hand_fit_subset)>0:
-            cont = input("\n\n\tDo you need to repeat any? (y or n)")
+            cont = str(input("\n\n\tDo you need to repeat any? (y or n)")).strip(' \t\r\n')
             if cont.lower() == 'y':
-                fiber = input("\n\tName the fiber")
-                print("Received: '{}'".format(fiber))
                 cam = comp.colnames[0][0]
-                while fiber != '':
-                    if cam not in fiber:
-                        fiber = cam + fiber
-                    f_x = comp[fiber].data
-                    coefs = coef_table[fiber]
-                    iteration_wm, iteration_fm = [], []
-                    if select_lines:
-                        iteration_wm, iteration_fm = wm.copy(), fm.copy()
+                for itter in range(1000):
+                    fiber = str(input("\n\tName the fiber")).strip(' \t\r\n')
+                    print("Received: '{}'".format(fiber))
+
+                    if fiber.strip(' \t\r\n') == '' or fiber is None:
+                        break
                     else:
-                        iteration_wm, iteration_fm = selectedlistdict[fiber]
+                        if cam not in fiber:
+                            fiber = cam + fiber
+                        f_x = comp[fiber].data
+                        coefs = coef_table[fiber]
+                        iteration_wm, iteration_fm = [], []
+                        if select_lines:
+                            iteration_wm, iteration_fm = wm.copy(), fm.copy()
+                        else:
+                            iteration_wm, iteration_fm = selectedlistdict[fiber]
 
-                    browser = LineBrowser(iteration_wm, iteration_fm, f_x, coefs, fulllinelist, bounds=bounds,edge_line_distance=-20.0,fibname=fiber)
-                    browser.plot()
-                    params, covs = browser.fit()
+                        browser = LineBrowser(iteration_wm, iteration_fm, f_x, coefs, fulllinelist, bounds=bounds,edge_line_distance=-20.0,fibname=fiber)
+                        browser.plot()
+                        params, covs = browser.fit()
 
-                    print(fiber, *params)
-                    all_coefs[fiber] = params
-                    variances[fiber] = covs.diagonal()
-                    print(np.dot(variances[fiber], variances[fiber]))
+                        print(fiber, *params)
+                        all_coefs[fiber] = params
+                        variances[fiber] = covs.diagonal()
+                        print(np.dot(variances[fiber], variances[fiber]))
 
-                    if select_lines:
-                        app_specific_linelists[fiber] = (browser.wm, browser.fm)
+                        if select_lines:
+                            app_specific_linelists[fiber] = (browser.wm, browser.fm)
 
-                    template = self.savetemplate_funcs(cam=str(filenum)+'_', ap=fiber, imtype='calib', step='finalfit',
-                                                       comment='byhand')
-                    if self.save_plots:
-                        browser.create_saveplot(params, covs, template)
+                        template = self.savetemplate_funcs(cam=str(filenum)+'_', ap=fiber, imtype='calib', step='finalfit',
+                                                           comment='byhand')
+                        if self.save_plots:
+                            browser.create_saveplot(params, covs, template)
 
-                    plt.close()
-                    del browser
-                    fiber = input("\n\tName the fiber")
-                    print("Received: {}".format(fiber))
-
+                        plt.close()
+                        del browser
+                print("Left loop")
+        print("Left if statement")
         if not select_lines:
             app_specific_linelists = None
             wm,fm = iteration_wm, iteration_fm
 
-        plt.close('all')
         return all_coefs, app_specific_linelists, app_fit_lambs, app_fit_pix, variances, wm, fm
 
 
@@ -737,11 +722,13 @@ class Calibrations:
         return Table(all_coefs)
 
 def auto_wavelength_fitting_by_lines_wrapper(input_dict):
+    print("In wrapper")
     return auto_wavelength_fitting_by_lines(**input_dict)
 
 
 def auto_wavelength_fitting_by_lines(comp, fulllinelist, coef_table, wm,fm,all_coefs,user_input='some',filenum='',\
                                      bounds=None, save_plots = True,  savetemplate_funcs='{}{}{}{}{}'.format):
+    print("In Auto fitting")
     comp = Table(comp)
 
     variances = {}
@@ -780,6 +767,7 @@ def auto_wavelength_fitting_by_lines(comp, fulllinelist, coef_table, wm,fm,all_c
             continue
         if fiber not in coef_table.colnames:
             continue
+        print("Auto fitting: {}".format(fiber))
         coefs = np.asarray(coef_table[fiber])
         f_x = comp[fiber].data
 
