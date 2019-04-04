@@ -203,11 +203,11 @@ class Calibrations:
                         print("that were explicitly defined: {}  {}".format(matches, overlaps))
                 else:
                     lastcc,lastfc = self.pairings[pairnum-1]
-                    template = self.savetemplate_funcs(cam=str(cc_filnum)-str(lastcc) + '_', ap='{fiber}',
+                    template = self.savetemplate_funcs(cam='{}-{}_'.format(cc_filnum,lastcc), ap='{fiber}',
                                                        imtype='coarse_calib',
                                                        step='calib_time_comparison', comment='auto')
-                    matches = compare_outputs(comp_data, tabs[0][overlaps],\
-                                              self.coarse_calibration_coefs[pairnum-1][overlaps],\
+                    matches = compare_outputs(comp_data, tabs[0][overlaps.tolist()],\
+                                              self.coarse_calibration_coefs[pairnum-1][overlaps.tolist()],\
                                               save_template=template, \
                                               save_plots=self.save_plots, show_plots=self.show_plots)
 
@@ -280,8 +280,16 @@ class Calibrations:
             else:
                 pass
 
+            hand_fit_subset = np.asarray(hand_fit_subset)
             ## HACK!
-            hand_fit_subset = np.asarray(hand_fit_subset)[0]
+            if cam =='r':
+                for iii in range(1,3):
+                    initial_coef_table['r1{:02d}'.format(iii)][1:3] = [1.00169, -1.97e-06]
+                    initial_coef_table['r8{:02d}'.format(17-iii)][1:3] = [1.00169, -1.97e-06]
+            else:
+                for iii in range(1,3):
+                    initial_coef_table['b8{:02d}'.format(iii)][1:3] = [1.00169, -1.97e-06]
+                    initial_coef_table['b1{:02d}'.format(17-iii)][1:3] = [1.00169, -1.97e-06]
             out_calib_h, out_linelist_h, lambdas_h, pixels_h, variances_h, wm, fm  = \
                                     self.wavelength_fitting_by_line_selection(data, linelist, \
                                     self.all_lines, initial_coef_table,select_lines=select_lines,\
@@ -339,6 +347,7 @@ class Calibrations:
                 matches = compare_outputs(data, Table(out_calib), Table(out_calib_a2),save_template=template,\
                                           save_plots=self.save_plots,show_plots=self.show_plots)
 
+                matches = list(matches)
                 if np.sort(self.instrument.overlapping_fibs[self.camera])!=np.sort(matches):
                     print("The overlaps returned from the matching didn't match the overlaps")
                     print("that were explicitly defined: {}  {}".format(matches,self.instrument.overlapping_fibs[self.camera]))
@@ -510,13 +519,57 @@ class Calibrations:
                 extrema_fiber = False
             counter += 1
             f_x = comp[fiber].data
-            coefs = coef_table[fiber]
+
+            ## HACK!!
+            #coefs = coef_table[fiber]
+            if fiber == 'r101':
+                coefs = [4377.517995094989,
+                    0.9924585019372959,
+                    5.142950231647317e-06,
+                    5.410738316527114e-09, - 5.913504598741283e-12,
+                    1.295764253221375e-15]
+            if fiber == 'r816':
+                coefs = [4369.022963110598,
+                    0.9912306552914903,
+                    1.2018259690352653e-05 ,- 5.34465531869862e-09,
+                    7.861696346099334e-13, - 1.6224337469649862e-16]
+            if fiber == 'r416':
+                coefs = [4268.231048499829,
+                    1.003521407204926, - 1.0718754879101437e-05,
+                    2.2807984834809712e-08 ,- 1.471914199718311e-11,
+                    2.9274061328248153e-15]
+            if fiber == 'r501':
+                coefs = [4266.999521530618,
+                    0.9997335166179256, - 2.504181224499703e-06,
+                    1.3765663270362488e-08, - 9.74601813932534e-12,
+                    1.8788845035312016e-15]
+            if fiber == 'r214':
+                coefs = [4306.755027434568,
+                    0.996075246372463,
+                    7.795415099421535e-06, - 1.628278660204676e-09, - 8.109792880170026e-13,
+                    1.2141470243476217e-16]
+            if fiber == 'r303':
+                coefs = [4289.203753188707,
+                    0.9996452204941928 ,- 2.726889657361145e-07,
+                    8.196734766456035e-09, - 6.0533976379463196e-12,
+                    1.1267086805921927e-15]
+            if fiber == 'r612':
+                coefs = [4284.3107579147,
+                    0.9998319207691722, - 1.620205582018001e-06,
+                    1.0453879123151255e-08, - 7.469050894347352e-12,
+                    1.4246267819397567e-15]
+            if fiber == 'r705':
+                coefs = [4303.1225144976115,
+                    1.0037566403877034, - 2.0388949216387168e-05,
+                    3.653978743018491e-08, - 2.2439189521386893e-11,
+                    4.454053636623292e-15]
             if select_lines:
                 iteration_wm, iteration_fm = wm.copy(), fm.copy()
             else:
                 iteration_wm, iteration_fm = selectedlistdict[fiber]
 
-            if len(all_coefs)>0:
+            ## HACK!!
+            if False:#len(all_coefs)>0:
                 curtet = int(fiber[1])
                 tets,fibs = [],[]
                 for fib in all_coefs.keys():
