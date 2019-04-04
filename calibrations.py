@@ -132,20 +132,28 @@ class Calibrations:
 
 
     def run_initial_calibrations(self,skip_coarse=False,use_history_calibs=False,only_use_peaks = True):
-        if not skip_coarse and use_history_calibs:
-            if self.default_calibration_coefs is not None:
-                histories = self.default_calibration_coefs
-            elif self.history_calibration_coefs[0] is not None:
+        if skip_coarse:
+            match = 0
+            for pairnum in self.pairings.keys():
+                if self.default_calibration_coefs is not None:
+                    self.coarse_calibration_coefs[pairnum] = Table(self.default_calibration_coefs)
+                    match += 1
+                elif self.history_calibration_coefs[pairnum] is not None:
+                    self.coarse_calibration_coefs[pairnum] = self.history_calibration_coefs[pairnum].copy()
+                    match += 1
+                else:
+                    self.coarse_calibration_coefs[pairnum] = None
+            if match > 0:
+                return
+
+        if use_history_calibs:
+            if self.history_calibration_coefs[0] is not None:
                 histories = self.get_medianfits_of(self.history_calibration_coefs)
             else:
                 histories = None
 
         for pairnum,(cc_filnum, throwaway) in self.pairings.items():
-            if skip_coarse and self.history_calibration_coefs[pairnum] is not None:
-                self.coarse_calibration_coefs[pairnum] = self.history_calibration_coefs[pairnum].copy()
-                continue
 
-            ## else do the following (remainder of loop)
             comp_data = Table(self.coarse_calibrations[cc_filnum].data)
 
             if self.single_core:
