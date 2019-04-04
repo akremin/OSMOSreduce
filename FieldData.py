@@ -27,6 +27,7 @@ class FieldData:
         self.show_plots = (str(pipeline_options['show_plots']).lower()=='true')
         self.only_peaks_in_coarse_cal = (str(pipeline_options['only_peaks_in_coarse_cal']).lower()=='true')
         self.use_selected_calib_lines = (str(pipeline_options['use_selected_calib_lines']).lower()=='true')
+        self.use_history_calibs = (str(pipeline_options['use_history_calibs']).lower()=='true')
 
         self.check_parameter_flags()
 
@@ -336,8 +337,9 @@ class FieldData:
                 self.populate_calibrations()
 
             for camera in self.instrument.cameras:
-               self.comparcs[camera].run_initial_calibrations(skip_coarse = self.skip_coarse_calib,\
-                                                              only_use_peaks=self.only_peaks_in_coarse_cal)
+               self.comparcs[camera].run_initial_calibrations(skip_coarse = self.skip_coarse_calib, \
+                                                              use_history_calibs = self.use_history_calibs,\
+                                                              only_use_peaks = self.only_peaks_in_coarse_cal)
 
             for camera in self.instrument.cameras:
                 self.comparcs[camera].run_final_calibrations()
@@ -381,7 +383,7 @@ class FieldData:
                                  pairings=comparc_pairs, load_history=True, trust_after_first=False,\
                                  single_core=self.single_core,show_plots=self.show_plots,\
                                  save_plots=self.save_plots,savetemplate_funcs=self.filemanager.get_saveplot_template,\
-                                 use_selected_calib_lines=self.use_selected_calib_lines)
+                                 use_selected_calib_lines=self.use_selected_calib_lines,use_history_calibs=self.use_history_calibs)
 
             self.comparcs[camera] = comparc
 
