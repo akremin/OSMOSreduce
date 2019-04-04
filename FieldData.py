@@ -383,7 +383,7 @@ class FieldData:
                                  pairings=comparc_pairs, load_history=True, trust_after_first=False,\
                                  single_core=self.single_core,show_plots=self.show_plots,\
                                  save_plots=self.save_plots,savetemplate_funcs=self.filemanager.get_saveplot_template,\
-                                 use_selected_calib_lines=self.use_selected_calib_lines,use_history_calibs=self.use_history_calibs)
+                                 use_selected_calib_lines=self.use_selected_calib_lines)
 
             self.comparcs[camera] = comparc
 

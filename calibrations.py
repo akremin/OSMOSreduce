@@ -151,6 +151,8 @@ class Calibrations:
                 histories = self.get_medianfits_of(self.history_calibration_coefs)
             else:
                 histories = None
+        else:
+            histories = None
 
         for pairnum,(cc_filnum, throwaway) in self.pairings.items():
 
@@ -278,7 +280,8 @@ class Calibrations:
             else:
                 pass
 
-            hand_fit_subset = np.asarray(hand_fit_subset)
+            ## HACK!
+            hand_fit_subset = np.asarray(hand_fit_subset)[0]
             out_calib_h, out_linelist_h, lambdas_h, pixels_h, variances_h, wm, fm  = \
                                     self.wavelength_fitting_by_line_selection(data, linelist, \
                                     self.all_lines, initial_coef_table,select_lines=select_lines,\
@@ -428,7 +431,7 @@ class Calibrations:
         coarse_tables = [Table(coarse) for coarse in ordered_dict.values() if coarse is not None]
         initial_coef_table = OrderedDict()
         for fib in coarse_tables[0].colnames:
-            coeff_arr = np.zeros((len(coarse_tables,6)))
+            coeff_arr = np.zeros((len(coarse_tables),6))
             for ii,tab in enumerate(coarse_tables):
                 coeff_arr[ii,:] = tab[fib]
             coeff_med = np.median(coeff_arr,axis=0)
@@ -654,118 +657,8 @@ class Calibrations:
         return all_coefs, app_specific_linelists, app_fit_lambs, app_fit_pix, variances, wm, fm
 
 
-
-
-def auto_wavelength_fitting_by_lines_wrapper(input_dict):
-    return auto_wavelength_fitting_by_lines(**input_dict)
-
-
-def auto_wavelength_fitting_by_lines(comp, fulllinelist, coef_table, wm,fm,all_coefs,user_input='some',filenum='',\
-                                     bounds=None, save_plots = True,  savetemplate_funcs='{}{}{}{}{}'.format):
-    comp = Table(comp)
-
-    variances = {}
-    app_fit_pix = {}
-    app_fit_lambs = {}
-    outlinelist = {}
-    hand_fit_subset = np.array(list(all_coefs.keys()))
-
-    cam = comp.colnames[0][0]
-    if user_input != 'none':
-        if cam =='b':
-            numeric_hand_fit_names = np.asarray([ (16*(9-int(fiber[1])))+int(fiber[2:]) for fiber in hand_fit_subset])
-        else:
-            numeric_hand_fit_names = np.asarray([ (16*int(fiber[1]))+int(fiber[2:]) for fiber in hand_fit_subset])
-
-    coef_table = Table(coef_table)
-
-    if cam =='b':
-        numerics = np.asarray([(16 * (9 - int(fiber[1]))) + int(fiber[2:]) for fiber in comp.colnames])
-    else:
-        numerics = np.asarray([(16 * int(fiber[1])) + int(fiber[2:]) for fiber in comp.colnames])
-
-    sorted = np.argsort(numerics)
-    all_fibers = np.array(comp.colnames)[sorted]
-    del sorted,numerics
-
-    if cam == 'r' and int(all_fibers[0][1]) > 3:
-        all_fibers = all_fibers[::-1]
-    elif cam =='b' and int(all_fibers[0][1]) < 6:
-        all_fibers = all_fibers[::-1]
-
-    last_fiber = None
-
-    for fiber in all_fibers:
-        if fiber in hand_fit_subset:
-            continue
-        if fiber not in coef_table.colnames:
-            continue
-        coefs = np.asarray(coef_table[fiber])
-        f_x = comp[fiber].data
-
-        if user_input != 'none' and len(hand_fit_subset)>0:
-            if cam == 'b':
-                fibern = (16 * (9-int(fiber[1]))) + int(fiber[2:])
-            else:
-                fibern = (16 * int(fiber[1])) + int(fiber[2:])
-
-            if len(hand_fit_subset)>1:
-                dists = np.abs(fibern-numeric_hand_fit_names)
-                closest = np.argsort(dists)[:2]
-                nearest_fibs = hand_fit_subset[closest]
-                diffs_fib1 = np.asarray(all_coefs[nearest_fibs[0]]) - np.asarray(coef_table[nearest_fibs[0]])
-                diffs_fib2 = np.asarray(all_coefs[nearest_fibs[1]]) - np.asarray(coef_table[nearest_fibs[1]])
-                d1,d2 = dists[closest[0]], dists[closest[1]]
-                diffs_hfib = (d2*diffs_fib1 + d1*diffs_fib2)/(d1+d2)
-            else:
-                nearest_fibs = hand_fit_subset[np.argsort(np.abs(fibern-numeric_hand_fit_names))]
-                diffs_fib1 = np.asarray(all_coefs[nearest_fibs[0]]) - np.asarray(coef_table[nearest_fibs[0]])
-                diffs_hfib = diffs_fib1
-
-            if last_fiber is None:
-                last_fiber = nearest_fibs[0]
-
-            nearest_fib = np.asarray(all_coefs[last_fiber]) - np.asarray(coef_table[last_fiber])
-
-            diffs_mean = (0.5*diffs_hfib)+(0.5*nearest_fib)
-
-            adjusted_coefs_guess = coefs+diffs_mean
-        else:
-            adjusted_coefs_guess = coefs
-
-        browser = LineBrowser(wm,fm, f_x, adjusted_coefs_guess, fulllinelist, bounds=None, edge_line_distance=(-20.0),initiate=False)
-
-        params,covs = browser.fit()
-
-        if save_plots:
-            template = savetemplate_funcs(cam=str(filenum)+'_', ap=fiber, imtype='calib', step='finalfit', comment='auto')
-            browser.initiate_browser()
-            browser.create_saveplot(params, covs, template)
-
-        all_coefs[fiber] = params
-        variances[fiber] = covs.diagonal()
-        outlinelist[fiber] = (wm,fm)
-        normd_vars = variances[fiber]/(params*params)
-
-        app_fit_pix[fiber] = browser.line_matches['peaks_p']
-        app_fit_lambs[fiber] = browser.line_matches['lines']
-
-        print('\n\n',fiber,'{:.2f} {:.6e} {:.6e} {:.6e} {:.6e} {:.6e}'.format(*params))
-        fitlamb = pix_to_wave_fifthorder(np.asarray(app_fit_pix[fiber]), params)
-        dlamb = fitlamb - app_fit_lambs[fiber]
-        print("  ----> mean={}, median={}, std={}, root normd fit var={}".format(np.mean(dlamb),np.median(dlamb),np.std(dlamb),np.sqrt(np.sum(normd_vars))))
-
-        plt.close()
-        del browser
-        if np.std(dlamb) < 0.6:
-            last_fiber = fiber
-
-    return all_coefs, outlinelist, app_fit_lambs, app_fit_pix, variances
-
-
-
-   def run_interactive_slider_calibration(self,coarse_comp, complinelistdict, default_vals=None,history_vals=None,\
-                                       steps = None, default_key = None, trust_initial = False):
+    def run_interactive_slider_calibration(self,coarse_comp, complinelistdict, default_vals=None,history_vals=None,\
+                                   steps = None, default_key = None, trust_initial = False):
 
         init_default = (4523.4,1.0007,-1.6e-6)
 
@@ -865,6 +758,118 @@ def auto_wavelength_fitting_by_lines(comp, fulllinelist, coef_table, wm,fm,all_c
                     break
 
         return Table(all_coefs)
+
+def auto_wavelength_fitting_by_lines_wrapper(input_dict):
+    return auto_wavelength_fitting_by_lines(**input_dict)
+
+
+def auto_wavelength_fitting_by_lines(comp, fulllinelist, coef_table, wm,fm,all_coefs,user_input='some',filenum='',\
+                                     bounds=None, save_plots = True,  savetemplate_funcs='{}{}{}{}{}'.format):
+    comp = Table(comp)
+
+    variances = {}
+    app_fit_pix = {}
+    app_fit_lambs = {}
+    outlinelist = {}
+    hand_fit_subset = np.array(list(all_coefs.keys()))
+
+    cam = comp.colnames[0][0]
+    if user_input != 'none':
+        if cam =='b':
+            numeric_hand_fit_names = np.asarray([ (16*(9-int(fiber[1])))+int(fiber[2:]) for fiber in hand_fit_subset])
+        else:
+            numeric_hand_fit_names = np.asarray([ (16*int(fiber[1]))+int(fiber[2:]) for fiber in hand_fit_subset])
+
+    coef_table = Table(coef_table)
+
+    if cam =='b':
+        numerics = np.asarray([(16 * (9 - int(fiber[1]))) + int(fiber[2:]) for fiber in comp.colnames])
+    else:
+        numerics = np.asarray([(16 * int(fiber[1])) + int(fiber[2:]) for fiber in comp.colnames])
+
+    sorted = np.argsort(numerics)
+    all_fibers = np.array(comp.colnames)[sorted]
+    del sorted,numerics
+
+    if cam == 'r' and int(all_fibers[0][1]) > 3:
+        all_fibers = all_fibers[::-1]
+    elif cam =='b' and int(all_fibers[0][1]) < 6:
+        all_fibers = all_fibers[::-1]
+
+    for fiber in all_fibers:
+        if fiber in hand_fit_subset:
+            continue
+        if fiber not in coef_table.colnames:
+            continue
+        coefs = np.asarray(coef_table[fiber])
+        f_x = comp[fiber].data
+
+        if cam == 'b':
+            fibern = (16 * (9 - int(fiber[1]))) + int(fiber[2:])
+        else:
+            fibern = (16 * int(fiber[1])) + int(fiber[2:])
+
+        if len(hand_fit_subset)>0:
+            # if len(hand_fit_subset)>1:
+            #     dists = np.abs(fibern-numeric_hand_fit_names)
+            #     closest = np.argsort(dists)[:2]
+            #     nearest_fibs = hand_fit_subset[closest]
+            #     # diffs_fib1 = np.asarray(all_coefs[nearest_fibs[0]]) - np.asarray(coef_table[nearest_fibs[0]])
+            #     # diffs_fib2 = np.asarray(all_coefs[nearest_fibs[1]]) - np.asarray(coef_table[nearest_fibs[1]])
+            #     # d1,d2 = dists[closest[0]], dists[closest[1]]
+            #     # diffs_hfib = (d2*diffs_fib1 + d1*diffs_fib2)/(d1+d2)
+            #     diffs_hfib = closest
+            # else:
+            #     nearest_fibs = hand_fit_subset[np.argsort(np.abs(fibern-numeric_hand_fit_names))]
+            #     diffs_fib1 = np.asarray(all_coefs[nearest_fibs[0]]) - np.asarray(coef_table[nearest_fibs[0]])
+            #     diffs_hfib = diffs_fib1
+            #
+            # if last_fiber is None:
+            #     last_fiber = nearest_fibs[0]
+            #
+            # nearest_fib = np.asarray(all_coefs[last_fiber]) - np.asarray(coef_table[last_fiber])
+            #
+            # diffs_mean = (0.5*diffs_hfib)+(0.5*nearest_fib)
+            #
+            # adjusted_coefs_guess = coefs+diffs_mean
+            nearest_fibs = hand_fit_subset[np.argsort(np.abs(fibern - numeric_hand_fit_names))]
+            diffs_fib1 = np.asarray(all_coefs[nearest_fibs[0]]) - np.asarray(coef_table[nearest_fibs[0]])
+            diffs_mean = diffs_fib1
+            adjusted_coefs_guess = coefs + diffs_mean
+        else:
+            adjusted_coefs_guess = coefs
+
+        browser = LineBrowser(wm,fm, f_x, adjusted_coefs_guess, fulllinelist, bounds=None, edge_line_distance=(-20.0),initiate=False)
+
+        params,covs = browser.fit()
+
+        if save_plots:
+            template = savetemplate_funcs(cam=str(filenum)+'_', ap=fiber, imtype='calib', step='finalfit', comment='auto')
+            browser.initiate_browser()
+            browser.create_saveplot(params, covs, template)
+
+        all_coefs[fiber] = params
+        variances[fiber] = covs.diagonal()
+        outlinelist[fiber] = (wm,fm)
+        normd_vars = variances[fiber]/(params*params)
+
+        app_fit_pix[fiber] = browser.line_matches['peaks_p']
+        app_fit_lambs[fiber] = browser.line_matches['lines']
+
+        print('\n\n',fiber,'{:.2f} {:.6e} {:.6e} {:.6e} {:.6e} {:.6e}'.format(*params))
+        fitlamb = pix_to_wave_fifthorder(np.asarray(app_fit_pix[fiber]), params)
+        dlamb = fitlamb - app_fit_lambs[fiber]
+        print("  ----> mean={}, median={}, std={}, root normd fit var={}".format(np.mean(dlamb),np.median(dlamb),np.std(dlamb),np.sqrt(np.sum(normd_vars))))
+
+        plt.close()
+        del browser
+        if np.std(dlamb) < 0.5:
+            numeric_hand_fit_names = np.append(numeric_hand_fit_names,fibern)
+            hand_fit_subset = np.append(hand_fit_subset,fiber)
+
+    return all_coefs, outlinelist, app_fit_lambs, app_fit_pix, variances
+
+
 
 
 def waves(pixels, a, b, c,d,e,f):
