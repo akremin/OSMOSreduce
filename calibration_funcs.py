@@ -191,7 +191,7 @@ def run_automated_calibration(coarse_comp, complinelistdict, last_obs=None, prin
 
         abest, bbest, cbest, corrbest = 0., 0., 0., 0.
         alow, ahigh = 3000, 8000
-        awidth, bwidth, cwidth = 20, 0.02, 4.0e-6
+        awidth, bwidth, cwidth = 12, 0.02, 4.0e-6
 
         if last_obs is None or fiber_identifier not in last_obs.keys():
             if counter == 0:
@@ -239,7 +239,8 @@ def run_automated_calibration(coarse_comp, complinelistdict, last_obs=None, prin
                     bbest = 1.0
                     cbest = 0.
                 astep,bstep,cstep = 0.5, 0.04, 8.0e-6
-                avals = (abest-30,   abest+30+astep,  astep)
+                aw = 30
+                avals = (abest-aw,   abest+aw+astep,  astep)
                 bvals = (bbest , bbest+bstep , bstep)
                 cvals = (cbest , cbest+cstep , cstep)
                 if print_itters:
@@ -262,7 +263,7 @@ def run_automated_calibration(coarse_comp, complinelistdict, last_obs=None, prin
                 print("\nItter 1 results:")
                 print("--> Using previous obs value of:   a={:.2f}, b={:.5f}, c={:.2e}".format(abest, bbest, cbest))
 
-        astep,bstep,cstep = awidth/10., bwidth/10., cwidth/10.
+        astep,bstep,cstep = 1, bwidth/10., cwidth/10.
 
         dcorr = 1.
         for itter in range(100):
