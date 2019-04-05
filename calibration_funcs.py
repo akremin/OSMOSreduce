@@ -162,13 +162,14 @@ def run_automated_calibration(coarse_comp, complinelistdict, last_obs=None, prin
     elif cam =='b' and int(fibernames[0][1]) < 6:
         fibernames = fibernames[::-1]
 
-    for fiber_identifier in fibernames:#['r101','r408','r409','r608','r816']:
-        counter += 1
+    burnin = 6;
+    fibernames = np.concatenate([fibernames[:burnin], fibernames[1:burnin - 1][::-1], fibernames])
+
+    for counter,fiber_identifier in enumerate(fibernames):#['r101','r408','r409','r608','r816']:
         #print("\n\n", fiber_identifier)
 
         ## Get the spectra (column with fiber name as column name)
         comp_spec = np.asarray(coarse_comp[fiber_identifier])
-
 
         if only_use_peaks:
             ## Find just the peaks in the calibration spectrum
@@ -193,7 +194,7 @@ def run_automated_calibration(coarse_comp, complinelistdict, last_obs=None, prin
         awidth, bwidth, cwidth = 20, 0.02, 4.0e-6
 
         if last_obs is None or fiber_identifier not in last_obs.keys():
-            if counter == 1:
+            if counter == 0:
                 avals = (alow, ahigh+1, 1)
                 bvals = (0.96,1.04,0.01)
                 cvals = (0., 1., 1.)
@@ -205,8 +206,8 @@ def run_automated_calibration(coarse_comp, complinelistdict, last_obs=None, prin
                                                                       calib_wave_start=waves[0],
                                                                       flux_wave_precision=precision,\
                                                                       print_itters=print_itters)
-            elif counter < 4:
-                compare_fiber = fibernames[counter - 2]
+            elif counter < 3:
+                compare_fiber = fibernames[counter - 1]
                 [trasha, bbest, cbest, trash1, trash2, trash3] = all_coefs[compare_fiber]
                 if (bbest < 0.96) or (bbest>1.04):
                     bbest = 1.0
@@ -224,11 +225,11 @@ def run_automated_calibration(coarse_comp, complinelistdict, last_obs=None, prin
                                                                     flux_wave_precision=precision,\
                                                                       print_itters=print_itters)
             else:
-                compare_fiber1 = fibernames[counter - 2]
+                compare_fiber1 = fibernames[counter - 1]
                 [a1, b1, c1, trash1, trash2, trash3] = all_coefs[compare_fiber1]
-                compare_fiber2 = fibernames[counter - 3]
+                compare_fiber2 = fibernames[counter - 2]
                 [a2, b2, c2, trash1, trash2, trash3] = all_coefs[compare_fiber2]
-                compare_fiber3 = fibernames[counter - 4]
+                compare_fiber3 = fibernames[counter - 3]
                 [a3, b3, c3, trash1, trash2, trash3] = all_coefs[compare_fiber3]
                 abest = np.median([a1, a2, a3])
                 bbest = np.median([b1, b2, b3])
