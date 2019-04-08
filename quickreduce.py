@@ -147,8 +147,10 @@ def pipeline(maskname=None,obs_config_name=None,io_config_name=None, pipe_config
                 with open(outfile,'wb') as crashsave:
                     pkl.dump(data.all_hdus,crashsave)
                 raise()
-
-    if step == 'zfit' and do_this_step and (str(pipe_options['make_mtlz']).lower()=='true'):
+    step == 'zfit'
+    do_this_step = True
+    if step == 'zfit' and do_this_step and (str(pipe_options['make_mtlz']).lower()=='true') and \
+        str(io_config['SPECIALFILES']['mtlz'].lower()) != 'none':
         find_extra_redshifts = (str(pipe_options['find_extra_redshifts']).lower()=='true')
         mtlz_path = io_config['PATHS']['mtlz_path']
         mtlz_name = io_config['SPECIALFILES']['mtlz']
