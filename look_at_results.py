@@ -14,17 +14,21 @@ from astroquery.vizier import Vizier
 from astropy.constants import c as speed_of_light
 
 
-ra_clust,dec_clust,z_clust = 240.8291, 3.2790,0.2198#210.25864,2.87847,0.252
-kpc_p_amin = Planck13.kpc_comoving_per_arcmin(z_clust)
-cluster = SkyCoord(ra=ra_clust*u.deg,dec=dec_clust*u.deg)
-scalar_c = consts.c.to(u.km/u.s).value
 
-
-prefix, target = 'M2FS16', 'A04'
-outfile = os.path.abspath(os.path.join(os.curdir,'..','..', 'OneDrive - umich.edu','Research','M2FSReductions','catalogs','merged_target_lists', 'mtlz_{}_{}_full.fits'.format(prefix,target)))
+# prefix, target = 'M2FS16', 'A04'
+# outfile = os.path.abspath(os.path.join(os.curdir,'..','..', 'OneDrive - umich.edu','Research','M2FSReductions','catalogs','merged_target_lists', 'mtlz_{}_{}_full.fits'.format(prefix,target)))
+prefix, target = 'M2FS17', 'B09'
+outfile = os.path.abspath(os.path.join(os.curdir,'..','data','catalogs','merged_target_lists', 'mtlz_{}_{}_full.fits'.format(prefix,target)))
 
 
 complete_table = Table.read(outfile,format='fits')
+
+ra_clust = float(complete_table.meta['RA_TARG'])
+dec_clust= float(complete_table.meta['DEC_TARG'])
+z_clust  = float(complete_table.meta['Z_TARG'])
+kpc_p_amin = Planck13.kpc_comoving_per_arcmin(z_clust)
+cluster = SkyCoord(ra=ra_clust*u.deg,dec=dec_clust*u.deg)
+scalar_c = consts.c.to(u.km/u.s).value
 
 measured_table = complete_table[np.bitwise_not(complete_table['SDSS_only'])]
 

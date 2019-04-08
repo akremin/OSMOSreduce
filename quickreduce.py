@@ -149,10 +149,15 @@ def pipeline(maskname=None,obs_config_name=None,io_config_name=None, pipe_config
                 raise()
     step == 'zfit'
     do_this_step = True
+    hdus = {}
+    from astropy.io import fits
+    hdus[('r', None, 'zfits', None)] =  fits.open('../data/B09/zfits/r_zfits_B09_combined_1d_bcwfs.fits')['ZFITS']
+    hdus[('b', None, 'zfits', None)] = fits.open('../data/B09/zfits/b_zfits_B09_combined_1d_bcwfs.fits')['ZFITS']
+    data.all_hdus = hdus
     if step == 'zfit' and do_this_step and (str(pipe_options['make_mtlz']).lower()=='true') and \
         str(io_config['SPECIALFILES']['mtlz'].lower()) != 'none':
         find_extra_redshifts = (str(pipe_options['find_extra_redshifts']).lower()=='true')
-        mtlz_path = io_config['PATHS']['mtlz_path']
+        mtlz_path = os.path.join(io_config['PATHS']['catalog_loc'],io_config['DIRS']['mtl'])
         mtlz_name = io_config['SPECIALFILES']['mtlz']
         outfile = os.path.join(mtlz_path,mtlz_name)
         from create_merged_target_list import make_mtlz

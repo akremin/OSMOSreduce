@@ -185,17 +185,17 @@ def create_mtl(io_config,science_filenum,vizier_catalogs,overwrite_field,overwri
     dataname = io_config['FILETEMPLATES']['raw'].format(cam='{cam}',filenum=science_filenum,opamp='1')
     dataname = dataname + '.fits'
 
-    plate_path = os.path.join(catalog_loc,io_config['DIRS']['plate_loc'])
+    plate_path = os.path.join(catalog_loc,io_config['DIRS']['plate'])
     plate_name = io_config['SPECIALFILES']['plate']
     if plate_name == 'None':
         plate_name = None
 
-    field_path = os.path.join(catalog_loc,io_config['DIRS']['field_loc'])
+    field_path = os.path.join(catalog_loc,io_config['DIRS']['field'])
     field_name = io_config['SPECIALFILES']['field']
     if field_name == 'None':
         field_name = None
 
-    redshifts_path = os.path.join(catalog_loc,io_config['DIRS']['redshifts_loc'])
+    redshifts_path = os.path.join(catalog_loc,io_config['DIRS']['redshifts'])
     redshifts_name = io_config['SPECIALFILES']['redshifts']
     if redshifts_name == 'None':
         redshifts_name == None
@@ -228,7 +228,7 @@ def create_mtl(io_config,science_filenum,vizier_catalogs,overwrite_field,overwri
 
         field_table = table.Table.read(field_pathname)
     else:
-        field_table = table.Table.read(field_pathname, header_start=1, format='ascii.tab')
+        field_table = table.Table.read(field_pathname, format='ascii.basic')#header_start=2,
         field_table.rename_column('RA', 'RA_targeted')
         field_table.rename_column('DEC', 'DEC_targeted')
 
@@ -257,8 +257,7 @@ def create_mtl(io_config,science_filenum,vizier_catalogs,overwrite_field,overwri
         matches = get_vizier_matches(ml, vizier_catalogs)
         # print(len(fiber_table),len(drilled_field_table),len(observed_field_table),len(joined_field_table),len(mtl),len(matches))
         if matches is not None:
-            full_pathname = os.path.join(redshifts_path,
-                                         field_prefix + field + '_redshifts_' + vizier_catalogs[0] + '.csv')
+            full_pathname = os.path.join(redshifts_path,redshifts_name.format(zsource=vizier_catalogs[0]))
             matches.write(full_pathname, format='ascii.csv', overwrite='True')
             mtl = table.join(ml, matches, keys='ID', join_type='left')
         else:
@@ -307,9 +306,9 @@ def make_mtlz(mtl_table, hdus, find_more_redshifts=False,outfile='mtlz.csv',\
     mtl = Table(mtl_table)
     tabler.rename_column('apperature', 'FIBNAME')
 
-    ra_clust,dec_clust = headerr['RA_TARG'],headerr['DEC_TARG']
+    ra_clust,dec_clust = float(headerr['RA_TARG']),float(headerr['DEC_TARG'])
     cluster = SkyCoord(ra=ra_clust * u.deg, dec=dec_clust * u.deg)
-    z_clust = headerr['Z_TARG']
+    z_clust = float(headerr['Z_TARG'])
     kpc_p_amin = Planck13.kpc_comoving_per_arcmin(z_clust)
 
     if hdu2 is not None:
