@@ -191,13 +191,26 @@ def run_automated_calibration(coarse_comp, complinelistdict, last_obs=None, prin
 
         abest, bbest, cbest, corrbest = 0., 0., 0., 0.
         alow, ahigh = 3000, 8000
-        awidth, bwidth, cwidth = 12, 0.02, 4.0e-6
+        awidth, bwidth, cwidth = 12, 0.005, 5.0e-6
 
         if last_obs is None or fiber_identifier not in last_obs.keys():
             if counter == 0:
                 avals = (alow, ahigh+1, 1)
-                bvals = (0.96,1.04,0.01)
-                cvals = (0., 1., 1.)
+                bvals = (1.0,1.01,0.1)
+                cvals = (0, 1.0, 2)
+                if print_itters:
+                    print("\nItter 1 results, (fixing c to 0.):")
+                abest, trashb, trashc, corrbest = fit_using_crosscorr(pixels=pix1, raw_spec=comp_spec,
+                                                                      comp_highres_fluxes=fluxes, \
+                                                                      avals=avals, bvals=bvals, cvals=cvals, \
+                                                                      calib_wave_start=waves[0],
+                                                                      flux_wave_precision=precision,\
+                                                                      print_itters=print_itters)
+
+
+                avals = (abest-40, abest+41, 0.5)
+                bvals = (0.96,1.04,0.005)
+                cvals = (-1.0e-5, 1.0e-5, 1.0e-6)
                 if print_itters:
                     print("\nItter 1 results, (fixing c to 0.):")
                 abest, bbest, cbest, corrbest = fit_using_crosscorr(pixels=pix1, raw_spec=comp_spec,
@@ -206,13 +219,14 @@ def run_automated_calibration(coarse_comp, complinelistdict, last_obs=None, prin
                                                                       calib_wave_start=waves[0],
                                                                       flux_wave_precision=precision,\
                                                                       print_itters=print_itters)
+
             elif counter < 3:
                 compare_fiber = fibernames[counter - 1]
                 [trasha, bbest, cbest, trash1, trash2, trash3] = all_coefs[compare_fiber]
                 if (bbest < 0.96) or (bbest>1.04):
                     bbest = 1.0
                     cbest = 0.
-                astep,bstep,cstep = 1, 0.04, 8.0e-6
+                astep,bstep,cstep = 0.5, 0.04, 8.0e-6
                 avals = (alow,   ahigh+astep,  astep)
                 bvals = (bbest , bbest+bstep , bstep)
                 cvals = (cbest , cbest+cstep , cstep)
@@ -263,7 +277,7 @@ def run_automated_calibration(coarse_comp, complinelistdict, last_obs=None, prin
                 print("\nItter 1 results:")
                 print("--> Using previous obs value of:   a={:.2f}, b={:.5f}, c={:.2e}".format(abest, bbest, cbest))
 
-        astep,bstep,cstep = 1, bwidth/10., cwidth/10.
+        astep,bstep,cstep = 0.5, bwidth/10., cwidth/10.
 
         dcorr = 1.
         for itter in range(100):

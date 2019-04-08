@@ -31,17 +31,31 @@ def cutout_all_apperatures(all_hdus,cameras,deadfibers=[],summation_preference='
     for (camera, filenum, imtype, opamp),hdu in all_hdus.items():
         oneds = cutout_oned_apperatures(hdu.data ,cam_apperatures[camera],summation_preference)
         outhead = hdu.header.copy(strip=True)
-        outhead.remove('datasec' ,ignore_missing=True)
-        outhead.remove('trimsec' ,ignore_missing=True)
-        outhead.remove('CHOFFX' ,ignore_missing=True)
-        outhead.remove('CHOFFY' ,ignore_missing=True)
-        outhead.remove('NOPAMPS' ,ignore_missing=True)
+        outhead = update_header(outhead,cam_apperatures[camera])
 
         outhdu = fits.BinTableHDU(data=Table(data=oneds) ,header=outhead, name='flux')
         apcut_hdus[(camera, filenum, imtype, opamp)] = outhdu
         print("Completed Apperature Cutting of: cam={}, fil={}, type={}".format(camera,filenum,imtype))
 
     return apcut_hdus
+
+
+def update_header(header,cam_app):
+    header.remove('datasec', ignore_missing=True)
+    header.remove('trimsec', ignore_missing=True)
+    header.remove('CHOFFX', ignore_missing=True)
+    header.remove('CHOFFY', ignore_missing=True)
+    header.remove('NOPAMPS', ignore_missing=True)
+
+    for tet, tet_dict in cam_app.items():
+        start, end = tet_dict['start'], tet_dict['end']
+        peaks = tet_dict['peaks']
+        for fib in peaks.keys():
+            med_peak = np.median(peaks[fib])
+            header['yloc_{}'.format(fib[1:])] = start + med_peak
+    return header
+
+
 
 def cutout_oned_apperatures(image,apperatures,summation_preference):
     twod_cutouts = cutout_twod_apperatures(image,apperatures)

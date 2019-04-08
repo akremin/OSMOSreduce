@@ -19,6 +19,7 @@ class FieldData:
         self.twod_to_oned = pipeline_options['twod_to_oned_strategy']
         self.debias_strategy = pipeline_options['debias_strategy']
         self.skysub_strategy = pipeline_options['skysub_strategy']
+        self.initial_calib_priors = pipeline_options['initial_calib_priors']
 
         self.convert_adu_to_e = (str(pipeline_options['convert_adu_to_e']).lower()=='true')
         self.skip_coarse_calib = (str(pipeline_options['try_skip_coarse_calib']).lower()=='true')
@@ -82,6 +83,10 @@ class FieldData:
         if self.debias_strategy != 'median':
             print("Only median debias strategy is currently implemented. Defaulting to that.")
             self.debias_strategy = 'median'
+
+        if self.initial_calib_priors not in ['medians','defaults','parametrized']:
+            print("Only medians, defaults, parametrized utilizations of the coarse calibrations is permitted. Defaulting to 'defaults'")
+            self.initial_calib_priors = 'defaults'
 
     def update_step(self,step):
         self.step = step
@@ -342,7 +347,7 @@ class FieldData:
                                                               only_use_peaks = self.only_peaks_in_coarse_cal)
 
             for camera in self.instrument.cameras:
-                self.comparcs[camera].run_final_calibrations()
+                self.comparcs[camera].run_final_calibrations(initial_priors=self.initial_calib_priors)
                 self.comparcs[camera].create_calibration_default()
 
         elif self.step == 'flatten':
