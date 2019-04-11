@@ -78,11 +78,14 @@ def load_sdss_templatefiles(path_to_files='.',filenames=['spDR2-023.fit']):
             raise IOError
             
         # Declare the array for the template flux(es)  
-        coeff0 = early_type[0].header['COEFF0']
-        coeff1 = early_type[0].header['COEFF1']
+        coeff0 = float(early_type[0].header['COEFF0'])
+        coeff1 = float(early_type[0].header['COEFF1'])
+        final_z = float(early_type[0].header['Z'])
         flux=early_type[0].data[0]
 
         wave=10**(coeff0 + coeff1*np.arange(0.,flux.size,1.))
+        wave = wave/(1.0+final_z)
+
         name = (template_file.split('.fit')[0]).replace('spDR2-','')
         early_type.close()
         waveforms.append(waveform(wave=wave,flux=flux,name=name))
