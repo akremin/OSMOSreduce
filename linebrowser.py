@@ -229,8 +229,8 @@ class LineBrowser:
 
             self.wm = np.insert(self.wm, j, self.last['wm'].pop())
             self.fm = np.insert(self.fm, j, self.last['fm'].pop())
-            while self.j != j:
-                self.back_line()
+
+            self.back_line()
         else:
             return
 
@@ -284,13 +284,15 @@ class LineBrowser:
         return least_squares_fit(self.coefs,self.line_matches['peaks_p'],self.line_matches['lines'],self.bounds)
 
     def create_saveplot(self, coefs, cov, savename):
+        coefs = np.asarray(coefs)
         from quickreduce_funcs import format_plot
-        waves = fifth_order_poly(self.p_x, *coefs)
+        waves = np.polyval(coefs[::-1],self.p_x)
         fitlines = np.asarray(self.line_matches['lines'])
         fitlineloc = np.asarray(self.wm)
         fitheights = np.asarray(self.fm)
         dellines = np.asarray(self.all_wms)
         fitpix = np.asarray(self.line_matches['peaks_p'])
+        fitwaves = np.polyval(coefs[::-1],fitpix)
 
         fig = plt.figure(figsize=(20., 25.),frameon=False)
         ax_lineplot_first = plt.subplot2grid((20, 16), (9, 0), colspan=16,rowspan=5, fig=fig)
@@ -310,7 +312,7 @@ class LineBrowser:
                                           [minlam,middlelam],[middlelam,maxlam],\
                                           ["First Half of Range","Second Half of Range"]):
             axi.plot(waves, self.yspectra, 'b-')
-            axi.plot(self.line_matches['peaks_w'], self.line_matches['peaks_h'], 'co', markersize=6, markeredgewidth=2, markerfacecolor='w', alpha=0.5)
+            axi.plot(fitwaves, self.line_matches['peaks_h'], 'co', markersize=6, markeredgewidth=2, markerfacecolor='w', alpha=0.5)
             for w in dellines:
                 axi.axvline(w, color='gray',linewidth=1 ,alpha=0.2)
             for w in fitlines:
@@ -323,11 +325,12 @@ class LineBrowser:
 
         axfitpts.plot(fitpix, fitlines-fitpix, 'r.',label='pts-1*pix')
         highres_pix = np.arange(fitpix.min(), fitpix.max(), 0.1)
-        axfitpts.plot(highres_pix, fifth_order_poly(highres_pix, *coefs)-highres_pix, 'b-',label='fit-1*pix')
+        coefs = np.asarray(coefs)
+        axfitpts.plot(highres_pix, np.polyval(coefs[::-1],highres_pix)-highres_pix, 'b-',label='fit-1*pix')
         format_plot(axfitpts, title="Fit versus Data", xlabel='Pixels', ylabel=r'Wavelength [$\mathrm{\AA}$]', labelsize=16)
         axfitpts.legend(loc='best')
 
-        residuals = fitlines - fifth_order_poly(fitpix, *coefs)
+        residuals = fitlines - np.polyval(coefs[::-1],fitpix)
         axresid.plot(fitpix, residuals, 'r.')
         axresid.plot(highres_pix, np.zeros(len(highres_pix)), 'k--')
         format_plot(axresid, title="Residuals", xlabel='Pixels', ylabel=r'Line-Fit [$\mathrm{\AA}$]', labelsize=16)
@@ -377,12 +380,13 @@ class LineBrowser:
         plottitle.replace('_',' ')
 
         fig.suptitle(plottitle,fontsize=24)
-        fig.savefig(savename, dpi=600)
+        fig.savefig(savename, dpi=200)
         plt.close()
         del fig
 
 
     def create_saveplot_var(self, coefs, cov, savename):
+        coefs = np.asarray(coefs)
         from quickreduce_funcs import format_plot
         waves = fifth_order_poly(self.p_x, *coefs)
         fitlines = np.asarray(self.line_matches['lines'])
@@ -390,6 +394,7 @@ class LineBrowser:
         fitheights = np.asarray(self.fm)
         dellines = np.asarray(self.all_wms)
         fitpix = np.asarray(self.line_matches['peaks_p'])
+        fitwaves = np.polyval(coefs[::-1],fitpix)
 
         fig = plt.figure(figsize=(20., 25.),frameon=False)
         ax_lineplot_first = plt.subplot2grid((20, 16), (0, 0), colspan=16,rowspan=5, fig=fig)
@@ -408,7 +413,7 @@ class LineBrowser:
                                           [minlam,middlelam],[middlelam,maxlam],\
                                           ["First Half of Range","Second Half of Range"]):
             axi.plot(waves, self.yspectra, 'b-')
-            axi.plot(self.line_matches['peaks_w'], self.line_matches['peaks_h'], 'co', markersize=6, markeredgewidth=2, markerfacecolor='w', alpha=0.5)
+            axi.plot(fitwaves, self.line_matches['peaks_h'], 'co', markersize=6, markeredgewidth=2, markerfacecolor='w', alpha=0.5)
             for w in dellines:
                 axi.axvline(w, color='gray',linewidth=1 ,alpha=0.2)
             for w in fitlines:
@@ -474,14 +479,38 @@ def least_squares_fit(coefs,pixels,wavelengths,bounds):
     pixels = np.sort(pixels).astype(np.float64)
     waves = np.sort(wavelengths).astype(np.float64)
     try:
-        if bounds is None:
-            params, pcov = curve_fit(fifth_order_poly, pixels, waves, p0=coefs, method='lm')
-        else:
-            params, pcov = curve_fit(fifth_order_poly, pixels, waves, \
-                                     p0=coefs, bounds = bounds)
+        # if bounds is None:
+        #     params, pcov = curve_fit(fifth_order_poly, pixels, waves, p0=coefs, method='lm')
+        # else:
+        #     params, pcov = curve_fit(fifth_order_poly, pixels, waves, \
+        #                              p0=coefs, bounds = bounds)
+
+        guessed_waves = np.polyval(np.asarray(coefs)[::-1],pixels)
+        dwaves = waves - guessed_waves
+
+        # fit_poly = np.polynomial.polynomial.Polynomial.fit
+        # if bounds is None:
+        #     outseries, [resid, rank, sv, rcond] = fit_poly(pixels, dwaves, deg=5, full=True)
+        #     params = outseries.convert().coef
+        # else:
+        #     outseries, [resid, rank, sv, rcond] = fit_poly(pixels, dwaves, deg=5, full=True, domain=bounds)
+        #     params = outseries.convert().coef
+
+        # print(sv,sv.shape)
+        # cov = np.identity(len(params))*sv[::-1
+
+        fit_poly = np.polyfit
+
+        params, cov = fit_poly(pixels, dwaves, deg=5, full=False,cov=True)
+
+        params = params[::-1] + np.asarray(coefs)
+        outdwaves = waves- np.polyval(params[::-1],pixels)
+        resid = np.dot(outdwaves,outdwaves)/len(outdwaves)
+
     except TypeError:
         print("Type error, fit failed, saving default")
-        params =  coefs
-        pcov = np.ones(shape=(5,5))*1.0e6
+        params = coefs
+        cov = np.ones(shape=(5,5))*1.0e6
+        resid = 1e6
 
-    return params,pcov
+    return params,cov, resid

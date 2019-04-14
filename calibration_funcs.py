@@ -833,7 +833,7 @@ def find_devs(table1,table2):
     devs = []
     for fib in overlaps:
         coef_dev = np.asarray(table1[fib])-np.asarray(table2[fib])
-        full_devs = pix_to_wave_fifthorder(xs, coef_dev)
+        full_devs = np.polyval(coef_dev[::-1],xs)
         dev = np.std(full_devs)
         devs.append(dev)
     return np.mean(devs)

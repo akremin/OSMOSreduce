@@ -16,7 +16,7 @@ from calibration_funcs import compare_outputs, \
     ensure_match, find_devs
 
 from linebrowser import LineBrowser
-
+from collections import Counter
 
 class Calibrations:
     def __init__(self, camera, instrument, lamptypesc, lamptypesf, coarse_calibrations, filemanager, config, \
@@ -280,13 +280,12 @@ class Calibrations:
 
             linelist = self.selected_lines
 
-            if pairnum == 0 and using_defaults:
-                user_input = 'minimal'
-            elif pairnum == 0 and not using_defaults:
+            effective_iteration = pairnum + int(using_defaults)
+            if effective_iteration == 0:
                 user_input = 'some'
-            elif pairnum == 1:
+            elif effective_iteration == 1:
                 user_input = 'minimal'
-            elif pairnum > 1 and devs < dev_allowance:
+            elif effective_iteration > 1:# and devs < dev_allowance:
                 user_input = 'none'
 
             hand_fit_subset = []
@@ -728,15 +727,15 @@ class Calibrations:
                                   edge_line_distance=10.0,fibname=fiber)
             if np.any((np.asarray(browser.line_matches['lines'])-np.asarray(browser.line_matches['peaks_w']))>0.3):
                 browser.plot()
-            params,covs = browser.fit()
+            params,covs,resid = browser.fit()
 
             print(fiber,*params)
+            print(np.sqrt(resid))
             out_coefs[fiber] = params
             completed_coefs[fiber] = params
             variances[fiber] = covs.diagonal()
             app_fit_pix[fiber] = browser.line_matches['peaks_p']
             app_fit_lambs[fiber] = browser.line_matches['lines']
-            print(np.sum(variances[fiber]))
 
             template =  self.savetemplate_funcs(cam=str(filenum)+'_',ap=fiber,imtype='calib',step='finalfit',comment='byhand')
             if self.save_plots:
@@ -823,14 +822,14 @@ class Calibrations:
 
                         browser = LineBrowser(iteration_wm, iteration_fm, f_x, updated_coefs, fulllinelist, bounds=bounds,edge_line_distance=-20.0,fibname=fiber)
                         browser.plot()
-                        params, covs = browser.fit()
+                        params, covs, resid = browser.fit()
 
                         print(fiber, *params)
+                        print(np.sqrt(resid))
                         out_coefs[fiber] = params
                         variances[fiber] = covs.diagonal()
                         app_fit_pix[fiber] = browser.line_matches['peaks_p']
                         app_fit_lambs[fiber] = browser.line_matches['lines']
-                        print(np.dot(variances[fiber], variances[fiber]))
 
                         if select_lines:
                             app_specific_linelists[fiber] = (browser.wm, browser.fm)
@@ -1000,9 +999,11 @@ def auto_wavelength_fitting_by_lines(comp, fulllinelist, coef_table, linelistdic
     elif cam =='b' and int(all_fibers[0][1]) > 5:
         all_fibers = all_fibers[::-1]
 
-
-    for itter in range(4):
+    upper_limit_resid = 0.4
+    for itter in range(10):
         badfits = []
+        maxdevs = []
+        upper_limit_resid += itter/100.
         for fiber in all_fibers:
             if fiber in hand_fit_subset:
                 continue
@@ -1050,16 +1051,17 @@ def auto_wavelength_fitting_by_lines(comp, fulllinelist, coef_table, linelistdic
 
             browser = LineBrowser(wm,fm, f_x, adjusted_coefs_guess, fulllinelist, bounds=None, edge_line_distance=(-20.0),initiate=False)
 
-            params,covs = browser.fit()
-
-            normd_vars = covs.diagonal()/(params*params)
+            params,covs, resid = browser.fit()
 
             print('\n\n',fiber,'{:.2f} {:.6e} {:.6e} {:.6e} {:.6e} {:.6e}'.format(*params))
-            fitlamb = pix_to_wave_fifthorder(np.asarray(browser.line_matches['peaks_p']), params)
+            fitlamb = np.polyval(params[::-1],np.asarray(browser.line_matches['peaks_p']))
             dlamb = fitlamb - browser.line_matches['lines']
-            print("  ----> mean={}, median={}, std={}, root normd fit var={}".format(np.mean(dlamb),np.median(dlamb),np.std(dlamb),np.sqrt(np.sum(normd_vars))))
+            print("  ----> mean={}, median={}, std={}, sqrt(resid)={}".format(np.mean(dlamb),np.median(dlamb),np.std(dlamb),np.sqrt(resid)))
 
-            if np.std(dlamb) < 0.5:
+            if np.max(np.abs(dlamb)) > 1.0 and np.sqrt(resid) < 1.0:
+                maxdev_line = browser.line_matches['lines'][np.argmax(np.abs(dlamb))]
+                maxdevs.append(maxdev_line)
+            if np.sqrt(resid) < upper_limit_resid:
                 if save_plots:
                     template = savetemplate_funcs(cam=str(filenum) + '_', ap=fiber, imtype='calib', step='finalfit',
                                                   comment='auto')
@@ -1071,6 +1073,7 @@ def auto_wavelength_fitting_by_lines(comp, fulllinelist, coef_table, linelistdic
                 outlinelist[fiber] = (wm, fm)
                 app_fit_pix[fiber] = browser.line_matches['peaks_p']
                 app_fit_lambs[fiber] = browser.line_matches['lines']
+                # if np.sqrt(resid) < upper_limit_resid:
                 numeric_hand_fit_names = np.append(numeric_hand_fit_names,fibern)
                 hand_fit_subset = np.append(hand_fit_subset,fiber)
             else:
@@ -1078,6 +1081,16 @@ def auto_wavelength_fitting_by_lines(comp, fulllinelist, coef_table, linelistdic
 
             plt.close()
             del browser
+
+        if (len(badfits) > 0) and (len(maxdevs) > 0) and (len(wm) > 11):
+            count = Counter(maxdevs)
+            line, num = count.most_common(1)[0]
+            if (num > (len(maxdevs)//2)) and (num > (len(all_fibers)//2)):
+                wm_loc = np.where(wm == line)[0][0]
+                wmlist,fmlist = wm.tolist(),fm.tolist()
+                wmlist.pop(wm_loc)
+                fmlist.pop(wm_loc)
+                wm,fm = np.asarray(wmlist),np.asarray(fmlist)
 
         all_fibers = np.array(badfits)[::-1]
 
@@ -1087,7 +1100,3 @@ def auto_wavelength_fitting_by_lines(comp, fulllinelist, coef_table, linelistdic
 def quadratic(xs,a,b,c):
     return a + b*xs + c*xs*xs
 
-def waves(pixels, a, b, c,d,e,f):
-    return a + (b * pixels) + (c * pixels * pixels)+\
-           (d * np.power(pixels,3)) + (e * np.power(pixels,4))+ \
-           (f * np.power(pixels, 5))
