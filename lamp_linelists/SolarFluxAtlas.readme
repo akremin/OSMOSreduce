@@ -1,0 +1,18 @@
+Title: An Optical and Near-Infrared (2958 - 9250 Angstrom) Solar Flux Atlas 
+Authors: Wallace L., Hinkle K.H., Livingston W.C., Davis S.P. 
+Table: Digital Atlas
+================================================================================
+Byte-by-byte Description of file: apjs395296t2_mrt.txt
+--------------------------------------------------------------------------------
+   Bytes Format Units Label     Explanations
+--------------------------------------------------------------------------------
+   1- 10 F10.4  cm-1  WaveNum   Wavenumber in vacuum (1)
+  12- 20 F9.4   0.1nm Wave      Wavelength in air at STP; Angstroms
+  22- 28 F7.5   ---   CorFlux   ? Corrected flux 
+  30- 36 F7.5   ---   TelCor    ? Telluric correction
+  38- 44 F7.5   ---   UCorFlux  Uncorrected flux
+      46 A1     ---   Region    Region of the atlas; see text
+--------------------------------------------------------------------------------
+Note (1): Wavenumber coverage is overlapped 2 cm^-1^ at region boundaries.
+--------------------------------------------------------------------------------
+
