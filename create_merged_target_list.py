@@ -104,11 +104,14 @@ def create_m2fs_fiber_info_table(datapath,dataname,cams=['r','b']):
 
 def get_vizier_matches(mtl,vizier_catalogs=['sdss12']):
     if 'RA' in mtl.colnames:
-        short_mtl = mtl[~mtl['RA'].mask]
+        if type(mtl['RA']) is table.Table.MaskedColumn:
+            short_mtl = mtl[~mtl['RA'].mask]
+        else:
+            short_mtl = mtl.copy()
     else:
         mtl.add_column(table.Table.Column(data=mtl['RA_targeted'].data,name='RA'))
         mtl.add_column(table.Table.Column(data=mtl['DEC_targeted'].data,name='DEC'))
-        short_mtl = mtl
+        short_mtl = mtl.copy()
 
     skies = [('SKY' in name) for name in short_mtl['ID']]
     short_mtl = short_mtl[np.bitwise_not(skies)]
@@ -227,12 +230,22 @@ def create_mtl(io_config,science_filenum,vizier_catalogs,overwrite_field,overwri
                                       drilled_field_path=field_path, overwrite_file=overwrite_field)
 
         field_table = table.Table.read(field_pathname)
+        if 'RA_targeted' in field_table.colnames:
+            field_table.rename_column('RA_targeted','RA')
+            field_table.rename_column('DEC_targeted','DEC')
+        if 'RA_drilled' in field_table.colnames:
+            field_table.rename_column('RA_drilled','RA')
+            field_table.rename_column('RA_drilled','DEC')
     else:
         field_table = table.Table.read(field_pathname, format='ascii.basic')#header_start=2,
-        field_table.rename_column('RA', 'RA_targeted')
-        field_table.rename_column('DEC', 'DEC_targeted')
+        if 'RA_targeted' in field_table.colnames:
+            field_table.rename_column('RA_targeted','RA')
+            field_table.rename_column('DEC_targeted','DEC')
+
 
     ## Merge fiber and drill info
+    if len(fiber_table)==0 or len(field_table)==0:
+        print("Stop here")
     observed_field_table = table.join(fiber_table, field_table, keys='ID', join_type='left')
 
     ## If there is targeting information, merge that in as well
@@ -254,7 +267,15 @@ def create_mtl(io_config,science_filenum,vizier_catalogs,overwrite_field,overwri
         redshifts = table.Table.read(full_pathname, format='ascii.csv')
         mtl = table.join(ml, redshifts, keys='ID', join_type='left')
     else:
-        matches = get_vizier_matches(ml, vizier_catalogs)
+        if 'DEC' in ml.colnames:
+            dec_name = 'DEC'
+        else:
+            dec_name = 'DEC_targeted'
+        if len(vizier_catalogs) == 1 and vizier_catalogs[0] == 'sdss12' and ml[dec_name][0] < -20:
+            matches = None
+        else:
+            matches = get_vizier_matches(ml, vizier_catalogs)
+
         # print(len(fiber_table),len(drilled_field_table),len(observed_field_table),len(joined_field_table),len(mtl),len(matches))
         if matches is not None:
             full_pathname = os.path.join(redshifts_path,redshifts_name.format(zsource=vizier_catalogs[0]))
@@ -299,47 +320,55 @@ def make_mtlz(mtl_table, hdus, find_more_redshifts=False,outfile='mtlz.csv',\
     # apperature, redshift_est, cor, template
     # ID,FIBNAME,sdss_SDSS12,RA,DEC,sdss_zsp,sdss_zph,sdss_rmag,MAG
 
-    tabler = Table(hdu1.data)
+    table1 = Table(hdu1.data)
+    header1 = hdu1.header
 
-    headerr = hdu1.header
-
-    mtl = Table(mtl_table)
-    tabler.rename_column('apperature', 'FIBNAME')
-
-    ra_clust,dec_clust = float(headerr['RA_TARG']),float(headerr['DEC_TARG'])
-    cluster = SkyCoord(ra=ra_clust * u.deg, dec=dec_clust * u.deg)
-    z_clust = float(headerr['Z_TARG'])
-    kpc_p_amin = Planck13.kpc_comoving_per_arcmin(z_clust)
+    cam1 = str(header1['SHOE']).lower()
+    if str(table1['apperature'][0])[0].lower() != cam1:
+        print("I couldn't match the camera between the header and data table for hdu1!")
+    table1.rename_column('apperature', 'FIBNAME')
 
     if hdu2 is not None:
-        tableb = Table(hdu2.data)
-        headerb = hdu2.header
-        tableb.rename_column('apperature', 'FIBNAME')
+        table2 = Table(hdu2.data)
+        header2 = hdu2.header
+        cam2 = str(header2['SHOE']).lower()
+        if str(table2['apperature'][0])[0].lower() != cam2:
+            print("I couldn't match the camera between the header and data table for hdu2!")
+        table2.rename_column('apperature', 'FIBNAME')
+
+    mtl = Table(mtl_table)
+
+
+    ra_clust,dec_clust = float(header1['RA_TARG']),float(header1['DEC_TARG'])
+    cluster = SkyCoord(ra=ra_clust * u.deg, dec=dec_clust * u.deg)
+    z_clust = float(header1['Z_TARG'])
+    kpc_p_amin = Planck13.kpc_comoving_per_arcmin(z_clust)
+
 
     fibermap = {}
-    for key, val in dict(headerr).items():
+    for key, val in dict(header1).items():
         if key[:5] == 'FIBER':
-            fibermap['{}{}'.format('r', key[5:])] = val.strip(' \t')
+            fibermap['{}{}'.format(cam1, key[5:])] = val.strip(' \t')
 
     for t in range(1, 9):
         for f in range(1, 17):
             testkey = 'FIBER{:d}{:02d}'.format(t, f)
-            replacekey = 'r{:d}{:02d}'.format(t, f)
-            if testkey in tabler.meta.keys():
-                tabler.meta[replacekey] = tabler.meta[testkey]
-                tabler.meta.pop(testkey)
+            replacekey = '{}{:d}{:02d}'.format(cam1,t, f)
+            if testkey in table1.meta.keys():
+                table1.meta[replacekey] = table1.meta[testkey]
+                table1.meta.pop(testkey)
 
     if hdu2 is not None:
-        for key, val in dict(headerb).items():
+        for key, val in dict(header2).items():
             if key[:5] == 'FIBER':
-                fibermap['{}{}'.format('b', key[5:])] = val.strip(' \t')
+                fibermap['{}{}'.format(cam2, key[5:])] = val.strip(' \t')
         for t in range(1, 9):
             for f in range(1, 17):
                 testkey = 'FIBER{:d}{:02d}'.format(t, f)
-                replacekey = 'b{:d}{:02d}'.format(t, f)
-                if testkey in tableb.meta.keys():
-                    tableb.meta[replacekey] = tableb.meta[testkey]
-                    tableb.meta.pop(testkey)
+                replacekey = '{}{:d}{:02d}'.format(cam2,t, f)
+                if testkey in table2.meta.keys():
+                    table2.meta[replacekey] = table2.meta[testkey]
+                    table2.meta.pop(testkey)
 
         for ii in range(len(mtl)):
             id = mtl['ID'][ii]
@@ -349,18 +378,18 @@ def make_mtlz(mtl_table, hdus, find_more_redshifts=False,outfile='mtlz.csv',\
             elif fibermap[fbnm].upper() != id:
                 print(ii, fbnm, fibermap[fbnm], id)
 
-        combined_table = vstack([tabler, tableb])
+        combined_table = vstack([table1, table2])
     else:
-        combined_table = tabler
+        combined_table = table1
 
     full_table = join(combined_table, mtl, 'FIBNAME', join_type='inner')
 
     ## Add additional information
-    time = Time(headerr['MJD'], format='mjd')
-    location = EarthLocation(lon=headerr['SITELONG'] * u.deg, lat=headerr['SITELAT'] * u.deg, \
-                             height=headerr['SITEALT'] * u.meter)
-    hc_cor = cluster.radial_velocity_correction(kind='barycentric', obstime=time, location=location)
-    dz = hc_cor / consts.c
+    time = Time(header1['MJD'], format='mjd')
+    location = EarthLocation(lon=header1['SITELONG'] * u.deg, lat=header1['SITELAT'] * u.deg, \
+                             height=header1['SITEALT'] * u.meter)
+    bc_cor = cluster.radial_velocity_correction(kind='barycentric', obstime=time, location=location)
+    dz = bc_cor / consts.c
 
     full_table.add_column(Table.Column(data=full_table['redshift_est'] + dz, name='z_est_bary'))
 
@@ -376,57 +405,60 @@ def make_mtlz(mtl_table, hdus, find_more_redshifts=False,outfile='mtlz.csv',\
         radius = 5 * u.Mpc / kpc_p_amin
         Vizier.ROW_LIMIT = -1
         result = Vizier.query_region(cluster, radius=radius, catalog=vizier_catalogs)
-        res_tab = result[0]
+        if type(result) is list and len(result)>0:
+            res_tab = result[0]
 
-        if np.all(res_tab['zsp'].mask):
-            if np.all(res_tab['zph'].mask):
-                sdss_archive_table = res_tab
+            if np.all(res_tab['zsp'].mask):
+                if np.all(res_tab['zph'].mask):
+                    sdss_archive_table = res_tab
+                else:
+                    cut_tab = res_tab[np.where(~res_tab['zph'].mask)]
+                    sdss_archive_table = cut_tab[np.where(cut_tab['zph'] > -99)]
             else:
-                cut_tab = res_tab[np.where(~res_tab['zph'].mask)]
-                sdss_archive_table = cut_tab[np.where(cut_tab['zph'] > -99)]
+                sdss_archive_table = res_tab[np.where(~res_tab['zsp'].mask)]
+
+            for col in sdss_archive_table.colnames:
+                sdss_archive_table.rename_column(col, 'sdss_' + col)
+
+            for ii in np.arange(len(sdss_archive_table))[::-1]:
+                if sdss_archive_table['sdss_SDSS12'][ii] in full_table['sdss_SDSS12']:
+                    print("Removing: {}".format(sdss_archive_table['sdss_SDSS12'][ii]))
+                    sdss_archive_table.remove_row(ii)
+
+            sdss_archive_table.add_column(Table.Column(data=sdss_archive_table['sdss_RA_ICRS'], name='RA'))
+            sdss_archive_table.add_column(Table.Column(data=sdss_archive_table['sdss_DE_ICRS'], name='DEC'))
+            sdss_archive_table.add_column(Table.Column(data=['T'] * len(sdss_archive_table), name='TYPE'))
+            sdss_archive_table.add_column(Table.Column(data=[2000.0] * len(sdss_archive_table), name='EPOCH'))
+
+            all_sdss_coords = SkyCoord(ra=sdss_archive_table['sdss_RA_ICRS'], dec=sdss_archive_table['sdss_DE_ICRS'])
+            seps = cluster.separation(all_sdss_coords)
+            sdss_archive_table.add_column(Table.Column(data=seps.to(u.arcsec).value, name='Proj_R_asec'))
+            sdss_archive_table.add_column(Table.Column(data=(kpc_p_amin * seps).to(u.Mpc).value, name='Proj_R_Comoving_Mpc'))
+            sdss_archive_table.add_column(Table.Column(data=sdss_archive_table['sdss_zsp'], name='z_est_bary'))
+            dvs = consts.c.to(u.km / u.s).value * (z_clust - sdss_archive_table['z_est_bary']) / (1. + z_clust)
+            sdss_archive_table.add_column(Table.Column(data=dvs, name='velocity'))
+            #
+            #
+            full_table.add_column(Table.Column(data=[False] * len(full_table), name='SDSS_only'))
+            sdss_archive_table.add_column(Table.Column(data=[True] * len(sdss_archive_table), name='SDSS_only'))
+
+            sdss_archive_table.convert_bytestring_to_unicode()
+            convert = []
+            for row in sdss_archive_table['sdss_q_mode']:
+                convert.append(float(row.strip(' ') == '+'))
+
+            new_sdssq_col = Table.Column(data=convert, name='sdss_q_mode')
+            sdss_archive_table.replace_column('sdss_q_mode', new_sdssq_col)
+
+            mega_table = vstack([full_table, sdss_archive_table])
         else:
-            sdss_archive_table = res_tab[np.where(~res_tab['zsp'].mask)]
-
-        for col in sdss_archive_table.colnames:
-            sdss_archive_table.rename_column(col, 'sdss_' + col)
-
-        for ii in np.arange(len(sdss_archive_table))[::-1]:
-            if sdss_archive_table['sdss_SDSS12'][ii] in full_table['sdss_SDSS12']:
-                print("Removing: {}".format(sdss_archive_table['sdss_SDSS12'][ii]))
-                sdss_archive_table.remove_row(ii)
-
-        sdss_archive_table.add_column(Table.Column(data=sdss_archive_table['sdss_RA_ICRS'], name='RA'))
-        sdss_archive_table.add_column(Table.Column(data=sdss_archive_table['sdss_DE_ICRS'], name='DEC'))
-        sdss_archive_table.add_column(Table.Column(data=['T'] * len(sdss_archive_table), name='TYPE'))
-        sdss_archive_table.add_column(Table.Column(data=[2000.0] * len(sdss_archive_table), name='EPOCH'))
-
-        all_sdss_coords = SkyCoord(ra=sdss_archive_table['sdss_RA_ICRS'], dec=sdss_archive_table['sdss_DE_ICRS'])
-        seps = cluster.separation(all_sdss_coords)
-        sdss_archive_table.add_column(Table.Column(data=seps.to(u.arcsec).value, name='Proj_R_asec'))
-        sdss_archive_table.add_column(Table.Column(data=(kpc_p_amin * seps).to(u.Mpc).value, name='Proj_R_Comoving_Mpc'))
-        sdss_archive_table.add_column(Table.Column(data=sdss_archive_table['sdss_zsp'], name='z_est_bary'))
-        dvs = consts.c.to(u.km / u.s).value * (z_clust - sdss_archive_table['z_est_bary']) / (1. + z_clust)
-        sdss_archive_table.add_column(Table.Column(data=dvs, name='velocity'))
-        #
-        #
-        full_table.add_column(Table.Column(data=[False] * len(full_table), name='SDSS_only'))
-        sdss_archive_table.add_column(Table.Column(data=[True] * len(sdss_archive_table), name='SDSS_only'))
-
-        sdss_archive_table.convert_bytestring_to_unicode()
-        convert = []
-        for row in sdss_archive_table['sdss_q_mode']:
-            convert.append(float(row.strip(' ') == '+'))
-
-        new_sdssq_col = Table.Column(data=convert, name='sdss_q_mode')
-        sdss_archive_table.replace_column('sdss_q_mode', new_sdssq_col)
-
-        mega_table = vstack([full_table, sdss_archive_table])
-
+            full_table.add_column(Table.Column(data=[False] * len(full_table), name='SDSS_only'))
+            mega_table = full_table
     else:
         full_table.add_column(Table.Column(data=[False] * len(full_table), name='SDSS_only'))
         mega_table = full_table
 
-    for key, val in headerr.items():
+    for key, val in header1.items():
         if 'FIBER' in key:
             continue
         elif 'TFORM' in key:
@@ -442,8 +474,10 @@ def make_mtlz(mtl_table, hdus, find_more_redshifts=False,outfile='mtlz.csv',\
             print("Values of the conflict: {}  {}".format(val,mega_table.meta[key]))
         mega_table.meta[key] = val
 
-    desc = mega_table.meta.pop('description')
-    mega_table.meta['DESCRP'] = desc
+
+    if 'description' in dict(mega_table.meta).keys():
+        desc = mega_table.meta.pop('description')
+        mega_table.meta['DESCRP'] = desc
 
 
     if 'full' not in outfile:

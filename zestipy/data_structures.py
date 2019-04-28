@@ -15,13 +15,13 @@ from astropy.table import Table
 class waveform:
     def __init__(self,wave,flux,name,mask=None):
         if mask is None or len(mask)!= flux.size:
-            self.mask = np.ones(flux.size).astype(bool)
+            self.mask = np.zeros(flux.size).astype(bool)
         else:
             self.mask = mask
         self.flux = flux
         self.wave = wave
-        self.masked_flux = flux[self.mask]
-        self.masked_wave = wave[self.mask]
+        self.masked_flux = flux[np.bitwise_not(self.mask)]
+        self.masked_wave = wave[np.bitwise_not(self.mask)]
         self.continuum_subtracted_flux = self.__continuum_subtract()
         self.min_lam = np.min(wave)
         self.max_lam = np.max(wave)

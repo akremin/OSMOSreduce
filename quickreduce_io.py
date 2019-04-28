@@ -22,13 +22,25 @@ class DirectoryManager:
         self.current_write_dir = None
 
         dirnms = self.dirnames
+        self.catalog_path    = os.path.abspath(PATHS['catalog_loc'])
+        self.lampline_dir    = os.path.abspath(PATHS['lampline'])
 
         self.calibration_dir = os.path.abspath(os.path.join(PATHS['data_product_loc'],dirnms['calibration']))
+        if not os.path.exists(self.calibration_dir):
+            os.makedirs(self.calibration_dir)
+
         self.default_calibration_dir = os.path.abspath(PATHS['default_calibration'])
-        self.lampline_dir    = os.path.abspath(PATHS['lampline'])
-        self.plot_dir        = os.path.join(self.data_product_loc,dirnms['save_plots'])
-        self.catalog_path    = os.path.abspath(PATHS['catalog_loc'])
+        if not os.path.exists(self.default_calibration_dir):
+            os.makedirs(self.default_calibration_dir)
+
+        self.base_plot_dir = os.path.join(self.data_product_loc,dirnms['save_plots'])
+        self.plot_dir = self.base_plot_dir
+        if not os.path.exists(self.base_plot_dir):
+            os.makedirs(self.base_plot_dir)
+
         self.mtl_path       = os.path.join(self.catalog_path,dirnms['mtl'])
+        if not os.path.exists(self.mtl_path):
+            os.makedirs(self.mtl_path)
 
         self.dirname_dict = {
                                 'bias':        {'read':dirnms['raw'],      'write':dirnms['debiased']},\
@@ -43,7 +55,7 @@ class DirectoryManager:
                             }
 
         self.step = 'bias'
-        self.verify_files_exist()
+        #self.verify_files_exist()
         self.update_dirs_for()
 
         if not os.path.exists(self.calibration_dir):
@@ -61,13 +73,20 @@ class DirectoryManager:
             step = self.step
         else:
             self.step = step
-            print("Setting internal step to {}".format(step))
+            print("Setting internal dirs for step: {}".format(step))
 
         if step not in self.dirname_dict.keys():
             print("{} not understood. No directory updates performed.\nPossible steps: {}".format(step,self.dirname_dict.keys()))
 
         readdir = self.dirname_dict[step]['read']
         writedir = self.dirname_dict[step]['write']
+
+        if step in ['wavecalib','skysub','zfit']:
+            self.plot_dir = os.path.join(self.base_plot_dir,step)
+            if not os.path.exists(self.plot_dir):
+                os.makedirs(self.plot_dir)
+        else:
+            self.plot_dir = self.base_plot_dir
 
         if step == 'bias':
             if os.path.exists(self.raw_data_loc):
@@ -83,7 +102,8 @@ class DirectoryManager:
 
         if not os.path.exists(self.current_read_dir):
             os.makedirs(self.current_read_dir)
-            print("write folder created: {}".format(self.current_read_dir))
+            print("Read folder created: {}".format(self.current_read_dir))
+            print("! -- > WARNING: This may mean we are about to try to read files from an empty directory, which will not end well")
         if not os.path.exists(self.current_write_dir):
             os.makedirs(self.current_write_dir)
             print("Write folder created: {}".format(self.current_write_dir))
@@ -154,7 +174,7 @@ class FileManager:
             step = self.step
         elif step in self.tempname_dict.keys():
             self.step = step
-            print("Setting internal step to {}".format(step))
+            print("Setting internal file formats for step: {}".format(step))
 
         ## Update the directory
         self.directory.update_dirs_for(step)
@@ -214,13 +234,18 @@ class FileManager:
 
     def read_hdu(self,camera='r', filenum=999,imtype='comp',amp=None,fibersplit=False):
         filename = self.get_read_filename(camera=camera,imtype=imtype,filenum=filenum,amp=amp)
-
+        if not os.path.exists(filename):
+            print("\n\n\n\n\n------->Couldn't find: {}\n\n\n".format(filename))
+        if imtype != 'masks' and os.path.getsize(filename) < 1e6:
+            print("\n\n\n\n\n------->Small filesize: {},  {}\n\n\n".format(filename,os.path.getsize(filename)))
         inhdulist = fits.open(filename,memmap=False)
         if len(inhdulist)>1:
-            if 'flux' in inhdulist:
-                inhdu = inhdulist['flux']
-            elif 'wave' in inhdulist:
-                inhdu = inhdulist['wave']
+            if 'FLUX' in inhdulist:
+                inhdu = inhdulist['FLUX']
+            elif 'WAVE' in inhdulist:
+                inhdu = inhdulist['WAVE']
+            elif 'MASK' in inhdulist:
+                inhdu = inhdulist['MASK']
             else:
                 inhdu = inhdulist[1]
         else:
@@ -382,7 +407,7 @@ class FileManager:
             try:
                 mtl = Table.read(full_name, format='ascii.csv', \
                                   include_names=['ID','TARGETNAME','FIBNAME','sdss_SDSS12','RA','DEC',\
-                                                 'sdss_zsp','sdss_zph','sdss_rmag','MAG'])
+                                                 'RA_targeted','DEC_targeted','sdss_zsp','sdss_zph','sdss_rmag','MAG'])
                 return mtl
             except:
                 print("Failed to open merged target list, but it did exist")

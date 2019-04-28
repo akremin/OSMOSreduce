@@ -8,6 +8,7 @@ from scipy.signal import medfilt
 
 
 def flatten_data(fiber_fluxes,waves):
+    interp_scale = 397
     waves_arr = []
     orig_fluxs_arr = []
     names = []
@@ -48,7 +49,8 @@ def flatten_data(fiber_fluxes,waves):
 
         ## Also save a smoothed version (because line peaks may differ slightly
         ## and cause issues in dividing out to get acceptances
-        med = medfilt(outflux,193)
+        ## Want interp scale to be roughly half, but need to force it to be odd for medfiltering
+        med = medfilt(outflux,2*(interp_scale//4)+1)
         adj_smth_flux_array[ii,:] = med
 
 
@@ -66,7 +68,7 @@ def flatten_data(fiber_fluxes,waves):
     ## the final_flux_array spline-fit back to the original pixel grid
     for ii in range(normalized.shape[0]):
         ## Normalized the data to the brightest fiber, then smooth out division incongruities
-        flux = medfilt(adj_smth_flux_array[ii,:]/adj_smth_flux_array[top,:],193)
+        flux = medfilt(adj_smth_flux_array[ii,:]/adj_smth_flux_array[top,:],interp_scale)
         normalized[ii, :] = flux
 
         ## Interpolate the normalized data

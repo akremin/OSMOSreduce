@@ -16,7 +16,7 @@ def fit_redshifts_wrapper(input_dict):
 
 def fit_redshifts(sky_subd_sciences,mask_name,run_auto=True,prior = None,savetemplate_func=None):
     # 3.0e-5
-    R = z_est(lower_w=4200.0, upper_w=6400.0, lower_z=0.16, upper_z=0.6, \
+    R = z_est(lower_w=4200.0, upper_w=6400.0, lower_z=0.10, upper_z=0.6, \
               z_res=1.0e-5, prior_width=0.02, use_zprior=False, \
               skip_initial_priors=True, \
               auto_pilot=True)
@@ -53,7 +53,7 @@ def fit_redshifts(sky_subd_sciences,mask_name,run_auto=True,prior = None,savetem
         if not run_auto:
             qualityval = redshift_outputs.qualityval
         try:
-            HSN, KSN, GSN = sncalc(redshift_est, test_waveform.wave,
+            HSN, KSN, GSN = sncalc(redshift_est, test_waveform.masked_wave,
                                                test_waveform.continuum_subtracted_flux)
         except ValueError:
             HSN, KSN, GSN = 0.0, 0.0, 0.0

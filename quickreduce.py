@@ -91,7 +91,7 @@ def pipeline(maskname=None,obs_config_name=None,io_config_name=None, pipe_config
     ## Ingest steps and determine where to start
     steps = OrderedDict(pipe_config['STEPS'])
     pipe_config.remove_section('STEPS')
-    start = str(list(steps.keys())[0])
+    start = str(list(steps.keys())[-1])
     for key,val in steps.items():
         if val.upper()=='TRUE':
             start = key
@@ -121,7 +121,8 @@ def pipeline(maskname=None,obs_config_name=None,io_config_name=None, pipe_config
 
     ## For all steps marked true, run those steps on the data
     for step,do_this_step in steps.items():
-        if do_this_step.lower()=='false':
+        do_step_bool = (do_this_step.lower() == 'true')
+        if not do_step_bool:
             print("\nSkipping {}".format(step))
             continue
 
@@ -147,29 +148,44 @@ def pipeline(maskname=None,obs_config_name=None,io_config_name=None, pipe_config
                 with open(outfile,'wb') as crashsave:
                     pkl.dump(data.all_hdus,crashsave)
                 raise()
-    step == 'zfit'
-    do_this_step = True
-    hdus = {}
-    from astropy.io import fits
-    hdus[('r', None, 'zfits', None)] =  fits.open('../data/B09/zfits/r_zfits_B09_combined_1d_bcwfs.fits')['ZFITS']
-    hdus[('b', None, 'zfits', None)] = fits.open('../data/B09/zfits/b_zfits_B09_combined_1d_bcwfs.fits')['ZFITS']
-    data.all_hdus = hdus
-    if step == 'zfit' and do_this_step and (str(pipe_options['make_mtlz']).lower()=='true') and \
-        str(io_config['SPECIALFILES']['mtlz'].lower()) != 'none':
+    ##HACK!!
+    make_mtlz = (str(pipe_options['make_mtlz']).lower()=='true')
+    mtlz_hasname = (str(io_config['SPECIALFILES']['mtlz'].lower()) != 'none')
+    if make_mtlz and mtlz_hasname:
+        cams = instrument.cameras
+        imtype = 'zfits'
+        if not do_step_bool:
+            step == 'zfit'
+            data.proceed_to(step)
+            write_dir = filemanager.directory.current_write_dir
+            write_template = filemanager.current_write_template
+
+            if os.path.exists(os.path.join(write_dir,write_template.format(imtype=imtype,cam=cams[0]))):
+                hdus = {}
+                from astropy.io import fits
+                hdus = [fits.open(os.path.join(write_dir,write_template.format(imtype=imtype,cam=cams[0])))['ZFITS']]
+                if len(cams)>1:
+                    hdus.append(fits.open(os.path.join(write_dir,write_template.format(imtype=imtype,cam=cams[1])))['ZFITS'])
+                else:
+                    hdus.append(None)
+            else:
+                return
+        else:
+            hdus = [data.all_hdus[(cams[0], None, imtype, None)]]
+            if len(cams) == 2:
+                hdus.append(data.all_hdus[(cams[1], None, imtype, None)])
+            else:
+                hdus.append(None)
+
         find_extra_redshifts = (str(pipe_options['find_extra_redshifts']).lower()=='true')
         mtlz_path = os.path.join(io_config['PATHS']['catalog_loc'],io_config['DIRS']['mtl'])
         mtlz_name = io_config['SPECIALFILES']['mtlz']
         outfile = os.path.join(mtlz_path,mtlz_name)
         from create_merged_target_list import make_mtlz
-        if len(instrument.cameras) == 2:
-            hdur = data.all_hdus[('r', None, 'zfits', None)]
-            hdub = data.all_hdus[('b', None, 'zfits', None)]
-            hdus = [hdur,hdub]
-        else:
-            hdu1 = data.all_hdus[(instrument.cameras[0], None, 'zfits', None)]
-            hdus = [hdu1,None]
         make_mtlz(data.mtl, hdus, find_extra_redshifts,outfile=outfile,\
                   vizier_catalogs = ['sdss12'])
+    else:
+        return
 
 
 def parse_command_line(argv):
@@ -194,7 +210,13 @@ def parse_command_line(argv):
 
 if __name__ == '__main__':
     if len(sys.argv)>1:
-        input_variables = parse_command_line()
+        input_variables = parse_command_line(sys.argv)
+        nonvals = []
+        for key,val in input_variables.items():
+            if val is None:
+                nonvals.append(key)
+        for key in nonvals:
+            input_variables.pop(key)
     else:
         input_variables = {}
     pipeline(**input_variables)
