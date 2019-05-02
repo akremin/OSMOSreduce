@@ -29,7 +29,8 @@ def cutout_all_apperatures(all_hdus,cameras,deadfibers=[],summation_preference='
         cam_apperatures[camera] = apperatures
 
     for (camera, filenum, imtype, opamp),hdu in all_hdus.items():
-        oneds = cutout_oned_apperatures(hdu.data ,cam_apperatures[camera],summation_preference)
+
+        oneds = cutout_oned_apperatures(hdu.data,cam_apperatures[camera],summation_preference)
         outhead = hdu.header.copy(strip=True)
         outhead = update_header(outhead,cam_apperatures[camera])
 
@@ -94,7 +95,7 @@ def cutout_twod_apperatures(image,apperatures):
     return cutout_dict
 
 
-def find_apperatures(image,badfibs,cam='r',height=1e4,prominence=1.e3,\
+def find_apperatures(image,badfibs,cam='r',height=0.2,prominence=0.1,\
                      show_plots=True,save_plots=False,\
                      save_template='outfile_{}.png'):
     tetris = np.arange(1,9)
@@ -106,9 +107,8 @@ def find_apperatures(image,badfibs,cam='r',height=1e4,prominence=1.e3,\
 
     apperatures = {}
     for tet,start,end in zip(tetris,starts,ends):
+        print("Detecting apertures for cam={}, tet={}, identified to start at pixel row {} and end at {}".format(cam,tet,start,end))
         apperatures[tet] = {'start':start,'end':end}
-        cut_image = image[start:end,:]
-        peak_array, left_array, right_array, deviations = find_peak_inds(cut_image, height, prominence)
 
         bad_nums = []
         for fib in badfibs:
@@ -121,7 +121,13 @@ def find_apperatures(image,badfibs,cam='r',height=1e4,prominence=1.e3,\
         for bad_num in bad_nums:
             fiber_nums.pop(bad_num - 1)
 
+        nfibs = len(fiber_nums)
+        cut_image = image[start:end,:]
+        peak_array, left_array, right_array, deviations = find_peak_inds(cut_image, height, prominence,nfibs)
+
         peaks,devs,bots,tops = {},{},{},{}
+        if nfibs>peak_array.shape[0]:
+            print("There were fewer identified peaks than expected for: cam={} tet={}  start={}, end={}".format(cam,tet,start,end))
         for index,fibnum in enumerate(fiber_nums):
             fibername = '{}{}{:02d}'.format(cam,tet,fibnum)
             peaks[fibername] = peak_array[index, :]
@@ -132,8 +138,10 @@ def find_apperatures(image,badfibs,cam='r',height=1e4,prominence=1.e3,\
         if save_plots or show_plots:
             plot_single_tet_apperatures(cut_image, peaks,bots,tops, tet)
         if save_plots:
-            plt.savefig(save_template.format(comment='_cutout_'+str(tet)))
+            plt.savefig(save_template.format(comment='_cutout_'+str(tet)),dpi=600)
         if show_plots:
+            figManager = plt.get_current_fig_manager()
+            figManager.window.showMaximized()
             plt.show()
         plt.close()
         apperatures[tet]['peaks'] = peaks
@@ -203,7 +211,7 @@ def get_all_tetris_edges(image, show_plots, save_plots, save_template):
 
 
 
-def find_peak_inds(image,height,prominence):
+def find_peak_inds(image,height,prominence,nrows):
     binwidth = 2
     pixels = np.arange(binwidth,image.shape[1]-binwidth)
     row_lens = []
@@ -212,36 +220,12 @@ def find_peak_inds(image,height,prominence):
     for pix in pixels:
         subset = image[:,pix-binwidth:pix+binwidth+1]
         oned = subset.sum(axis=1)
-        peak_inds, outdict = find_peaks(oned,height=height,prominence=prominence,width=(1,30))
+        oned = oned/oned.max()
+        peak_inds, outdict = find_peaks(oned,height=height,prominence=prominence,width=(1,10))
         lefts.append(np.floor(outdict['left_ips']).astype(int))
         rights.append(np.ceil(outdict['right_ips']).astype(int))
         inds.append(peak_inds)
         row_lens.append(len(peak_inds))
-
-    nrows = int(np.median(row_lens))
-
-    def get_peak_array(inds,nrows,pixels,row_lens,ncols,binwidth):
-        peak_array = np.zeros(shape=(nrows,ncols))
-        #full_inds = np.where((np.array(row_lens) == nrows))[0]
-        valid_locations= []
-        for ii in range(len(pixels)):
-            if (row_lens[ii] == nrows) and np.all(np.diff(inds[ii])> 4.):
-                valid_locations.append(ii)
-        first_good_ind = int(np.min(valid_locations))
-        for ii,(pixel, rowl) in enumerate(zip(pixels,row_lens)):
-            if rowl != nrows:
-                if ii == 0:
-                    peak_array[:,pixel] = inds[first_good_ind]
-                else:
-                    peak_array[:,pixel] = peak_array[:,pixel - 1]
-            else:
-                peak_array[:, pixel] = inds[ii]
-
-        ## For the first and last few pixels, set them equal to the last valid pixel
-        for pix in np.arange(binwidth):
-            peak_array[:,pix] = peak_array[:,binwidth]
-            peak_array[:, -1*(pix+1)] = peak_array[:, -1*(binwidth+1)]
-        return peak_array
 
     peak_array = get_peak_array(inds,nrows, pixels, row_lens, image.shape[1], binwidth)
     left_array = get_peak_array(lefts,nrows, pixels, row_lens, image.shape[1], binwidth)
@@ -257,6 +241,67 @@ def find_peak_inds(image,height,prominence):
 
     return peak_array,left_array,right_array,deviations
 
+def get_peak_array(inds,nrows,pixels,row_lens,ncols,binwidth):
+    peak_array = np.zeros(shape=(nrows,ncols))
+    #full_inds = np.where((np.array(row_lens) == nrows))[0]
+    #valid_locations= []
+    first_good_ind = None
+    for ii in range(len(pixels)):
+        if (row_lens[ii] == nrows) and np.all(np.diff(inds[ii])> 4.):
+            # valid_locations.append(ii)
+            first_good_ind = ii
+            break
+    if first_good_ind is None:
+        print("There were no columns detected with length={}. Maxlen={}, Minlen={}, typical length={}.".format(nrows,np.max(row_lens),np.min(row_lens),np.median(row_lens)),
+              "Please check to see if deadfibers need to be added or removed")
+        print("An error is likely to occur")
+    #first_good_ind = int(np.min(valid_locations))
+    for ii,(pixel, rowl) in enumerate(zip(pixels,row_lens)):
+        correctly_assigned = False
+        if rowl == nrows:
+            peak_array[:, pixel] = inds[ii]
+            correctly_assigned = True
+        elif rowl == (nrows+1):
+            diffs = np.diff(inds[ii])
+            typical_diff = np.median(diffs)
+            min_inds = np.argsort(diffs)[:2]
+            ## Don't care which  of the two is smaller,
+            ## just want in the correct index order:
+            min_inds = np.sort(min_inds)
+            minims = diffs[min_inds]
+            if min_inds[1]-min_inds[0] == 1:
+                diffs = np.delete(diffs,min_inds[1])
+                diffs = np.delete(diffs,min_inds[0])
+                if np.all(np.abs((diffs/np.sum(minims))-1.)<0.1):
+                    outlist = inds[ii]
+                    outlist = np.delete(outlist,min_inds[1])
+                    peak_array[:, pixel] = np.array(outlist)
+                    correctly_assigned = True
+        elif rowl == (nrows-1):
+            diffs = np.diff(inds[ii])
+            typical_diff = np.median(diffs)
+            max_ind = np.argmax(diffs)
+            maxdiff = diffs[max_ind]
+            diffs = diffs[diffs!=maxdiff]
+            if np.all(np.abs((float(maxdiff)/diffs)-2.)<0.25):
+                outlist = list(inds[ii])
+                outlist.insert(max_ind+1,int(outlist[max_ind]+typical_diff))
+                peak_array[:,pixel] = np.array(outlist)
+                correctly_assigned = True
+
+        if not correctly_assigned:
+            if ii == 0:
+                peak_array[:,pixel] = inds[first_good_ind]
+            else:
+                peak_array[:,pixel] = peak_array[:,pixel - 1]
+
+
+    ## For the first and last few pixels, set them equal to the last valid pixel
+    for pix in np.arange(binwidth):
+        peak_array[:,pix] = peak_array[:,binwidth]
+        peak_array[:, -1*(pix+1)] = peak_array[:, -1*(binwidth+1)]
+    return peak_array
+
 
 def plot_single_tet_apperatures(image,peaks,bots,tops,tet):
     plt.figure()
@@ -267,13 +312,11 @@ def plot_single_tet_apperatures(image,peaks,bots,tops,tet):
         peak_set = peaks[fib]
         bot_set = bots[fib]
         top_set = tops[fib]
-        plt.plot(pixels,peak_set ,'b-')
-        plt.plot(pixels,top_set,'r-')
-        plt.plot(pixels,bot_set,'r-')
+        plt.plot(pixels,peak_set ,'b-',lw=1)
+        plt.plot(pixels,top_set,'r-',lw=1)
+        plt.plot(pixels,bot_set,'r-',lw=1)
         plt.text(200,peak_set[200],fib)
     plt.title(str(tet))
-    figManager = plt.get_current_fig_manager()
-    figManager.window.showMaximized()
     plt.tight_layout()
     #plt.show()
 

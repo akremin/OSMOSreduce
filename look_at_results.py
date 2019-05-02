@@ -17,7 +17,7 @@ from astropy.constants import c as speed_of_light
 
 # prefix, target = 'M2FS16', 'A04'
 # outfile = os.path.abspath(os.path.join(os.curdir,'..','..', 'OneDrive - umich.edu','Research','M2FSReductions','catalogs','merged_target_lists', 'mtlz_{}_{}_full.fits'.format(prefix,target)))
-prefix, target = 'M2FS17', 'B08'
+prefix, target = 'M2FS18', 'A20'
 corval = 0.4
 
 def compare_to_sdss(maskname,prefixname, corcut = 0.3):

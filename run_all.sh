@@ -6,26 +6,16 @@ which python
 
 
 
-
-
-
-
-
-
-#######################################################
-## These Succesful on fine calib
-#######################################################
-
-echo ; echo ; echo ; echo ; echo
-python quickreduce.py -m A26
-# > ../A26_output.txt
-
-
-
+#### Acting strangely in fine calib:
 
 #echo ; echo ; echo ; echo ; echo
-#python quickreduce.py -m A09
-# > ../A09_output.txt
+#python quickreduce.py -m B01
+# > ../B01_output.txt
+
+
+
+
+
 
 
 
@@ -38,14 +28,15 @@ python quickreduce.py -m A26
 
 
 
-#### Acting strangely in fine calib:
 
-#echo ; echo ; echo ; echo ; echo
-#python quickreduce.py -m B01
-# > ../B01_output.txt
-#echo ; echo ; echo ; echo ; echo
-#python quickreduce.py -m A20
-# > ../A20_output.txt
+
+
+#######################################################
+## NOT Completed
+####################################################
+echo ; echo ; echo ; echo ; echo
+python quickreduce.py -m A00
+# > ../A00_output.txt
 
 
 #######################################################
@@ -53,32 +44,30 @@ python quickreduce.py -m A26
 ####################################################
 
 ## these are completely done, but with older versions of the code
-#echo ; echo ; echo ; echo ; echo
-#python quickreduce.py -m A00
-# > ../A00_output.txt
-#echo ; echo ; echo ; echo ; echo
-#python quickreduce.py -m A02
+
+echo ; echo ; echo ; echo ; echo
+python quickreduce.py -m A02
 # > ../A02_output.txt
-#echo ; echo ; echo ; echo ; echo
-#python quickreduce.py -m A04
+echo ; echo ; echo ; echo ; echo
+python quickreduce.py -m A04
 # > ../A04_output.txt
-#echo ; echo ; echo ; echo ; echo
-#python quickreduce.py -m B04a
+echo ; echo ; echo ; echo ; echo
+python quickreduce.py -m B04a
 # > ../B04a_output.txt
-#echo ; echo ; echo ; echo ; echo
-#python quickreduce.py -m B02
+echo ; echo ; echo ; echo ; echo
+python quickreduce.py -m B02
 # > ../B02_output.txt
-#echo ; echo ; echo ; echo ; echo
-#python quickreduce.py -m A23
+echo ; echo ; echo ; echo ; echo
+python quickreduce.py -m A23
 # > ../A23_output.txt
-#echo ; echo ; echo ; echo ; echo
-#python quickreduce.py -m B11
+echo ; echo ; echo ; echo ; echo
+python quickreduce.py -m B11
 # > ../B11_output.txt
-#echo ; echo ; echo ; echo ; echo
-#python quickreduce.py -m A22
+echo ; echo ; echo ; echo ; echo
+python quickreduce.py -m A22
 # > ../A22_output.txt
-#echo ; echo ; echo ; echo ; echo
-#python quickreduce.py -m B09
+echo ; echo ; echo ; echo ; echo
+python quickreduce.py -m B09
 # > ../B09_output.txt
 
 
@@ -115,6 +104,21 @@ python quickreduce.py -m A26
 #echo ; echo ; echo ; echo ; echo
 #python quickreduce.py -m A11
 # > ../A11_output.txt
+#echo ; echo ; echo ; echo ; echo
+#python quickreduce.py -m A26
+# > ../A26_output.txt
+#### Problem was only 1 camera: the rest all sky,
+#### but current code only uses skies from current camera
+#### uses r, doesn't use b for anything but sky
+#echo ; echo ; echo ; echo ; echo
+#python quickreduce.py -m A09
+# > ../A09_output.txt
+#### Got A20 but the redshift distribution doesn't look great
+#echo ; echo ; echo ; echo ; echo
+#python quickreduce.py -m A20
+# > ../A20_output.txt
+
+
 
 echo ; echo ; echo ; echo ; echo
 echo "Got to the end!"

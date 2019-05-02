@@ -19,21 +19,21 @@ from linebrowser import LineBrowser
 from collections import Counter
 
 class Calibrations:
-    def __init__(self, camera, instrument, lamptypesc, lamptypesf, coarse_calibrations, filemanager, config, \
+    def __init__(self, camera, instrument, coarse_calibrations, filemanager,  \
                  fine_calibrations=None, pairings=None, load_history=True, trust_after_first=False,\
                  default_fit_key='cross correlation',use_selected_calib_lines=False, \
-                 single_core=False, save_plots=False, savetemplate_funcs=None,show_plots=False):
+                 single_core=False, save_plots=False, show_plots=False):
 
         self.imtype = 'comp'
 
         self.camera = camera
         self.instrument = instrument
         self.filemanager = filemanager
-        self.config = config
-        self.lamptypesc = lamptypesc
-        self.lamptypesf = lamptypesf
+        self.config = instrument.configuration
+        self.lamptypesc = instrument.coarse_lamp_names
+        self.lamptypesf = instrument.fine_lamp_names
         self.default_fit_key = default_fit_key
-        self.savetemplate_funcs = savetemplate_funcs
+        self.savetemplate_funcs = filemanager.get_saveplot_template
 
         self.trust_after_first = trust_after_first
         self.single_core = single_core
@@ -41,7 +41,7 @@ class Calibrations:
         self.show_plots = show_plots
 
         #self.linelistc,selected_linesc,all_linesc = filemanager.load_calibration_lines_dict(lamptypesc,use_selected=use_selected_calib_lines)
-        self.linelistc,all_linesc = filemanager.load_calibration_lines_dict(lamptypesc,use_selected=use_selected_calib_lines)
+        self.linelistc,all_linesc = filemanager.load_calibration_lines_dict(self.lamptypesc,use_selected=use_selected_calib_lines)
 
         self.load_history = load_history
         self.coarse_calibrations = coarse_calibrations
@@ -57,14 +57,14 @@ class Calibrations:
         self.lampstr_c = 'basic'
         self.lampstr_f = 'full'
 
-        for lamp in lamptypesc:
+        for lamp in self.lamptypesc:
             self.lampstr_c += '-'+str(lamp)
 
         if self.do_fine_calib:
-            self.linelistf,self.all_lines = filemanager.load_calibration_lines_dict(lamptypesf,use_selected=use_selected_calib_lines)
+            self.linelistf,self.all_lines = filemanager.load_calibration_lines_dict(self.lamptypesf,use_selected=use_selected_calib_lines)
             #self.linelistf,self.selected_lines,self.all_lines = filemanager.load_calibration_lines_dict(lamptypesf,use_selected=use_selected_calib_lines)
             self.fine_calibrations = fine_calibrations
-            for lamp in lamptypesf:
+            for lamp in self.lamptypesf:
                 self.lampstr_f += '-' + str(lamp)
         else:
             self.linelistf = self.linelistc.copy()
@@ -223,7 +223,7 @@ class Calibrations:
 
             histories = out_calib
 
-    def run_final_calibrations(self,initial_priors='median'):
+    def run_final_calibrations(self,initial_priors='parametric'):
         if not self.do_fine_calib:
             print("There doesn't seem to be a fine calibration defined. Using the supplied coarse calibs")
         select_lines = True
@@ -234,20 +234,30 @@ class Calibrations:
         if initial_priors == 'defaults':
             if self.default_calibration_coefs is None:
                 print("Couldn't find the default calibration coefficients, so using a parametrization of the coarse coefs")
-                initial_coef_table = Table(self.get_parametricfits_of(self.coarse_calibration_coefs))
+                initial_coef_table = Table(self.get_parametricfits_of(caltype='coarse'))
             else:
+                need_to_parametrize = False
                 initial_coef_table = Table(self.default_calibration_coefs)
+                for fib in self.instrument.full_fibs[self.camera]:
+                    if fib not in initial_coef_table.colnames:
+                        need_to_parametrize = True
+                        break
+                if need_to_parametrize:
+                    paramd_table = Table(self.get_parametricfits_of(caltype='default'))
+                    for fib in self.instrument.full_fibs[self.camera]:
+                        if fib not in initial_coef_table.colnames:
+                            initial_coef_table[fib] = paramd_table[fib]
                 using_defaults = True
         elif initial_priors == 'medians':
             initial_coef_table = Table(self.get_medianfits_of(self.coarse_calibration_coefs))
         else:
-            initial_coef_table = Table(self.get_parametricfits_of(self.coarse_calibration_coefs))
+            initial_coef_table = Table(self.get_parametricfits_of(caltype='coarse'))
 
         for pairnum,filnums in self.pairings.items():
 
             # if pairnum == 0:
             #     from astropy.io import fits
-            #     first = fits.open('/nfs/kremin/M2FS_analysis/data/B09/calibrations/r_calibration_full-ThAr_11J_1303_359770.fits')
+            #     first = fits.open('/nfs/kremin/M2FS_analysis/data/A11/calibrations/r_calibration_full-ThAr_11D_1725_387164.fits')
             #     initial_coef_table = Table(first[1].data)
             #     self.fine_calibration_coefs[0] = initial_coef_table.copy()
             #     select_lines = False
@@ -267,8 +277,13 @@ class Calibrations:
             #     self.selected_lines = select_linedict
             #     continue
             # elif pairnum == 1:
-            #     from astropy.io import fits
-            #     second = fits.open('/nfs/kremin/M2FS_analysis/data/B09/calibrations/r_calibration_full-ThAr_11J_1309_359879.fits')
+            #     second = fits.open('/nfs/kremin/M2FS_analysis/data/A11/calibrations/r_calibration_full-ThAr_11D_1732_387164.fits')
+            #     initial_coef_table = Table(second[1].data)
+            #     self.fine_calibration_coefs[1] = initial_coef_table.copy()
+            #     devs = 0
+            #     continue
+            # elif pairnum == 2:
+            #     second = fits.open('/nfs/kremin/M2FS_analysis/data/A11/calibrations/r_calibration_full-ThAr_11D_1947_387164.fits')
             #     initial_coef_table = Table(second[1].data)
             #     self.fine_calibration_coefs[1] = initial_coef_table.copy()
             #     devs = 0
@@ -280,17 +295,19 @@ class Calibrations:
 
             linelist = self.selected_lines
 
-            effective_iteration = pairnum + int(using_defaults)
+            effective_iteration = np.max([pairnum,int(using_defaults)])
             if effective_iteration == 0:
                 user_input = 'some'
             elif effective_iteration == 1:
                 user_input = 'minimal'
             elif effective_iteration > 1:# and devs < dev_allowance:
-                user_input = 'none'
+                user_input = 'single'#'none'
 
             hand_fit_subset = []
             cam = self.camera
-            if user_input == 'some':
+            if user_input == 'all':
+                hand_fit_subset = list(initial_coef_table.colnames)
+            elif user_input in ['some', 'minimal', 'single']:
                 if cam == 'r':
                     specific_set = [cam + '101', cam + '816', cam + '416', cam + '501']
                 else:
@@ -298,23 +315,17 @@ class Calibrations:
                 for i, fib in enumerate(specific_set):
                     outfib = ensure_match(fib, data.colnames, hand_fit_subset, cam)
                     hand_fit_subset.append(outfib)
-                seed = int(filenum)
-                np.random.seed(seed)
-                randfibs = ['{:02d}'.format(x) for x in np.random.randint(1, 16, 4)]
-                for tetn, fibn in zip([2, 3, 6, 7], randfibs):
-                    fib = '{}{}{}'.format(cam, tetn, fibn)
-                    outfib = ensure_match(fib, data.colnames, hand_fit_subset, cam)
-                    hand_fit_subset.append(outfib)
-            elif user_input == 'minimal':
-                if cam == 'r':
-                    specific_set = [cam + '101', cam + '816', cam + '416']
-                else:
-                    specific_set = [cam + '116', cam + '801', cam + '516']
-                for i, fib in enumerate(specific_set):
-                    outfib = ensure_match(fib, data.colnames, hand_fit_subset, cam)
-                    hand_fit_subset.append(outfib)
-            elif user_input == 'all':
-                hand_fit_subset = list(initial_coef_table.colnames)
+
+                if user_input == 'some':
+                    seed = int(filenum)
+                    np.random.seed(seed)
+                    randfibs = ['{:02d}'.format(x) for x in np.random.randint(1, 16, 4)]
+                    for tetn, fibn in zip([2, 3, 6, 7], randfibs):
+                        fib = '{}{}{}'.format(cam, tetn, fibn)
+                        outfib = ensure_match(fib, data.colnames, hand_fit_subset, cam)
+                        hand_fit_subset.append(outfib)
+                elif user_input == 'single':
+                    hand_fit_subset = hand_fit_subset[:1]
             else:
                 pass
 
@@ -331,7 +342,7 @@ class Calibrations:
                 linelistdict = self.selected_lines
 
             if self.single_core:
-                out_calib, outlinelist, lambdas, pixels, variances, badfits = \
+                out_calib, out_linelist, lambdas, pixels, variances, badfits = \
                     auto_wavelength_fitting_by_lines(data, self.all_lines, initial_coef_table, linelistdict.copy(),\
                                                           out_calib_h, user_input=user_input,filenum=filenum, \
                                                           save_plots=self.save_plots, savetemplate_funcs=self.savetemplate_funcs)
@@ -401,43 +412,6 @@ class Calibrations:
                 variances[key] = variances_b[key]
                 out_linelist[key] = out_linelist_b[key]
 
-            if len(variances)!= len(out_calib):
-                print("initial_coef_table:\n", initial_coef_table.keys())
-                print("hand_fit_subset:\n",hand_fit_subset)
-                print("badfits_a1:\n",badfits_a1)
-                print("badfits_a2:\n",badfits_a2)
-                print("badfits:\n",badfits)
-                print("linelistdict:\n",linelistdict.keys())
-
-                print("\n\n\n")
-                print("Variances:\n",variances)
-                print("Pixels:\n",pixels)
-                print("Outlinelist:\n",out_linelist.keys())
-                print("lambdas:\n",lambdas)
-                print("out_calib:\n",out_calib)
-
-                print("\n\n\n")
-                print("Variances_h:\n",variances_h)
-                print("Pixels_h:\n",pixels_h)
-                print("Outlinelist_h:\n",out_linelist_h.keys())
-                print("lambdas_h:\n",lambdas_h)
-                print("out_calib_h:\n",out_calib_h)
-
-                print("\n\n\n")
-                print("Variances_a2:\n",variances_a2)
-                print("Pixels_a2:\n",pixels_a2)
-                print("Outlinelist_a2:\n",out_linelist_a2.keys())
-                print("lambdas_a2:\n",lambdas_a2)
-                print("out_calib_a2:\n",out_calib_a2)
-
-                print("\n\n\n")
-                print("Variances_b:\n",variances_b)
-                print("Pixels_b:\n",pixels_b)
-                print("Outlinelist_b:\n",out_linelist_b.keys())
-                print("lambdas_b:\n",lambdas_b)
-                print("out_calib_b:\n",out_calib_b)
-
-
             if select_lines:
                 self.selected_lines = out_linelist.copy()
                 select_lines = False
@@ -503,31 +477,40 @@ class Calibrations:
             initial_coef_table[fib] = coeff_med
         return initial_coef_table
 
-    def get_parametricfits_of(self,ordered_dict,caltype='coarse'):
+    def get_parametricfits_of(self,caltype='coarse'):
         from scipy.optimize import curve_fit
         ## assumes quadratic fits  ( as it only fits 3 params per coef)
         yparametrized_coefs = np.zeros(shape=(3,6))
-        if caltype == 'coarse':
-            ncoefs = 3
-
-        else:
+        fibers = list(self.instrument.full_fibs[self.camera])
+        if caltype == 'default':
             ncoefs = 6
+            ordered_dict = OrderedDict()
+            ordered_dict[0] = self.default_calibration_coefs
+            header = dict(self.coarse_calibrations[self.pairings[1][0]].header)
+        elif caltype == 'fine':
+            ncoefs = 6
+            ordered_dict = self.fine_calibration_coefs
+            header = dict(self.fine_calibrations[self.pairings[1][1]].header)
+        elif caltype == 'coarse':
+            ncoefs = 3
+            ordered_dict = self.coarse_calibration_coefs
+            header = dict(self.coarse_calibrations[self.pairings[1][0]].header)
+        else:
+            ncoefs = 3
+            ordered_dict = self.coarse_calibration_coefs
+            header = dict(self.coarse_calibrations[self.pairings[1][0]].header)
+
         coef_xys = {coef: {'x': [], 'y': []} for coef in range(ncoefs)}
-        for pairnum,(cc_filnum, fc_filnum) in self.pairings.items():
-            if caltype == 'coarse':
-                header = dict(self.coarse_calibrations[cc_filnum].header)
-            else:
-                header = dict(self.fine_calibrations[fc_filnum].header)
-            coarse_table = Table(ordered_dict[pairnum])
-            if pairnum == 0:
-                fibers = list(coarse_table.colnames)
-                outheader = header.copy()
-            for fiber in coarse_table.colnames:
-                yval = header['YLOC_{}'.format(fiber[1:])]
-                for ii in range(ncoefs):
-                    ## note the rotation here. Otherwise we're fitting a sideways parabola
-                    coef_xys[ii]['y'].append(coarse_table[fiber][ii])
-                    coef_xys[ii]['x'].append(yval)
+
+        for pairnum,iterdict in ordered_dict.items():
+            iter_table = Table(iterdict)
+            for fiber in fibers:
+                if fiber in iter_table.colnames:
+                    yval = header['YLOC_{}'.format(fiber[1:])]
+                    for ii in range(ncoefs):
+                        ## note the rotation here. Otherwise we're fitting a sideways parabola
+                        coef_xys[ii]['y'].append(iter_table[fiber][ii])
+                        coef_xys[ii]['x'].append(yval)
 
         for ii in range(ncoefs):
             fit_params,cov = curve_fit(f=quadratic,xdata=coef_xys[ii]['x'],ydata=coef_xys[ii]['y'])
@@ -535,7 +518,7 @@ class Calibrations:
 
         out_dict = OrderedDict()
         for fiber in fibers:
-            yval = outheader['YLOC_{}'.format(fiber[1:])]
+            yval = header['YLOC_{}'.format(fiber[1:])]
             coefs = np.zeros(6)
             for ii in range(ncoefs):
                 coefs[ii] = quadratic(yval,yparametrized_coefs[0,ii],yparametrized_coefs[1,ii],yparametrized_coefs[2,ii])
@@ -558,23 +541,32 @@ class Calibrations:
         shifted_fitted_linears = fitted_linears - 1
         fitted_quads = quadratic(fitted_xs, *yparametrized_coefs[:, 2])
 
+        template = self.savetemplate_funcs(cam=self.camera, ap='_all',
+                                           imtype=caltype,
+                                           step='parametric_calib_coef_fits', comment='{coeff}')
         plt.figure()
-        plt.title("Offsets")
+        plt.title("Offsets {}".format(self.camera))
         plt.plot(fitted_xs, fitted_offsets, 'r-', label='fit offset')
         plt.plot(xs, offsets, '.', label='offsets')
         plt.legend(loc='best')
+        if self.save_plots:
+            plt.savefig(template.format(coeff='Offset'))
 
         plt.figure()
-        plt.title('Linears')
+        plt.title('Linears {}'.format(self.camera))
         plt.plot(xs, linears, '.', label='linears')
         plt.plot(fitted_xs, fitted_linears, 'r-', label='fit linear')
         plt.legend(loc='best')
+        if self.save_plots:
+            plt.savefig(template.format(coeff='linear'))
 
         plt.figure()
-        plt.title("Quads")
+        plt.title("Quads {}".format(self.camera))
         plt.plot(fitted_xs, fitted_quads, 'r-', label='fit quad')
         plt.plot(xs, quads, '.', label='quads')
         plt.legend(loc='best')
+        if self.save_plots:
+            plt.savefig(template.format(coeff='quadratic'))
 
         plt.figure()
         for pixel in [100, 1000, 2000]:
@@ -582,10 +574,13 @@ class Calibrations:
                      shifted_fitted_offsets + (shifted_fitted_linears * pixel) + (fitted_quads * pixel * pixel), 'r-',
                      'fit {}'.format(pixel))
             plt.plot(xs, shifted_offsets + (shifted_linears * pixel) + (quads * pixel * pixel), '.', label=str(pixel))
-            plt.title("Offset_fits_expanded {}".format(pixel))
-
+        plt.title("Offset_fits_expanded {}".format(self.camera))
         plt.legend(loc='best')
-        plt.show()
+        if self.save_plots:
+            plt.savefig(template.format(coeff='example_pixels'))
+        if self.show_plots:
+            plt.show()
+        plt.close('all')
         return out_dict
 
 
@@ -1000,10 +995,10 @@ def auto_wavelength_fitting_by_lines(comp, fulllinelist, coef_table, linelistdic
         all_fibers = all_fibers[::-1]
 
     upper_limit_resid = 0.4
-    for itter in range(10):
+    for itter in range(20):
         badfits = []
         maxdevs = []
-        upper_limit_resid += itter/100.
+        upper_limit_resid += 0.01
         for fiber in all_fibers:
             if fiber in hand_fit_subset:
                 continue
@@ -1019,7 +1014,14 @@ def auto_wavelength_fitting_by_lines(comp, fulllinelist, coef_table, linelistdic
             else:
                 fibern = (16 * int(fiber[1])) + int(fiber[2:])
 
-            if len(hand_fit_subset)>0:
+            if len(hand_fit_subset)==0:
+                adjusted_coefs_guess = coefs
+            elif len(hand_fit_subset)==1:
+                nearest_fib = hand_fit_subset[0]
+                diffs_fib1 = np.asarray(all_coefs[nearest_fib]) - np.asarray(coef_table[nearest_fib])
+                diffs_mean = diffs_fib1
+                adjusted_coefs_guess = coefs + diffs_mean
+            else:
                 # if len(hand_fit_subset)>1:
                 #     dists = np.abs(fibern-numeric_hand_fit_names)
                 #     closest = np.argsort(dists)[:2]
@@ -1046,8 +1048,6 @@ def auto_wavelength_fitting_by_lines(comp, fulllinelist, coef_table, linelistdic
                 diffs_fib1 = np.asarray(all_coefs[nearest_fibs[0]]) - np.asarray(coef_table[nearest_fibs[0]])
                 diffs_mean = diffs_fib1
                 adjusted_coefs_guess = coefs + diffs_mean
-            else:
-                adjusted_coefs_guess = coefs
 
             browser = LineBrowser(wm,fm, f_x, adjusted_coefs_guess, fulllinelist, bounds=None, edge_line_distance=(-20.0),initiate=False)
 
@@ -1058,9 +1058,6 @@ def auto_wavelength_fitting_by_lines(comp, fulllinelist, coef_table, linelistdic
             dlamb = fitlamb - browser.line_matches['lines']
             print("  ----> mean={}, median={}, std={}, sqrt(resid)={}".format(np.mean(dlamb),np.median(dlamb),np.std(dlamb),np.sqrt(resid)))
 
-            if np.max(np.abs(dlamb)) > 1.0 and np.sqrt(resid) < 1.0:
-                maxdev_line = browser.line_matches['lines'][np.argmax(np.abs(dlamb))]
-                maxdevs.append(maxdev_line)
             if np.sqrt(resid) < upper_limit_resid:
                 if save_plots:
                     template = savetemplate_funcs(cam=str(filenum) + '_', ap=fiber, imtype='calib', step='finalfit',
@@ -1078,14 +1075,39 @@ def auto_wavelength_fitting_by_lines(comp, fulllinelist, coef_table, linelistdic
                 hand_fit_subset = np.append(hand_fit_subset,fiber)
             else:
                 badfits.append(fiber)
+                if np.sqrt(resid) < 3.0:
+                    guessed_waves = np.polyval(np.asarray(adjusted_coefs_guess)[::-1], browser.line_matches['peaks_p'])
+                    lines = browser.line_matches['lines']
+                    dlines = np.array(lines) - np.array(guessed_waves)
+
+                    sorted_args = np.argsort(np.abs(dlines))
+                    sorted_dlamb = np.abs(dlines)[sorted_args]
+                    if (sorted_dlamb[-1] > 10.0) and sorted_dlamb[-3] < 4.0:
+                        maxdev_line = lines[sorted_args[-1]]
+
+                        if app_specific and len(wm) > 11:
+                            print(
+                                "\n\n\nDetermined that line={} is causing bad fit for fiber={}. Dev:{}  vs 3rd:{}\n\n\n".format( \
+                                    maxdev_line, fiber, sorted_dlamb[-1], sorted_dlamb[-3]))
+                            wm_loc = np.where(wm == maxdev_line)[0][0]
+                            wmlist, fmlist = wm.tolist(), fm.tolist()
+                            wmlist.pop(wm_loc)
+                            fmlist.pop(wm_loc)
+                            linelistdict[fiber] = (np.asarray(wmlist), np.asarray(fmlist))
+                        else:
+                            maxdevs.append(maxdev_line)
 
             plt.close()
             del browser
 
-        if (len(badfits) > 0) and (len(maxdevs) > 0) and (len(wm) > 11):
+        if (not app_specific) and (len(maxdevs) > (len(all_fibers)//4)) and (len(wm) > 11):
             count = Counter(maxdevs)
             line, num = count.most_common(1)[0]
-            if (num > (len(maxdevs)//2)) and (num > (len(all_fibers)//2)):
+            if (num >= (len(maxdevs)//3)):
+                print(
+                    "\n\n\nDetermined that line={} is causing bad fits, {} of {} had problems with it out of {} fibers\n\n\n".format( \
+                        line, num, len(maxdevs), len(all_fibers)))
+
                 wm_loc = np.where(wm == line)[0][0]
                 wmlist,fmlist = wm.tolist(),fm.tolist()
                 wmlist.pop(wm_loc)

@@ -12,18 +12,13 @@ from astropy.table import Table,hstack,vstack
 corcut = 0.3
 
 def main(mtl_path,mtl_name,correlation_cut=0.2):
-
     maskname = mtl_name.split('_')[2]
-    print(maskname)
+
     tab = Table.read(os.path.join(mtl_path,mtl_name),format='ascii.csv')
 
     ## Make appropriate cuts
     if 'SDSS_only' in tab.colnames:
-        if type(tab['SDSS_only'][0]) in [bool,np.bool,np.bool_]:
-            boolcut = [(not row) for row in tab['SDSS_only']]
-        else:
-            boolcut = [row.lower()=='false' for row in tab['SDSS_only']]
-        tab = tab[boolcut]
+        tab = tab[np.bitwise_not(tab['SDSS_only'])]
     if 'cor' in tab.colnames:
         tab = tab[tab['cor']>=correlation_cut]
     if 'ID' in tab.colnames:
@@ -40,13 +35,11 @@ def main(mtl_path,mtl_name,correlation_cut=0.2):
         tab.rename_column('RA_targeted','RA')
         tab.rename_column('DEC_targeted','DEC')
     if 'sdss_SDSS12' in tab.colnames:
-        newcol = []
-        for ii in range(len(tab)):
-            newcol.append('SDSS'+str(tab['sdss_SDSS12'][ii]))
-        tab.add_column(Table.Column(data=newcol,name='OBJID'))
-        tab.remove_column('sdss_SDSS12')
+        tab.rename_column('OBJID')
+        for ii in len(tab):
+            tab['OBJID'][ii] = 'SDSS'+str(tab['OBJID'][ii])
     else:
-        tab.add_column(tab.MaskedColumn(data=['']*len(tab),name='OBJID',mask=np.ones(len(tab)).astype(bool)))
+        tab.add_column(tab.MaskedColumn(data=['']*len(tab),name='OBJID',mask=np.ones(len(tab).astype(bool))))
     if 'sdss_zsp' in tab.colnames:
         tab.rename_column('sdss_zsp','SDSS_zsp')
     else:
@@ -62,11 +55,7 @@ def main(mtl_path,mtl_name,correlation_cut=0.2):
     ## Load up in the right order
     tab = tab[['TARGETID','FIBERNUM','RA','DEC','OBJID','z','R [asec]','v [km/s]','SDSS_zsp']]
 
-    if 'description' in dict(tab.meta).keys():
-        desc = tab.meta.pop('description')
-        tab.meta['DESCRP'] = desc
-
-    return tab.filled()
+    return tab.filled('--')
 
 if __name__ == '__main__':
     catalog_loc = '../data/catalogs/merged_target_lists/'

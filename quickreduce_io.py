@@ -6,14 +6,14 @@ from astropy.table import Table
 
 
 class DirectoryManager:
-    def __init__(self,conf):
+    def __init__(self,conf, startstep='bias'):
         self.dirnames = dict(conf['DIRS'])
         PATHS = dict(conf['PATHS'])
         self.raw_data_loc = os.path.abspath(PATHS['raw_data_loc'])
         self.data_product_loc = os.path.abspath(PATHS['data_product_loc'])
 
         if not os.path.exists(self.raw_data_loc):
-            raise(IOError,"The raw data directory doesn't exist")
+            print("The raw data directory doesn't exist. If you're performing bias subtracting, this will lead to an error.")
         if not os.path.exists(self.data_product_loc):
             os.makedirs(self.data_product_loc)
 
@@ -54,7 +54,7 @@ class DirectoryManager:
                                 'zfit':        {'read':dirnms['final1d'],  'write':dirnms['zfit']}\
                             }
 
-        self.step = 'bias'
+        self.step = startstep
         #self.verify_files_exist()
         self.update_dirs_for()
 
@@ -113,7 +113,7 @@ class DirectoryManager:
 
 
 class FileManager:
-    def __init__(self, conf):
+    def __init__(self, conf, startstep='bias'):
         ## TODO  get the configuration values propogated to here
         GENERAL, SPECIALFILES = conf['GENERAL'], conf['SPECIALFILES']
         flnm_tmplt = conf['FILETEMPLATES']
@@ -122,7 +122,7 @@ class FileManager:
         self.date_timestamp = np.datetime_as_string(np.datetime64('today', 'D'))
         self.numeric_timestamp = np.datetime64('now' ,'m').astype(int )-np.datetime64('2018-08-01T00:00' ,'m').astype(int)
 
-        self.directory = DirectoryManager(conf)
+        self.directory = DirectoryManager(conf, startstep)
         self.maskname = GENERAL['mask_name']
         self.mtl_name = SPECIALFILES['mtl']
 
@@ -162,7 +162,7 @@ class FileManager:
                                  'zfit':       {'read':flnm_tags['skysubd'],  'write': flnm_tags['skysubd']}\
                             }
 
-        self.step = 'bias'
+        self.step = startstep
         self.update_templates_for()
 
     def update_templates_for(self, step=None):

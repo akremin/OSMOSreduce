@@ -63,6 +63,13 @@ def subtract_sky(galflux,skyflux,gallams):
                                            prominence=(gal_contsub.max() / 5, None), wlen=24)
 
     g_peak_inds_matched = []
+    if len(g_peak_inds) == 0:
+        g_peak_inds, g_peak_props = find_peaks(gal_contsub, height=(gal_contsub.max() / 20, None), width=(0.5, 8), \
+                                               threshold=(None, None),
+                                               prominence=(gal_contsub.max() / 10, None), wlen=24)
+        if len(g_peak_inds) == 0:
+            return gal_contsub, skyflux*(np.median(gcont/scont)), gcont, np.zeros(len(galflux)).astype(bool)
+
     for peak in s_peak_inds:
         ind = np.argmin(np.abs(gallams[g_peak_inds] - gallams[peak]))
         g_peak_inds_matched.append(g_peak_inds[ind])
