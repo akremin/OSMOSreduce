@@ -486,19 +486,19 @@ class Calibrations:
             ncoefs = 6
             ordered_dict = OrderedDict()
             ordered_dict[0] = self.default_calibration_coefs
-            header = dict(self.coarse_calibrations[self.pairings[1][0]].header)
+            header = dict(self.coarse_calibrations[self.pairings[0][0]].header)
         elif caltype == 'fine':
             ncoefs = 6
             ordered_dict = self.fine_calibration_coefs
-            header = dict(self.fine_calibrations[self.pairings[1][1]].header)
+            header = dict(self.fine_calibrations[self.pairings[0][1]].header)
         elif caltype == 'coarse':
             ncoefs = 3
             ordered_dict = self.coarse_calibration_coefs
-            header = dict(self.coarse_calibrations[self.pairings[1][0]].header)
+            header = dict(self.coarse_calibrations[self.pairings[0][0]].header)
         else:
             ncoefs = 3
             ordered_dict = self.coarse_calibration_coefs
-            header = dict(self.coarse_calibrations[self.pairings[1][0]].header)
+            header = dict(self.coarse_calibrations[self.pairings[0][0]].header)
 
         coef_xys = {coef: {'x': [], 'y': []} for coef in range(ncoefs)}
 

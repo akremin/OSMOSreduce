@@ -77,6 +77,7 @@ def create_drilled_field_file(plate_pathname,drilled_field_name_template,
         else:
             continue
 
+
 def create_m2fs_fiber_info_table(datapath,dataname,cams=['r','b']):
     datapathname = os.path.join(datapath,dataname)
     od = {'ID': [], 'FIBNAME': [], 'm2fs_fiberID': [], 'm2fs_fab': [], 'm2fs_CH': []}
@@ -184,9 +185,9 @@ def load_merged_target_list(field_prefix='M2FS16',field='A02',catalog_path=os.pa
 
 def create_mtl(io_config,science_filenum,vizier_catalogs,overwrite_field,overwrite_redshifts):
     catalog_loc = os.path.abspath(io_config['PATHS']['catalog_loc'])
-    data_path = io_config['PATHS']['raw_data_loc']
-    dataname = io_config['FILETEMPLATES']['raw'].format(cam='{cam}',filenum=science_filenum,opamp='1')
-    dataname = dataname + '.fits'
+    data_path = os.path.abspath(os.path.join( io_config['PATHS']['data_product_loc'] , io_config['DIRS']['stitched'] ))
+    dataname = io_config['FILETEMPLATES']['stitched'].format(cam='{cam}',filenum=science_filenum,imtype='science')
+    dataname = dataname + io_config['FILETAGS']['debiased'] + '.fits'
 
     plate_path = os.path.join(catalog_loc,io_config['DIRS']['plate'])
     plate_name = io_config['SPECIALFILES']['plate']
@@ -236,17 +237,22 @@ def create_mtl(io_config,science_filenum,vizier_catalogs,overwrite_field,overwri
         if 'RA_drilled' in field_table.colnames:
             field_table.rename_column('RA_drilled','RA')
             field_table.rename_column('RA_drilled','DEC')
-    else:
+    elif field_name is not None and os.path.exists(field_pathname):
         field_table = table.Table.read(field_pathname, format='ascii.basic')#header_start=2,
         if 'RA_targeted' in field_table.colnames:
             field_table.rename_column('RA_targeted','RA')
             field_table.rename_column('DEC_targeted','DEC')
-
+    else:
+        field_table = []
 
     ## Merge fiber and drill info
-    if len(fiber_table)==0 or len(field_table)==0:
+    if len(fiber_table)==0:
         print("Stop here")
-    observed_field_table = table.join(fiber_table, field_table, keys='ID', join_type='left')
+        raise
+    if len(field_table)==0:
+        observed_field_table = fiber_table
+    else:
+        observed_field_table = table.join(fiber_table, field_table, keys='ID', join_type='left')
 
     ## If there is targeting information, merge that in as well
     if targeting_name is not None:
@@ -385,7 +391,10 @@ def make_mtlz(mtl_table, hdus, find_more_redshifts=False,outfile='mtlz.csv',\
     full_table = join(combined_table, mtl, 'FIBNAME', join_type='inner')
 
     ## Add additional information
-    time = Time(header1['MJD'], format='mjd')
+    if int(header1['UT-DATE'][:4]) > 2014:
+        time = Time(header1['MJD'], format='mjd')
+    else:
+        time = Time(header1['UT-DATE'] + ' ' + header1['UT-TIME'])
     location = EarthLocation(lon=header1['SITELONG'] * u.deg, lat=header1['SITELAT'] * u.deg, \
                              height=header1['SITEALT'] * u.meter)
     bc_cor = cluster.radial_velocity_correction(kind='barycentric', obstime=time, location=location)

@@ -15,13 +15,14 @@ from astropy.constants import c as speed_of_light
 
 
 
-# prefix, target = 'M2FS16', 'A04'
+prefix, target = '', 'A267'
 # outfile = os.path.abspath(os.path.join(os.curdir,'..','..', 'OneDrive - umich.edu','Research','M2FSReductions','catalogs','merged_target_lists', 'mtlz_{}_{}_full.fits'.format(prefix,target)))
-prefix, target = 'M2FS18', 'A20'
-corval = 0.4
+# prefix, target = '_M2FS18', 'A20'
+corval = 0.3
 
 def compare_to_sdss(maskname,prefixname, corcut = 0.3):
-    outfile = os.path.abspath(os.path.join(os.curdir,'..','data','catalogs','merged_target_lists', 'mtlz_{}_{}_full.fits'.format(prefixname,maskname)))
+    # outfile = os.path.abspath(os.path.join(os.curdir,'..','data','catalogs','merged_target_lists', 'mtlz{}_{}_full.fits'.format(prefixname,maskname)))
+    outfile = os.path.abspath(os.path.join(os.curdir,'..','..','OneDrive - umich.edu','Research','M2FSReductions','catalogs','merged_target_lists', 'mtlz{}_{}_full.fits'.format(prefixname,maskname)))
 
     complete_table = Table.read(outfile,format='fits')
 
@@ -128,7 +129,8 @@ def compare_to_sdss(maskname,prefixname, corcut = 0.3):
 
 
 def plot_results(maskname,prefixname, corcut = 0.3):
-    outfile = os.path.abspath(os.path.join(os.curdir,'..','data','catalogs','merged_target_lists', 'mtlz_{}_{}_full.fits'.format(prefixname,maskname)))
+    # outfile = os.path.abspath(os.path.join(os.curdir,'..','data','catalogs','merged_target_lists', 'mtlz_{}_{}_full.fits'.format(prefixname,maskname)))
+    outfile = os.path.abspath(os.path.join(os.curdir,'..','..','OneDrive - umich.edu','Research','M2FSReductions','catalogs','merged_target_lists', 'mtlz{}_{}_full.fits'.format(prefixname,maskname)))
 
     complete_table = Table.read(outfile, format='fits')
 
