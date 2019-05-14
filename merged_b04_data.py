@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import os
 import astropy.coordinates as ac
 
-correlation_cut = 0.4 # must be strictly greater than this
+correlation_cut = 0.2 # must be strictly greater than this
 overlap_criteria = 0.2*u.arcsec # must be strictly less than this
 flag_limit = 2 ## must be strictly greater than this
 

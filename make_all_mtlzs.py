@@ -27,7 +27,7 @@ def main(maskname=None):
     io_config.read(io_config_name)
 
     mtl_path = os.path.join(io_config['PATHS']['catalog_loc'],io_config['DIRS']['mtl'])
-    mtl_name = io_config['SPECIALFILES']['mtl']+"_full.csv"
+    mtl_name = io_config['SPECIALFILES']['mtlz']+"_full.csv"
 
     if not os.path.exists(os.path.join(mtl_path,mtl_name)):
         ## Interpret the filenumbers specified in the configuration files
@@ -36,6 +36,10 @@ def main(maskname=None):
 
         create_mtl(io_config,filenumbers['science'][0],vizier_catalogs=['sdss12'], \
                    overwrite_field=False, overwrite_redshifts = False)
+
+    make_mtlz
+    mtl_table, hdus, find_more_redshifts = False, outfile = 'mtlz.csv', \
+                                                            vizier_catalogs = ['sdss12'])
 
 if __name__ == '__main__':
     masks = []
