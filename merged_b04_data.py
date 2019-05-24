@@ -13,7 +13,7 @@ correlation_cut = 0.2 # must be strictly greater than this
 overlap_criteria = 0.2*u.arcsec # must be strictly less than this
 flag_limit = 2 ## must be strictly greater than this
 
-main_dir = os.path.abspath('../data/B04_combined')
+main_dir = os.path.abspath('../../M2FSdata/B04_combined')
 
 b04a = Table.read(os.path.join(main_dir,'mtlz_M2FS16_B04a_full.csv'),format='ascii.csv')
 b04b = Table.read(os.path.join(main_dir,'mtlz_M2FS16_B04b_full.csv'),format='ascii.csv')
@@ -204,13 +204,13 @@ ref_zs = [[],[],[],[]]
 print("                      K  C  M1  V  M3  ")
 for mind,rind in zip(m2fs_match_inds,ref_match_inds):
     merged_row = merged[rind]
-    print("M2FS: {},    catalog: {} {} {} {} {}".format(combined_m2fs['redshift_est'][mind],float(merged_row['z_K']),float(merged_row['z_C']),float(merged_row['z_m1']),float(merged_row['z VIMOS']),float(merged_row['z_m3'])))
+    print("M2FS: {},    catalog: {} {} {} {} {}".format(combined_m2fs['z_est_helio'][mind],float(merged_row['z_K']),float(merged_row['z_C']),float(merged_row['z_m1']),float(merged_row['z VIMOS']),float(merged_row['z_m3'])))
     zposs = [float(merged_row['z_K']),float(merged_row['z_C']),float(merged_row['z_m1']),float(merged_row['z VIMOS']),float(merged_row['z_m3'])]
     print(m2fs_coords[mind], ref_coords[rind])
     for ii in range(len(ref_zs)):
         if not np.isnan(zposs[ii]):
             ref_zs[ii].append(zposs[ii])
-            m2fs_zs[ii].append(combined_m2fs['redshift_est'][mind])
+            m2fs_zs[ii].append(combined_m2fs['z_est_helio'][mind])
 
 
 

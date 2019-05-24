@@ -13,7 +13,7 @@ correlation_cut = 0.3 # must be strictly greater than this
 overlap_criteria = 0.2*u.arcsec # must be strictly less than this
 flag_limit = 2 ## must be strictly greater than this
 
-main_dir = os.path.abspath('../data/B04_combined')
+main_dir = os.path.abspath('../../M2FSdata/B04_combined')
 
 b04a = Table.read(os.path.join(main_dir,'mtlz_M2FS16_B04a_full.csv'),format='ascii.csv')
 b04b = Table.read(os.path.join(main_dir,'mtlz_M2FS16_B04b_full.csv'),format='ascii.csv')

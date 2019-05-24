@@ -85,17 +85,20 @@ def pipeline(maskname=None,obs_config_name=None,io_config_name=None, pipe_config
     obs_config.read(obs_config_name)
 
     io_config = configparser.ConfigParser(interpolation=configparser.ExtendedInterpolation())
+    io_config.add_section('GENERAL')
+    io_config['GENERAL']['mask_name'] = pipe_config['GENERAL']['mask_name']
+    if 'path_to_masks' in pipe_config['GENERAL'].keys() and str(pipe_config['GENERAL']['path_to_masks']).lower() != 'none':
+        io_config.add_section('PATHS')
+        io_config['PATHS']['path_to_masks'] = pipe_config['GENERAL']['path_to_masks']
+    if 'raw_data_loc' in pipe_config['GENERAL'].keys() and str(pipe_config['GENERAL']['raw_data_loc']).lower() != 'none':
+        if 'PATHS' not in io_config.sections():
+            io_config.add_section('PATHS')
+        io_config['PATHS']['raw_data_loc'] = pipe_config['GENERAL']['raw_data_loc']
     io_config.read(io_config_name)
 
-    # ###         Beginning of Code
+    ####         Beginning of Code
     ## Ingest steps and determine where to start
-    steps = OrderedDict(pipe_config['STEPS'])
-    pipe_config.remove_section('STEPS')
-    start = str(list(steps.keys())[-1])
-    for key,val in steps.items():
-        if val.upper()=='TRUE':
-            start = key
-            break
+    steps, start, pipe_config = get_steps(pipe_config)
 
     ## Interpret the filenumbers specified in the configuration files
     str_filenumbers = OrderedDict(obs_config['FILENUMBERS'])
@@ -187,6 +190,16 @@ def pipeline(maskname=None,obs_config_name=None,io_config_name=None, pipe_config
     else:
         return
 
+def get_steps(pipe_config):
+    ## Ingest steps and determine where to start
+    steps = OrderedDict(pipe_config['STEPS'])
+    pipe_config.remove_section('STEPS')
+    start = str(list(steps.keys())[-1])
+    for key,val in steps.items():
+        if val.upper()=='TRUE':
+            start = key
+            break
+    return steps, start, pipe_config
 
 def parse_command_line(argv):
     from optparse import OptionParser

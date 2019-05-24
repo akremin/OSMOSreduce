@@ -15,14 +15,14 @@ from astropy.constants import c as speed_of_light
 
 
 
-prefix, target = '', 'A267'
+prefix, target = '_M2FS16', 'B04b'
 # outfile = os.path.abspath(os.path.join(os.curdir,'..','..', 'OneDrive - umich.edu','Research','M2FSReductions','catalogs','merged_target_lists', 'mtlz_{}_{}_full.fits'.format(prefix,target)))
 # prefix, target = '_M2FS18', 'A20'
 corval = 0.3
 
 def compare_to_sdss(maskname,prefixname, corcut = 0.3):
     # outfile = os.path.abspath(os.path.join(os.curdir,'..','data','catalogs','merged_target_lists', 'mtlz{}_{}_full.fits'.format(prefixname,maskname)))
-    outfile = os.path.abspath(os.path.join(os.curdir,'..','..','OneDrive - umich.edu','Research','M2FSReductions','catalogs','merged_target_lists', 'mtlz{}_{}_full.fits'.format(prefixname,maskname)))
+    outfile = os.path.abspath(os.path.join(os.curdir,'..','..','M2FSdata','catalogs','merged_target_lists', 'mtlz{}_{}_full.fits'.format(prefixname,maskname)))
 
     complete_table = Table.read(outfile,format='fits')
 
@@ -79,13 +79,13 @@ def compare_to_sdss(maskname,prefixname, corcut = 0.3):
 
     plt.figure()
     plt.title('Redshifts with cor > {}'.format(corcut),fontsize=14)
-    plt.hist(spec_overlap['z_est_bary'],bins=300); plt.xlim(0.18,0.32)
+    plt.hist(spec_overlap['z_est_helio'],bins=300); plt.xlim(0.18,0.32)
     ymin,ymax = plt.ylim()
     plt.vlines(.23,ymin,ymax,'k','--')
 
-    deviations = scalar_c * (spec_overlap['z_est_bary']-spec_overlap['sdss_zsp'])/(1+z_clust)
+    deviations = scalar_c * (spec_overlap['z_est_helio']-spec_overlap['sdss_zsp'])/(1+z_clust)
     #spec_overlap['velocity']
-    #scalar_c*((spec_overlap['z_est_bary']/(1+spec_overlap['z_est_bary']))-(spec_overlap['Published_Vlos']/(1+spec_overlap['Published_Vlos'])))
+    #scalar_c*((spec_overlap['z_est_helio']/(1+spec_overlap['z_est_helio']))-(spec_overlap['Published_Vlos']/(1+spec_overlap['Published_Vlos'])))
     meandev,meddev = np.mean(deviations),np.median(deviations)
 
 
@@ -101,15 +101,15 @@ def compare_to_sdss(maskname,prefixname, corcut = 0.3):
     plt.legend(loc='best')
 
     plt.figure()
-    plt.plot(spec_overlap['z_est_bary'],spec_overlap['sdss_zsp'],'b.')
+    plt.plot(spec_overlap['z_est_helio'],spec_overlap['sdss_zsp'],'b.')
     plt.plot([0,1],[0,1],'k--')
     plt.title("{}".format(target),fontsize=18)
-    plt.xlabel('z_est_bary',fontsize=18)
+    plt.xlabel('z_est_helio',fontsize=18)
     plt.ylabel('sdss_zsp',fontsize=18)
 
     plt.figure()
-    plt.plot(spec_overlap['z_est_bary'][blue_cam],deviations[blue_cam],'b.',markersize=18)
-    plt.plot(spec_overlap['z_est_bary'][red_cam],deviations[red_cam],'r.',markersize=18)
+    plt.plot(spec_overlap['z_est_helio'][blue_cam],deviations[blue_cam],'b.',markersize=18)
+    plt.plot(spec_overlap['z_est_helio'][red_cam],deviations[red_cam],'r.',markersize=18)
     plt.title("{} median={} mean={}".format(target,meddev,meandev),fontsize=18)
     plt.xlabel("Bary Redshift",fontsize=18)
     plt.ylabel("c*dz/(1+zclust) [km/s]",fontsize=18)
@@ -130,7 +130,7 @@ def compare_to_sdss(maskname,prefixname, corcut = 0.3):
 
 def plot_results(maskname,prefixname, corcut = 0.3):
     # outfile = os.path.abspath(os.path.join(os.curdir,'..','data','catalogs','merged_target_lists', 'mtlz_{}_{}_full.fits'.format(prefixname,maskname)))
-    outfile = os.path.abspath(os.path.join(os.curdir,'..','..','OneDrive - umich.edu','Research','M2FSReductions','catalogs','merged_target_lists', 'mtlz{}_{}_full.fits'.format(prefixname,maskname)))
+    outfile = os.path.abspath(os.path.join(os.curdir,'..','..','M2FSdata','catalogs','merged_target_lists', 'mtlz{}_{}_full.fits'.format(prefixname,maskname)))
 
     complete_table = Table.read(outfile, format='fits')
 
@@ -151,7 +151,7 @@ def plot_results(maskname,prefixname, corcut = 0.3):
 
     plt.figure()
     plt.title('Redshifts with cor > {}'.format(corcut), fontsize=14)
-    plt.hist(spec_overlap['z_est_bary'], bins=300);
+    plt.hist(spec_overlap['z_est_helio'], bins=300);
     plt.xlim(0.18, 0.32)
     ymin, ymax = plt.ylim()
     plt.vlines(.23, ymin, ymax, 'k', '--')
@@ -167,7 +167,7 @@ def plot_results(maskname,prefixname, corcut = 0.3):
     plt.hlines(0., xmin, xmax, 'k', '--', label='zero')
 
     plt.figure()
-    plt.hist(measured_table['z_est_bary'], bins=300);
+    plt.hist(measured_table['z_est_helio'], bins=300);
     plt.title("{} hist".format(target), fontsize=18)
     plt.xlabel("Bary Redshift", fontsize=18)
     ymin, ymax = plt.ylim()

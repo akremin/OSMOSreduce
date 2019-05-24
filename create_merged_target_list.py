@@ -248,7 +248,6 @@ def create_mtl(io_config,science_filenum,vizier_catalogs,overwrite_field,overwri
     ## Merge fiber and drill info
     if len(fiber_table)==0:
         print("Stop here")
-        raise
     if len(field_table)==0:
         observed_field_table = fiber_table
     else:
@@ -398,9 +397,14 @@ def make_mtlz(mtl_table, hdus, find_more_redshifts=False,outfile='mtlz.csv',\
     location = EarthLocation(lon=header1['SITELONG'] * u.deg, lat=header1['SITELAT'] * u.deg, \
                              height=header1['SITEALT'] * u.meter)
     bc_cor = cluster.radial_velocity_correction(kind='barycentric', obstime=time, location=location)
-    dz = bc_cor / consts.c
+    dzb = bc_cor / consts.c
 
-    full_table.add_column(Table.Column(data=full_table['redshift_est'] + dz, name='z_est_bary'))
+    hc_cor = cluster.radial_velocity_correction(kind='heliocentric', obstime=time, location=location)
+    dzh = hc_cor / consts.c
+
+    full_table.add_column(Table.Column(data=full_table['redshift_est']/(1+dzb), name='z_est_bary'))
+    full_table.add_column(Table.Column(data=full_table['redshift_est'] / (1 + dzh), name='z_est_helio'))
+    full_table.add_column(Table.Column(data=np.ones(len(full_table))*z_clust,name='z_clust_lit'))
 
     all_coords = SkyCoord(ra=full_table['RA'] * u.deg, dec=full_table['DEC'] * u.deg)
     seps = cluster.separation(all_coords)
@@ -443,8 +447,8 @@ def make_mtlz(mtl_table, hdus, find_more_redshifts=False,outfile='mtlz.csv',\
             seps = cluster.separation(all_sdss_coords)
             sdss_archive_table.add_column(Table.Column(data=seps.to(u.arcsec).value, name='Proj_R_asec'))
             sdss_archive_table.add_column(Table.Column(data=(kpc_p_amin * seps).to(u.Mpc).value, name='Proj_R_Comoving_Mpc'))
-            sdss_archive_table.add_column(Table.Column(data=sdss_archive_table['sdss_zsp'], name='z_est_bary'))
-            dvs = consts.c.to(u.km / u.s).value * (z_clust - sdss_archive_table['z_est_bary']) / (1. + z_clust)
+            sdss_archive_table.add_column(Table.Column(data=sdss_archive_table['sdss_zsp'], name='z_est_helio'))
+            dvs = consts.c.to(u.km / u.s).value * (z_clust - sdss_archive_table['z_est_helio']) / (1. + z_clust)
             sdss_archive_table.add_column(Table.Column(data=dvs, name='velocity'))
             #
             #
