@@ -85,21 +85,26 @@ def create_m2fs_fiber_info_table(datapath,dataname,cams=['r','b']):
         fulldatapathname = datapathname.format(cam=cam)
 
         if not os.path.exists(fulldatapathname):
+            print("Data not found at path: {}".format(fulldatapathname))
             continue
 
-        hdr = fits.getheader(fulldatapathname)
+        hdr = fits.getheader(fulldatapathname,1)
         fibs = [key for key in hdr.keys() if 'FIBER' in key]
         for fib in fibs:
             id = hdr[fib]
-            if id != 'unplugged':
+            if id != 'unplugged' and len(hdr.comments[fib])>0:
                 comm = hdr.comments[fib]
                 fid, fab, ch = comm.split(' ')
                 od['m2fs_fiberID'].append(fid.split('=')[1])
                 od['m2fs_fab'].append(fab.split('=')[1])
                 od['m2fs_CH'].append(ch.split('=')[1])
-                od['ID'].append(id)
-                od['FIBNAME'].append(fib.replace('FIBER',cam))
+            od['ID'].append(id)
+            od['FIBNAME'].append(fib.replace('FIBER',cam))
 
+    if len(od['m2fs_fiberID']) == 0:
+        od.pop('m2fs_fiberID')
+        od.pop('m2fs_fab')
+        od.pop('m2fs_CH')
     otab = table.Table(od)
     return otab
 
@@ -185,9 +190,9 @@ def load_merged_target_list(field_prefix='M2FS16',field='A02',catalog_path=os.pa
 
 def create_mtl(io_config,science_filenum,vizier_catalogs,overwrite_field,overwrite_redshifts):
     catalog_loc = os.path.abspath(io_config['PATHS']['catalog_loc'])
-    data_path = os.path.abspath(os.path.join( io_config['PATHS']['data_product_loc'] , io_config['DIRS']['stitched'] ))
-    dataname = io_config['FILETEMPLATES']['stitched'].format(cam='{cam}',filenum=science_filenum,imtype='science')
-    dataname = dataname + io_config['FILETAGS']['debiased'] + '.fits'
+    data_path = os.path.abspath(os.path.join( io_config['PATHS']['data_product_loc'] , io_config['DIRS']['oneD']))
+    dataname = io_config['FILETEMPLATES']['oneds'].format(cam='{cam}',filenum=science_filenum,imtype='science')
+    dataname = dataname + io_config['FILETAGS']['crrmvd'] + '.fits'
 
     plate_path = os.path.join(catalog_loc,io_config['DIRS']['plate'])
     plate_name = io_config['SPECIALFILES']['plate']
@@ -230,7 +235,10 @@ def create_mtl(io_config,science_filenum,vizier_catalogs,overwrite_field,overwri
             create_drilled_field_file(plate_pathname, drilled_field_name_template=field_name_template,
                                       drilled_field_path=field_path, overwrite_file=overwrite_field)
 
-        field_table = table.Table.read(field_pathname)
+        try:
+            field_table = table.Table.read(field_pathname,format='ascii.tab')
+        except:
+            field_table = table.Table.read(field_pathname, format='ascii.basic')
         if 'RA_targeted' in field_table.colnames:
             field_table.rename_column('RA_targeted','RA')
             field_table.rename_column('DEC_targeted','DEC')
@@ -248,7 +256,6 @@ def create_mtl(io_config,science_filenum,vizier_catalogs,overwrite_field,overwri
     ## Merge fiber and drill info
     if len(fiber_table)==0:
         print("Stop here")
-    if len(field_table)==0:
         observed_field_table = fiber_table
     else:
         observed_field_table = table.join(fiber_table, field_table, keys='ID', join_type='left')
@@ -266,29 +273,29 @@ def create_mtl(io_config,science_filenum,vizier_catalogs,overwrite_field,overwri
 
     ## If there is a separate redshifts file, merge that in
     ## Else query vizier (either sdss or panstarrs) to get redshifts and merge that in
-    if redshifts_name is not None and os.path.exists(
-            os.path.join(redshifts_path, redshifts_name)) and not overwrite_redshifts:
-        full_pathname = os.path.join(redshifts_path, redshifts_name)
-        redshifts = table.Table.read(full_pathname, format='ascii.csv')
-        mtl = table.join(ml, redshifts, keys='ID', join_type='left')
-    else:
-        if 'DEC' in ml.colnames:
-            dec_name = 'DEC'
-        else:
-            dec_name = 'DEC_targeted'
-        if len(vizier_catalogs) == 1 and vizier_catalogs[0] == 'sdss12' and ml[dec_name][0] < -20:
-            matches = None
-        else:
-            matches = get_vizier_matches(ml, vizier_catalogs)
-
-        # print(len(fiber_table),len(drilled_field_table),len(observed_field_table),len(joined_field_table),len(mtl),len(matches))
-        if matches is not None:
-            full_pathname = os.path.join(redshifts_path,redshifts_name.format(zsource=vizier_catalogs[0]))
-            matches.write(full_pathname, format='ascii.csv', overwrite='True')
-            mtl = table.join(ml, matches, keys='ID', join_type='left')
-        else:
-            mtl = ml
-
+    # if redshifts_name is not None and os.path.exists(
+    #         os.path.join(redshifts_path, redshifts_name)) and not overwrite_redshifts:
+    #     full_pathname = os.path.join(redshifts_path, redshifts_name)
+    #     redshifts = table.Table.read(full_pathname, format='ascii.csv')
+    #     mtl = table.join(ml, redshifts, keys='ID', join_type='left')
+    # else:
+    #     if 'DEC' in ml.colnames:
+    #         dec_name = 'DEC'
+    #     else:
+    #         dec_name = 'DEC_targeted'
+    #     if len(vizier_catalogs) == 1 and vizier_catalogs[0] == 'sdss12' and ml[dec_name][0] < -20:
+    #         matches = None
+    #     else:
+    #         matches = get_vizier_matches(ml, vizier_catalogs)
+    #
+    #     # print(len(fiber_table),len(drilled_field_table),len(observed_field_table),len(joined_field_table),len(mtl),len(matches))
+    #     if matches is not None:
+    #         full_pathname = os.path.join(redshifts_path,redshifts_name.format(zsource=vizier_catalogs[0]))
+    #         matches.write(full_pathname, format='ascii.csv', overwrite='True')
+    #         mtl = table.join(ml, matches, keys='ID', join_type='left')
+    #     else:
+    #         mtl = ml
+    mtl = ml
     all_most_interesting = ['ID', 'TARGETNAME', 'FIBNAME', 'sdss_SDSS12', 'RA', 'DEC', 'sdss_zsp', 'sdss_zph',
                             'sdss_rmag', 'MAG']
     all_cols = mtl.colnames
@@ -406,7 +413,15 @@ def make_mtlz(mtl_table, hdus, find_more_redshifts=False,outfile='mtlz.csv',\
     full_table.add_column(Table.Column(data=full_table['redshift_est'] / (1 + dzh), name='z_est_helio'))
     full_table.add_column(Table.Column(data=np.ones(len(full_table))*z_clust,name='z_clust_lit'))
 
-    all_coords = SkyCoord(ra=full_table['RA'] * u.deg, dec=full_table['DEC'] * u.deg)
+    if ':' in full_table['RA'][1]:
+        all_coords = SkyCoord(ra=full_table['RA'], dec=full_table['DEC'], unit=(u.hour, u.deg))
+        newras = Table.Column(data=all_coords.icrs.ra.deg,name='RA')
+        newdecs = Table.Column(data=all_coords.icrs.dec.deg,name='DEC')
+        full_table.replace_column('RA',newras)
+        full_table.replace_column('DEC',newdecs)
+    else:
+        all_coords = SkyCoord(ra=full_table['RA'], dec=full_table['DEC'], unit=(u.deg, u.deg))
+
     seps = cluster.separation(all_coords)
     full_table.add_column(Table.Column(data=seps.to(u.arcsec).value, name='Proj_R_asec'))
     full_table.add_column(Table.Column(data=(kpc_p_amin * seps).to(u.Mpc).value, name='Proj_R_Comoving_Mpc'))
