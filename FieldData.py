@@ -588,6 +588,9 @@ class FieldData:
             self.all_hdus[(cam,filnum,'science',None)] = fits.BinTableHDU(data=Table(outdata),header=hdr,name='FLUX')
 
     def subtract_skies(self, cam):
+        wave_grid_step = 0.25
+        wave_unit = 'A'
+        wave_type = 'linear'
         if len(self.final_calibration_coefs.keys()) == 0:
             self.get_final_wavelength_coefs()
         if cam not in self.targeting_sky_pairs.keys():
@@ -636,14 +639,15 @@ class FieldData:
                 mins.append(skylams.min())
                 maxs.append(skylams.max())
 
-            skyllams = np.arange(np.min(mins), np.max(maxs), 0.1).astype(np.float64)
+            wave_grid = np.arange(np.ceil(np.min(mins)), np.floor(np.max(maxs)), wave_grid_step).astype(np.float64)
+            self.wave_grid = wave_grid
             del mins, maxs
 
             master_skies = []
             meds = []
             for skyfib in skyfibs:
                 skyfit = skyfits[skyfib]
-                outskyflux = skyfit(skyllams)
+                outskyflux = skyfit(wave_grid)
                 med = np.nanmedian(outskyflux)
                 if np.isnan(med):
                     outskyflux[np.isnan(outskyflux)] = 0.
@@ -657,9 +661,9 @@ class FieldData:
             #master_sky *= medmed
             del meds
 
-            masterfit = CubicSpline(x=skyllams, y=master_sky, extrapolate=False)
+            #masterfit = CubicSpline(x=wave_grid, y=master_sky, extrapolate=False)
             if self.save_plots or self.show_plots:
-                plt.plot(skyllams, master_sky, 'k-', label='master', linewidth=2,alpha=0.4)
+                plt.plot(wave_grid, master_sky, 'k-', label='master', linewidth=2,alpha=0.4)
                 plt.legend(loc='best')
             if self.save_plots:
                 plt.savefig(self.filemanager.get_saveplot_template(cam=cam,ap='',imtype='science',step='skysub',comment='_allskies_'+str(sci_filnum)),dpi=600)
@@ -668,8 +672,8 @@ class FieldData:
             plt.close()
 
             nonzeros = np.where(master_sky > 0.)[0]
-            first_nonzero_lam = skyllams[nonzeros[0]]
-            last_nonzero_lam = skyllams[nonzeros[-1]]
+            first_nonzero_lam = wave_grid[nonzeros[0]]
+            last_nonzero_lam = wave_grid[nonzeros[-1]]
             del nonzeros
 
             if self.save_plots or self.show_plots:
@@ -689,10 +693,10 @@ class FieldData:
                     arr2 = np.array(arr2)
                     if arr1.shape[0] != 0:
                         med1 = np.nanmedian(np.asarray(arr1), axis=0)
-                        plt.plot(skyllams, med1, label="{}_1".format(key1), alpha=0.4)
+                        plt.plot(wave_grid, med1, label="{}_1".format(key1), alpha=0.4)
                     if arr2.shape[0] != 0:
                         med2 = np.nanmedian(np.asarray(arr2), axis=0)
-                        plt.plot(skyllams, med2, label="{}_2".format(key2), alpha=0.4)
+                        plt.plot(wave_grid, med2, label="{}_2".format(key2), alpha=0.4)
 
                 if self.save_plots or self.show_plots:
                     plt.legend(loc='best')
@@ -708,41 +712,45 @@ class FieldData:
                 a, b, c, d, e, f = comparc_data[galfib]
                 gallams = a + b * pixels + c * pix2 + d * pix3 + e * pix4 + f * pix5
                 galflux = np.asarray(sci_data[galfib])
-                out_galflux = galflux.copy()
-                lamcut = ((gallams>=first_nonzero_lam)&(gallams<=last_nonzero_lam))
-                gmasked = np.bitwise_not(lamcut)
 
-                cutgallams = gallams[lamcut]
-                cutgalflux = galflux[lamcut]
+                galspline = CubicSpline(x=gallams,y=galflux,extrapolate=False)
+                interpd_galflux = galspline(wave_grid)
+                galmask = np.isnan(interpd_galflux)
+                # lamcut = ((gallams>=first_nonzero_lam)&(gallams<=last_nonzero_lam))
+                # galmask = np.bitwise_not(lamcut)
 
                 if self.skysub_strategy == 'nearest':
                     skyfit = skyfits[skyfib]
-                    skyflux = skyfit(cutgallams)
-                    lamcut = (skyflux == 0)
-                    gmasked[np.bitwise_not(gmasked)] = np.bitwise_not(lamcut)
-                    cutgalflux = cutgallams[lamcut]
-                    cutskyflux = skyflux[lamcut]
-                    cutgallams = cutgallams[lamcut]
-                elif self.skysub_strategy == 'median':
-                    cutskyflux = masterfit(cutgallams)
+                    skyflux = skyfit(wave_grid)
+                    skymask = np.isnan(skyflux)
+                    galmask = (skymask | galmask)
+                else:
+                    skyflux = master_sky
+                # elif self.skysub_strategy == 'median':
+                #     skyflux = master_sky
 
-                outgal,remaining_sky,gcont,masked = subtract_sky(galflux=cutgalflux,skyflux=cutskyflux,gallams=cutgallams)
+                outgal,remaining_sky,gcont,masked = subtract_sky(galflux=interpd_galflux,skyflux=skyflux,gallams=wave_grid,galmask=galmask)
 
+                good_vals = np.bitwise_not(masked)
                 plt.subplots(1, 2)
                 if self.save_plots or self.show_plots:
                     plt.subplot(121)
-                    plt.plot(cutgallams, outgal, label='output', alpha=0.4)
-                    plt.plot(cutgallams, remaining_sky, label='remaining_sky', alpha=0.4)
-                    plt.plot(cutgallams, gcont, label='gcont', alpha=0.4)
+                    plt.plot(wave_grid[good_vals], outgal[good_vals], label='output', alpha=0.4)
+                    plt.plot(wave_grid[good_vals], remaining_sky[good_vals], label='remaining_sky', alpha=0.4)
+                    plt.plot(wave_grid[good_vals], gcont[good_vals], label='gcont', alpha=0.4)
                     plt.legend(loc='best')
                     plt.title("Unmasked Components".format(cam,sci_filnum))
                     ymin, ymax = plt.ylim()
                     plt.subplot(122)
-                    plt.plot(cutgallams, cutgalflux - cutskyflux, label='basic', alpha=0.4)
-                    plt.plot(cutgallams[np.bitwise_not(masked)], outgal[np.bitwise_not(masked)], label='outgal', alpha=0.4)
+                    #plt.plot(wave_grid[np.bitwise_not(galmask)], interpd_galflux[np.bitwise_not(galmask)] - skyflux[np.bitwise_not(galmask)], label='basic', alpha=0.4)
+                    plt.plot(wave_grid[np.bitwise_not(galmask)], interpd_galflux[np.bitwise_not(galmask)], label='Orig Gal', alpha=0.2)
+                    plt.plot(wave_grid[np.bitwise_not(galmask)], skyflux[np.bitwise_not(galmask)], label='Sky', alpha=0.2)
+                    plt.plot(wave_grid[good_vals], outgal[good_vals], label='Out Gal', alpha=0.4)
+                    window_max = 5*np.median(interpd_galflux[np.bitwise_not(galmask)])
                     # plt.plot(gallams, gal_contsub, label='gal_contsub',alpha=0.4)
                     plt.legend(loc='best')
                     plt.title("Masked vs Naive cam:{} file:{}".format(cam, sci_filnum))
+                    plt.ylim(np.nanmin(outgal[good_vals])-20,window_max)
                     # plt.ylim(ymin,ymax)
                 if self.save_plots:
                     plt.savefig(self.filemanager.get_saveplot_template(cam='',ap=galfib,imtype='science',step='skysub',comment='_result_'+str(sci_filnum)),dpi=600)
@@ -750,127 +758,152 @@ class FieldData:
                     plt.show()
                 plt.close()
 
-                out_galflux[np.bitwise_not(gmasked)] = outgal
-                gmasked[np.bitwise_not(gmasked)] = masked
-                out_sci_data.add_column(Table.Column(name=galfib, data=out_galflux))
-                out_mask_data.add_column(Table.Column(name=galfib, data=gmasked))
+                out_sci_data.add_column(Table.Column(name=galfib, data=outgal))
+                out_mask_data.add_column(Table.Column(name=galfib, data=masked))
 
+            out_header = sci_hdu.header.copy()
+            out_header['wavemin'] = wave_grid.min()
+            out_header['wavemax'] = wave_grid.max()
+            out_header['wavestep'] = wave_grid_step
+            out_header['waveunit'] = wave_unit
+            out_header['wavetype'] = wave_type
             self.all_hdus[(cam, sci_filnum, 'science', None)] = fits.BinTableHDU(data=out_sci_data,
-                                                                                 header=sci_hdu.header,
+                                                                                 header=out_header,
                                                                                  name='FLUX')
             self.all_hdus[(cam, sci_filnum, 'masks', None)] = fits.BinTableHDU(data=out_mask_data,
-                                                                                 header=sci_hdu.header,
+                                                                                 header=out_header,
                                                                                  name='MASK')
 
+    def generate_wave_grid(self,header):
+        wavemin,wavemax = header['wavemin'], header['wavemax']
+        wavetype = header['wavetype']
+        if wavetype == 'log':
+            if 'numwaves' in list(header.getHdrKeys()):
+                nwaves = header['numwaves']
+            else:
+                nwaves = header['NAXIS1']
+            if 'logbase' in list(header.getHdrKeys()):
+                logbase = header['logbase']
+            else:
+                logbase = 10
+            outwaves = np.logspace(wavemin,wavemax,num=nwaves,base=logbase)
+        else:
+            wavestep = header['wavestep']
+            outwaves = np.arange(wavemin,wavemax+wavestep,wavestep)
+        return outwaves
 
     ## TODO: Check if the same wavecal is used. If so, add before interpolation
     def combine_science_observations(self, cam):
-        if len(self.final_calibration_coefs.keys()) == 0:
-            self.get_final_wavelength_coefs()
+        from scipy.ndimage import median_filter
         observation_keys = list(self.observations.observations.keys())
         nobs = len(observation_keys)
-        middle_obs = observation_keys[nobs//2]
 
-        ref_science_filnum,ccalib,fcalib,comparc_ind = self.observations.observations[middle_obs]
-        ref_sci_hdu = self.all_hdus.pop((cam,ref_science_filnum,'science',None))
-        ref_mask_hdu = self.all_hdus.pop((cam, ref_science_filnum, 'masks', None))
-        ref_sci_data = Table(ref_sci_hdu.data)
-        ref_mask_data = Table(ref_mask_hdu.data)
-        if self.twostep_wavecomparc:
-            filnum = fcalib
-        else:
-            filnum = ccalib
-        ref_calibrations = self.final_calibration_coefs[(cam,filnum)]
-        pixels = np.arange(len(ref_sci_data)).astype(np.float64)
-        pix2 = np.power(pixels, 2)
-        pix3 = np.power(pixels, 3)
-        pix4 = np.power(pixels, 4)
-        pix5 = np.power(pixels, 5)
-
-        ref_wavearrays = {}
-        outfluxes = {}
-        outmasks = {}
-        for col in ref_sci_data.colnames:
-            a,b,c,d,e,f = ref_calibrations[col]
-            lams = a + b * pixels + c * pix2 + d * pix3 + e * pix4 + f * pix5
-            ref_wavearrays[col] = lams
-            flux = ref_sci_data[col]
-            mask = ref_mask_data[col]
-            smth_flux = flux.copy()
-            smth_flux[np.isnan(smth_flux)] = 0.
-            smth_flux = medfilt(smth_flux,397)
-            flux[mask] = smth_flux[mask]
-            outfluxes[col] = [flux]
-            outmasks[col] = [mask]
+        logbase = None
         for obs in observation_keys:
-            if obs == middle_obs:
-                continue
+            sci_filnum, ccalib, fcalib, comparc_ind = self.observations.observations[obs]
+            sci_header = self.all_hdus[(cam, sci_filnum, 'science', None)].header
+            if obs == 0:
+                wavemin, wavemax = sci_header['wavemin'], sci_header['wavemax']
+                wavestep = sci_header['wavestep']
+                if 'logbase' in list(sci_header.keys()):
+                    logbase = sci_header['logbase']
+            else:
+                if sci_header['wavemin'] < wavemin:
+                    wavemin = sci_header['wavemin']
+                if sci_header['wavemax'] > wavemax:
+                    wavemax = sci_header['wavemax']
+                if wavestep != sci_header['wavestep']:
+                    print("Wave steps were different!!")
+                    raise()
+                if 'logbase' in list(sci_header.keys()) and logbase != sci_header['logbase']:
+                    print("Wavelength log base was different!!")
+                    raise()
+
+        if logbase is not None:
+            master_wave_grid = np.logspace(wavemin,wavemax,num=sci_header['NAXIS2'],base=logbase)
+        else:
+            master_wave_grid = np.arange(wavemin,wavemax+wavestep,wavestep)
+
+        for obs in observation_keys:
             sci_filnum, ccalib, fcalib, comparc_ind = self.observations.observations[obs]
             sci_hdu = self.all_hdus.pop((cam, sci_filnum, 'science', None))
-            sci_data = sci_hdu.data
+            sci_data = Table(sci_hdu.data)
+
+            wave_grid = self.generate_wave_grid(sci_hdu.header)
+
             mask_hdu = self.all_hdus.pop((cam, sci_filnum, 'masks', None))
-            mask_data = mask_hdu.data
-            if self.twostep_wavecomparc:
-                filnum = fcalib
-            else:
-                filnum = ccalib
-            sci_calibrations = self.final_calibration_coefs[(cam,filnum)]
-            for col in ref_sci_data.colnames:
-                outwave = ref_wavearrays[col].copy()
-                a, b, c, d, e, f = sci_calibrations[col]
-                lams = a + b * pixels + c * pix2 + d * pix3 + e * pix4 + f * pix5
-                flux = sci_data[col]
-                mask = mask_data[col]
+            mask_data = Table(mask_hdu.data)
 
-                cflux = flux[np.bitwise_not(mask)]
-                clams = lams[np.bitwise_not(mask)]
+            matching_lams = ((wave_grid.min() <= master_wave_grid) & (wave_grid.max() >= master_wave_grid))
+            if np.sum(matching_lams) != len(sci_data):
+                print("Flux length wasn't the number of matching wavelengths!")
+                print(np.sum(matching_lams),"!=",len(sci_data))
+                print("Obs {}: Wavemin={} wavemax={} wavestep={}".format(obs,wave_grid.min(), wave_grid.max(),
+                                                                 wave_grid[1] - wave_grid[0]))
+                print("Master: Wavemin={} wavemax={} wavestep={}".format(master_wave_grid.min(), master_wave_grid.max(),
+                                                                 master_wave_grid[1] - master_wave_grid[0]))
 
-                out_lam_masked = np.zeros(len(outwave)).astype(bool)
-                for lam in lams[mask]:
-                    out_lam_masked[np.abs(outwave-lam)<=0.5] = True
+            if obs == 0:
+                all_fluxs = {col:[] for col in sci_data.colnames}
+                all_masks = {col:[] for col in sci_data.colnames}
 
-                scifit = CubicSpline(x=clams,y=cflux,extrapolate=False)
-
-                outflux = scifit(outwave)
-                # outflux[out_lam_masked] = np.nan
-                outfluxes[col].append(outflux)
-                outmasks[col].append(out_lam_masked)
+            oned_array = np.zeros(shape=(len(master_wave_grid),))
+            for col in sci_data.colnames:
+                outflux = oned_array.copy()
+                outmask = oned_array.copy()
+                outflux[matching_lams] = sci_data[col].copy()
+                outmask[matching_lams] = mask_data[col].copy()
+                outmask[np.bitwise_not(matching_lams)] = True
+                all_fluxs[col].append(outflux)
+                all_masks[col].append(outmask)
 
         out_data_table = Table()
         out_mask_table = Table()
-        for col in ref_sci_data.colnames:
-            flux_list = np.array(outfluxes[col])
-            mask_list = np.array(outmasks[col]).astype(float)
-            nanmean = np.nanmean(flux_list,axis=0)
-            # medmask = np.nanmedian(mask_list,axis=0)
-            medmask = np.nanmax(mask_list, axis=0)
-            medmask[np.isnan(medmask)] = 1.
-            # mask = (medmask>0.2)
-            mask = medmask.astype(bool)
-            masked = np.isnan(nanmean)
-            nanmean = replace_nans(nanmean)
-            finalmask = (mask | masked)
-            out_data_table.add_column(Table.Column(name=col, data=nanmean))
-            out_mask_table.add_column(Table.Column(name=col, data=finalmask))
+        out_uncmult_table = Table()
+        for col in sci_data.colnames:
+            flux_arr = np.array(all_fluxs[col])
+            masked_arr = np.array(all_masks[col]).astype(bool)
+            flux_arr[masked_arr] = np.nan
+            ngood_obs_perpix = float(nobs)-np.sum(masked_arr,axis=0)
+            masked = ((ngood_obs_perpix < (nobs // 2)))
+            ngood_obs_perpix[ngood_obs_perpix==0] = np.nan
+            nanmean_fluxes = np.nanmean(flux_arr,axis=0)
+            nansumd_fluxes = nanmean_fluxes*len(all_fluxs[col])
+            nansumd_unc_multiplier = np.sqrt(float(len(all_fluxs[col]))/ngood_obs_perpix)
 
-        plt.subplots(2,1)
+            alleged_nans = nanmean_fluxes[masked]
+            if np.sum(np.bitwise_not(np.isnan(alleged_nans)))!=0:
+                print("Mask assignment didn't match nanmean in combining fluxes!")
+                print(np.sum(masked),np.sum(np.bitwise_not(np.isnan(alleged_nans))))
+                print(alleged_nans[np.bitwise_not(np.isnan(alleged_nans))])
+            out_data_table.add_column(Table.Column(name=col, data=nansumd_fluxes))
+            out_mask_table.add_column(Table.Column(name=col, data=masked))
+            out_uncmult_table.add_column(Table.Column(name=col, data=nansumd_unc_multiplier))
+
+        # plt.subplots(2,1)
+        plt.figure()
         if self.save_plots or self.show_plots:
             for col in out_data_table.colnames:
-                plt.subplot(211)
-                plt.plot(ref_wavearrays[col][np.bitwise_not(out_mask_table[col])],out_data_table[col][np.bitwise_not(out_mask_table[col])],alpha=0.4,lw=1)
-                plt.title("Masked cam: {}".format(cam))
-                plt.subplot(212)
-                plt.plot(ref_wavearrays[col],out_data_table[col],alpha=0.4,lw=1)
+                flux = out_data_table[col]
+                unmasked = np.bitwise_not(out_mask_table[col])
+                stds = out_uncmult_table[col]
+                # plt.subplot(211)
+                # plt.plot(ref_wavearrays[col][np.bitwise_not(out_mask_table[col])],out_data_table[col][np.bitwise_not(out_mask_table[col])],alpha=0.4,lw=1)
+                # plt.title("Masked cam: {}".format(cam))
+                # plt.subplot(212)
+                if len(flux) == 0 or np.nansum(flux) == 0 or np.any(np.isnan(stds[unmasked])) or np.any(np.isnan(flux[unmasked])):
+                    print("Empty flux!")
+                plt.plot(master_wave_grid[unmasked],flux[unmasked],alpha=0.1)
+                #plt.fill_between(master_wave_grid[unmasked],flux[unmasked]-stds[unmasked],flux[unmasked]+stds[unmasked],alpha=0.2)
                 plt.title("Unmasked cam: {}".format(cam))
         if self.save_plots:
             plt.savefig(self.filemanager.get_saveplot_template(cam=cam,ap='',imtype='science',step='combine',comment='_all_1d'),dpi=600)
         if self.show_plots:
             plt.show()
         plt.close()
-        ref_wave_table = Table(ref_wavearrays)
-        self.all_hdus[(cam,'combined','science',None)] = fits.BinTableHDU(data=out_data_table,header=ref_sci_hdu.header,name='FLUX')
-        self.all_hdus[(cam,'combined','wavelengths',None)] = fits.BinTableHDU(data=ref_wave_table,name='WAVE')
-        self.all_hdus[(cam, 'combined', 'masks', None)] = fits.BinTableHDU(data=out_mask_table, name='MASK')
+
+        self.all_hdus[(cam,'combined','science',None)] = fits.BinTableHDU(data=out_data_table,header=sci_header,name='FLUX')
+        self.all_hdus[(cam, 'combined', 'masks', None)] = fits.BinTableHDU(data=out_mask_table,header=mask_hdu.header, name='MASK')
 
     def match_skies(self ,cam):
         from astropy.coordinates import SkyCoord
@@ -962,7 +995,6 @@ class FieldData:
 
     def fit_redshfits(self,cam):
         from fit_redshifts import fit_redshifts_wrapper
-        waves = Table(self.all_hdus[(cam,'combined','wavelengths',None)].data)
         fluxes = Table(self.all_hdus[(cam, 'combined', 'science', None)].data)
         masks = Table(self.all_hdus[(cam, 'combined', 'masks', None)].data)
         # if (cam, 'combined_mask', 'science', None) in self.all_hdus.keys():
@@ -971,11 +1003,11 @@ class FieldData:
         #     mask = None
 
         header = self.all_hdus[(cam, 'combined', 'science', None)].header
-
+        wave_grid = self.generate_wave_grid(header)
         if self.single_core:
             sci_data = OrderedDict()
             for fib in fluxes.colnames:
-                sci_data[fib] = (waves[fib], fluxes[fib], masks[fib])
+                sci_data[fib] = (wave_grid, fluxes[fib], masks[fib])
             obs1 = {
                 'sky_subd_sciences':sci_data, 'mask_name': self.filemanager.maskname, 'savetemplate_func': self.filemanager.get_saveplot_template, 'run_auto': True
             }
@@ -986,13 +1018,13 @@ class FieldData:
 
             for fib in fib1s:
                 if fib in fluxes.colnames:
-                    sci_data1[fib] = (waves[fib], fluxes[fib], masks[fib])
+                    sci_data1[fib] = (wave_grid, fluxes[fib], masks[fib])
 
             sci_data2 = OrderedDict()
             fib2s = self.instrument.upper_half_fibs[cam]
             for fib in fib2s:
                 if fib in fluxes.colnames:
-                    sci_data2[fib] = (waves[fib], fluxes[fib], masks[fib])
+                    sci_data2[fib] = (wave_grid, fluxes[fib], masks[fib])
 
             obs1 = {
                 'sky_subd_sciences':sci_data1, 'mask_name': self.filemanager.maskname, 'savetemplate_func': self.filemanager.get_saveplot_template, 'run_auto': True

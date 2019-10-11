@@ -4,11 +4,21 @@ from astropy.table import Table, Column
 from astropy.io import fits
 import matplotlib.pyplot as plt
 from scipy.signal import medfilt
+from scipy.optimize import curve_fit
 
+
+def poly11(x, a, b, c, d, e, f, g, h, i, j, k, l):
+    return (a + b * x + c * np.power(x, 2) + \
+            d * np.power(x, 3) + e * np.power(x, 4) + f * np.power(x, 5) + \
+            g * np.power(x, 6) + h * np.power(x, 7) + i * np.power(x, 8) + \
+            j * np.power(x, 9) + k * np.power(x, 10) + l * np.power(x, 11))
 
 
 def flatten_data(fiber_fluxes,waves):
-    interp_scale = 397
+    from scipy.ndimage import median_filter
+    from scipy.signal.windows import gaussian
+    interp_scale = 371
+    nloops=1
     waves_arr = []
     orig_fluxs_arr = []
     names = []
@@ -19,8 +29,46 @@ def flatten_data(fiber_fluxes,waves):
                e*np.power(pixels, 4)+ f*np.power(pixels,5)
         waves_arr.append(lams)
 
-        flux = fiber_fluxes[name]
+        origflux = fiber_fluxes[name].copy()
+        ## remove massive absorption line near end of solar spectrum
+        prior_range = origflux[((lams>6760)&(lams<6880))]
+        med_filler = np.median(prior_range)
+        max_filler = np.max(prior_range)
+        absorb_range_mask = ((lams > 6830) & (lams < 7080))
+        nfills = np.sum(absorb_range_mask)
+        midpoint = 250/2.
+        quad = (-(max_filler-med_filler)*((np.arange(nfills).astype(float)-midpoint)**2)/(midpoint**2)) + (2*max_filler-med_filler)
+        origflux[absorb_range_mask] = quad
+
+        # medflux = median_filter(origflux, interp_scale, mode='constant', cval=np.quantile(origflux[-1 * interp_scale:],0.5))
+        # flux = medflux.copy()
+        # gwindow = gaussian(interp_scale, int(np.ceil(interp_scale / 6)))
+        # gwindow = gwindow / gwindow.sum()
+        # flux2 = np.convolve(medflux, gwindow, mode='same')
+        # flux2[:interp_scale//2],flux2[-1*interp_scale//2:] = medflux[:interp_scale//2],medflux[-1*interp_scale//2:]
+        #
+        # flux = np.convolve(flux2, gwindow, mode='same')
+        # flux[:interp_scale//2],flux[-1*interp_scale//2:] = medflux[:interp_scale//2],medflux[-1*interp_scale//2:]
+
+        # for mult in range(1,10):
+        #     int_val = 2 * (interp_scale // np.power(2, mult)) + 1
+        #     gwindow = gaussian(int_val, int(np.ceil(int_val / 6)))
+        #     gwindow = gwindow / gwindow.sum()
+        #     flux2 = np.convolve(flux, gwindow, mode='same')
+        #     flux[int_val//2:int_val] = flux2[int_val//2:int_val]
+        #     flux[-1 * int_val:-1 * int_val//2] = flux2[-1 * int_val:-1 * int_val//2]
+        # flux[:10], flux[-10:] = flux[10],flux[-10]
+
+
+        coefs,cov = curve_fit(poly11,lams,origflux,p0=[5600,1,0.01,0,0,0,0,0,0,0,0,0])
+        flux = poly11(lams,*coefs)
+
         orig_fluxs_arr.append(flux)
+
+        # plt.figure()
+        # plt.plot(lams,origflux,alpha=0.4)
+        # plt.plot(lams,flux,alpha=0.4)
+        # plt.show()
         names.append(name)
 
     waves_array = np.array(waves_arr)
@@ -39,7 +87,17 @@ def flatten_data(fiber_fluxes,waves):
     ## Take in fibers row by row and interpolate them to the consistent wavelength grid
     for ii in range(len(names)):
         ## Get the original data to be interpolated
-        flux = orig_flux_array[ii,:].astype(np.float64)
+        flux_rough = orig_flux_array[ii,:].astype(np.float64)
+        flux = flux_rough.copy()
+        # flux = median_filter(flux_rough,interp_scale,mode='constant',cval=np.median(flux_rough[-1*interp_scale:]))
+        # last_int = interp_scale
+        # for mult in range(3):
+        #     int_val = 2*(interp_scale//int(np.power(2,mult+2)))+1
+        #     flux2 = median_filter(flux_rough,int_val,mode='constant',cval=np.median(flux[-1*int_val:]))
+        #     flux[:last_int] = flux2[:last_int]
+        #     flux[-1*last_int:] = flux2[-1*last_int:]
+        #     last_int = int_val
+
         wave = waves_array[ii,:].astype(np.float64)
 
         ## Interpolate the data
@@ -50,14 +108,27 @@ def flatten_data(fiber_fluxes,waves):
         ## Also save a smoothed version (because line peaks may differ slightly
         ## and cause issues in dividing out to get acceptances
         ## Want interp scale to be roughly half, but need to force it to be odd for medfiltering
-        med = medfilt(outflux,2*(interp_scale//4)+1)
+        flux = outflux.copy()
+        med = flux
+        # med = median_filter(flux, interp_scale, mode='constant', cval=np.quantile(flux[-1 * interp_scale:],0.25))
+        # for mult in range(3):
+        #     int_val = 2 * (interp_scale // int(np.power(2, mult + 2))) + 1
+        #     flux2 = median_filter(flux, int_val, mode='constant', cval=np.median(flux[-1 * int_val:]))
+        #     med[:int_val] = flux2[:int_val]
+        #     med[-1 * int_val:] = flux2[-1 * int_val:]
         adj_smth_flux_array[ii,:] = med
 
 
     ## Determine the brightest fiber and normalize on that
-    sumd_smth_flux = np.sum(adj_smth_flux_array,axis=1)
+    # med_smth_flux = np.median(adj_smth_flux_array[:,200:-200],axis=1)
+    # median = np.median(med_smth_flux)
+    # top = np.argwhere(med_smth_flux==median)[0][0]
+    # sumd_smth_flux = np.median(adj_smth_flux_array, axis=1)
+    # fiber_acceptances = (sumd_smth_flux/sumd_smth_flux[top])*(med_smth_flux/median)
+
+    sumd_smth_flux = np.median(adj_smth_flux_array, axis=1)
     top = np.argmax(sumd_smth_flux)
-    fiber_acceptances = sumd_smth_flux/sumd_smth_flux[top]
+    fiber_acceptances = (sumd_smth_flux/sumd_smth_flux[top])
 
     ## Initiate final arrays
     normalized = np.ndarray(shape=adj_smth_flux_array.shape)
@@ -68,7 +139,30 @@ def flatten_data(fiber_fluxes,waves):
     ## the final_flux_array spline-fit back to the original pixel grid
     for ii in range(normalized.shape[0]):
         ## Normalized the data to the brightest fiber, then smooth out division incongruities
-        flux = medfilt(adj_smth_flux_array[ii,:]/adj_smth_flux_array[top,:],interp_scale)
+        outflux = adj_smth_flux_array[ii,:]/adj_smth_flux_array[top,:]
+        ninterp = (2*interp_scale)+1
+        medflux = median_filter(outflux,size=ninterp,mode='constant',cval=np.quantile(outflux[-1 * ninterp:],0.25))
+        #
+        # int_val = (4 * interp_scale) + 1
+        # gwindow = gaussian(int_val, int(np.ceil(int_val / 6)))
+        # gwindow = gwindow / gwindow.sum()
+        # flux2 = np.convolve(medflux, gwindow, mode='same')
+        # flux2[:int_val//2],flux2[-1*int_val//2:] = medflux[:int_val//2],medflux[-1*int_val//2:]
+        # int_val = (4 * interp_scale) + 1
+        # gwindow = gaussian(int_val, int(np.ceil(int_val / 6)))
+        # gwindow = gwindow / gwindow.sum()
+        # flux = np.convolve(flux2, gwindow, mode='same')
+        # flux[:int_val//2],flux[-1*int_val//2:] = medflux[:int_val//2],medflux[-1*int_val//2:]
+        # for mult in range(16):
+        #     int_val = 2 * (interp_scale // np.power(2, mult)) + 1
+        #     gwindow = gaussian(int_val, int(np.ceil(int_val / 6)))
+        #     gwindow = gwindow / gwindow.sum()
+        #     flux2 = np.convolve(flux, gwindow, mode='same')
+        #     flux[int_val//2:int_val] = flux2[int_val//2:int_val]
+        #     flux[-1 * int_val:-1 * int_val//2] = flux2[-1 * int_val:-1 * int_val//2]
+        # flux[:100], flux[-100:] = flux[100],flux[-100]
+        # flux = medfilt(adj_smth_flux_array[ii,:]/adj_smth_flux_array[top,:],interp_scale)
+        flux = outflux
         normalized[ii, :] = flux
 
         ## Interpolate the normalized data
@@ -77,6 +171,20 @@ def flatten_data(fiber_fluxes,waves):
         ## Refit the data back to the original pixel grid
         final_wave = waves_array[ii,:]
         final_flux = interpol(final_wave)
+
+        #################### Short term hack
+        # plt.figure()
+        # plt.plot(outwaves,adj_smth_flux_array[ii,:]/np.median(adj_smth_flux_array[top,:]),label='Orig',alpha=0.2)
+        # plt.plot(outwaves,adj_smth_flux_array[top,:]/np.median(adj_smth_flux_array[top,:]),label='Divisor',alpha=0.2)
+
+        # plt.plot(outwaves, adj_smth_flux_array[ii, :] / adj_smth_flux_array[top, :], label='Ratiod', alpha=0.4)
+        # plt.plot(outwaves, medflux, label='Med {}'.format(interp_scale), alpha=0.4)
+        # plt.plot(outwaves, flux, label='Gaus Smthd {}'.format(interp_scale), alpha=0.4)
+        # plt.plot(final_wave, final_flux, label='Interpd', alpha=0.4)
+        # # plt.ylim(0.75, 0.9)
+        # plt.legend()
+        # plt.show()
+        ##############################################################3
 
         ## Data was only fit in shared wavelength regime.
         ## For the outer pixels, give a linear normalization from the last fit value

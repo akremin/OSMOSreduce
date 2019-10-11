@@ -72,7 +72,7 @@ def fit_redshifts(sky_subd_sciences,mask_name,run_auto=True,prior = None,savetem
         # Create a summary plot of the best z-fit
         comment = 'redEst_{}_Tmplt{}'.format(test_waveform.name, redshift_outputs.template.name)
         plt_name = savetemplate_func(cam='',ap=ap,imtype='science',step='zfit',comment=comment)
-        summary_plot(test_waveform.wave, test_waveform.flux, redshift_outputs.template.wave, \
+        summary_plot(test_waveform.masked_wave, test_waveform.masked_flux, redshift_outputs.template.wave, \
                      redshift_outputs.template.flux, redshift_outputs.best_zest, redshift_outputs.ztest_vals, \
                  redshift_outputs.corr_vals, plt_name, test_waveform.name, None)
         if run_auto:

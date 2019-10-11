@@ -66,7 +66,7 @@ def summary_plot(waves, flux, templ_waves, template,zest,z_test,corrs,plt_name,f
     shortnd_temp_flux = cont_subd_temp_flux[:last_ind]
     if len(shortnd_temp_flux)>0:
         ax2.set_ylim(np.min([cont_subd_flux.min(),shortnd_temp_flux.min()]),\
-                 np.max([cont_subd_flux.max(),shortnd_temp_flux.max()]))
+                 np.nanmax([np.nanmax(cont_subd_flux),np.nanmax(shortnd_temp_flux)]))
     else: 
        ax2.set_ylim(cont_subd_flux.min(),cont_subd_flux.max())
 
