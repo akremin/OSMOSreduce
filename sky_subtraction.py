@@ -5,6 +5,7 @@ from astropy.io import fits
 from astropy.table import Table
 from scipy.interpolate import CubicSpline
 from scipy.signal import medfilt, find_peaks
+from scipy.signal.windows import gaussian as gaussian_kernel
 from scipy.ndimage import median_filter
 from collections import OrderedDict
 from calibrations import Calibrations
@@ -100,16 +101,12 @@ def subtract_sky(galflux,skyflux,gallams,galmask):
     sky_contsub = skyflux - scont
 
     sky_too_large = np.where(scont>gcont)[0]
-    if len(sky_too_large) > 0.1*len(gal_contsub):
+    if len(sky_too_large) > 0.2*len(gal_contsub):
         adjusted_skyflux_ratio = np.median(gcont[sky_too_large]/scont[sky_too_large])
         skyflux *= adjusted_skyflux_ratio
         scont = median_filter(skyflux, size=continuum_median_kernalsize,mode='nearest')
         sky_contsub = skyflux - scont
 
-    #continuum_ratio = np.median(gcont[300:800] / scont[300:800]) - 0.1
-    # continuum_ratio = np.median(galflux[:400] / skyflux[:400])-0.1
-    #remaining_sky = medfilt(continuum_ratio * skyflux.copy(), 3)
-    #scont = continuum_ratio * scont
     remaining_sky = skyflux.copy()
 
     s_peak_inds, s_peak_props = find_peaks(sky_contsub, height=(30, None), width=(0.1*pix_per_wave, 10*pix_per_wave), \
@@ -243,9 +240,13 @@ def subtract_sky(galflux,skyflux,gallams,galmask):
 
         sky_g_distrib = normd_g_distrib * integral_s
         if len(sky_g_distrib) > 3:
+            nzpad = 5
+            nkern = 3
             subd = gal_contsub[slower_wave_ind:supper_wave_ind].copy() - sky_g_distrib
-            zeropadded = np.append(np.zeros(5),np.append(subd,np.zeros(5)))
-            removedlineflux = np.convolve(zeropadded, [1 / 5., 3 / 5., 1 / 5.], 'same')[5:-5]
+            zeropadded = np.pad(subd,(nzpad,nzpad),'constant',constant_values=0.)
+            gkern = gaussian_kernel(nkern,nkern/6.,sym=True)
+            norm_gkern = gkern/gkern.sum()
+            removedlineflux = np.convolve(zeropadded, norm_gkern, 'same')[nzpad:-nzpad]
             del subd,zeropadded
         else:
             removedlineflux = (gal_contsub[slower_wave_ind:supper_wave_ind].copy() - sky_g_distrib)
@@ -295,7 +296,6 @@ def subtract_sky(galflux,skyflux,gallams,galmask):
             ymin, ymax = plt.ylim()
             plt.vlines(gallams[slower_wave_ind], ymin, ymax)
             plt.vlines(gallams[supper_wave_ind - 1], ymin, ymax)
-            ymin, ymax = plt.ylim()
             plt.legend(loc='best')
 
             plt.subplot(133)

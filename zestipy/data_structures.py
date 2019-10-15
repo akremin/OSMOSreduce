@@ -29,7 +29,7 @@ class waveform:
 
 
     def __continuum_subtract(self):
-        return self.masked_flux - signal.medfilt(self.masked_flux,171)
+        return self.masked_flux - signal.medfilt(self.masked_flux,371)
 
 
 
