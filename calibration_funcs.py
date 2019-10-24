@@ -28,7 +28,7 @@ import numpy as np
 def run_automated_calibration(coarse_comp, complinelistdict, last_obs=None, print_itters = True, only_use_peaks = True):
     precision = 1e-4
     convergence_criteria = 1.0e-5 # change in correlation value from itteration to itteration
-    waves, fluxes = generate_synthetic_spectra(complinelistdict, compnames=['HgAr', 'NeAr','Xe'],precision=precision,\
+    waves, fluxes = generate_synthetic_spectra(complinelistdict, precision=precision,\
                                                maxheight=10000.,minwave=3400,maxwave=7500)
 
     ## Make sure the information is in astropy table format
@@ -269,12 +269,11 @@ def gaussian(x0,height,xs):
     fluxes = height*np.exp(-(dx*dx)/twosig2)
     return fluxes
 
-def generate_synthetic_spectra(compdict,compnames=[],precision=1.e-4,maxheight=10000.,\
+def generate_synthetic_spectra(compdict,precision=1.e-4,maxheight=10000.,\
                                minwave = 3400, maxwave = 7500):
     heights,waves = [],[]
 
-    for compname in compnames:
-        itterwaves,itterheights = compdict[compname]
+    for compname,(itterwaves,itterheights) in compdict.items():
         normalized_height = maxheight*np.asarray(itterheights).astype(np.float)/np.max(itterheights)
         if compname == 'Xe':
             normalized_height = normalized_height / 100.
@@ -755,7 +754,34 @@ def split_params(off,lin,quad,offstep,linstep,quadstep):
         def_lin_fine = lin_fine
     return def_off, def_off_fine, def_lin, def_lin_fine, def_quad_fine
 
+def air_to_vacuum(airwl, nouvconv=True):
+    """
+    Returns vacuum wavelength of the provided air wavelength array or scalar.
+    Good to ~ .0005 angstroms.
 
+    If nouvconv is True, does nothing for air wavelength < 2000 angstroms.
+
+    Input must be in angstroms.
+
+    Adapted from idlutils airtovac.pro, based on the IAU standard
+    for conversion in Morton (1991 Ap.J. Suppl. 77, 119)
+    """
+    airwl = np.array(airwl, copy=False, dtype=float, ndmin=1)
+    isscal = airwl.shape == tuple()
+    if isscal:
+        airwl = airwl.ravel()
+
+    # wavenumber squared
+    sig2 = (1e4 / airwl) ** 2
+
+    convfact = 1. + 6.4328e-5 + 2.94981e-2 / (146. - sig2) + 2.5540e-4 / (41. - sig2)
+    newwl = airwl.copy()
+    if nouvconv:
+        convmask = newwl >= 2000
+        newwl[convmask] *= convfact[convmask]
+    else:
+        newwl[:] *= convfact
+    return newwl[0] if isscal else newwl
 
 if __name__ == '__main__':
     #cal_lamp = ['Hg', 'He','Ar', 'Ne', 'Xe']  ## crc
@@ -800,31 +826,3 @@ if __name__ == '__main__':
                      default_dict=default_dict, steps=steps, default_key=default_key)
 
 
-def air_to_vacuum(airwl, nouvconv=True):
-    """
-    Returns vacuum wavelength of the provided air wavelength array or scalar.
-    Good to ~ .0005 angstroms.
-
-    If nouvconv is True, does nothing for air wavelength < 2000 angstroms.
-
-    Input must be in angstroms.
-
-    Adapted from idlutils airtovac.pro, based on the IAU standard
-    for conversion in Morton (1991 Ap.J. Suppl. 77, 119)
-    """
-    airwl = np.array(airwl, copy=False, dtype=float, ndmin=1)
-    isscal = airwl.shape == tuple()
-    if isscal:
-        airwl = airwl.ravel()
-
-    # wavenumber squared
-    sig2 = (1e4 / airwl) ** 2
-
-    convfact = 1. + 6.4328e-5 + 2.94981e-2 / (146. - sig2) + 2.5540e-4 / (41. - sig2)
-    newwl = airwl.copy()
-    if nouvconv:
-        convmask = newwl >= 2000
-        newwl[convmask] *= convfact[convmask]
-    else:
-        newwl[:] *= convfact
-    return newwl[0] if isscal else newwl

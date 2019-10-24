@@ -366,7 +366,57 @@ class FileManager:
         #     for camera,hdu in all_hdus.items():
         #         self.write_zfit(outhdu=hdu,camera=camera,step=step)
 
-    def load_calibration_lines_dict(self,cal_lamp,wavemincut=4000,wavemaxcut=10000,use_selected=False):
+    def load_calibration_lines_dict(self, cal_lamp, wavemincut=4000, wavemaxcut=10000, use_selected=False):
+        # return self.load_salt_calibration_lines_dict(cal_lamp,wavemincut=wavemincut,wavemaxcut=wavemaxcut,use_selected=use_selected)
+        return self.load_nist_calibration_lines_dict(cal_lamp,wavemincut=wavemincut,wavemaxcut=wavemaxcut,use_selected=use_selected)
+
+
+    def load_nist_calibration_lines_dict(self, cal_lamp, wavemincut=4000, wavemaxcut=10000, use_selected=False):
+        """Assumes the format of the nist linelist csvs privuded with this package"""
+        from calibration_funcs import air_to_vacuum
+        #linelistdict = {}
+        selectedlinesdict = {}
+        print(('Using calibration lamps: ', cal_lamp))
+        possibilities = ['Xe','Ar','Hg','Ne','Th','He']
+        all_wms = []
+        for lamp in possibilities:
+            if lamp in cal_lamp:
+                print(lamp)
+                filname = self.lampline_template.format(mod='',lamp=lamp)
+                sel_filname = self.lampline_template.format(mod='selected_',lamp=lamp)
+                pathname = os.path.join(self.directory.lampline_dir,filname)
+                sel_pathname = os.path.join(self.directory.lampline_dir,sel_filname)
+                if use_selected and os.path.exists(sel_pathname):
+                    tab = Table.read(sel_pathname,format='ascii.csv',dtype=[float,float,str,str])
+                else:
+                    tab = Table.read(pathname, format='ascii.csv')
+                fm = tab['intensity'].data
+                wm_air,wm_air_uncs = tab['obs_wl_air(A)'].data,tab['unc_obs_wl'].data
+                if 'Use' in tab.colnames:
+                    boolean = np.array([val.lower()=='y' for val in tab['Use']]).astype(bool)
+                else:
+                    boolean = np.ones(len(tab)).astype(bool)
+                good_measurements = ( ( (wm_air_uncs / wm_air) * (3e5) ) < 20) ## km/s
+                fm = fm[good_measurements]
+                wm_air = wm_air[good_measurements]
+                boolean = boolean[good_measurements]
+
+                wm_vac = air_to_vacuum(wm_air)
+
+                ## sort lines by wavelength
+                sortd = np.argsort(wm_vac)
+                srt_wm_vac, srt_fm, srt_bl = wm_vac[sortd], fm[sortd],boolean[sortd]
+                good_waves = np.where((srt_wm_vac>=wavemincut)&(srt_wm_vac<=wavemaxcut))[0]
+                out_wm_vac,out_fm_vac,out_bl = srt_wm_vac[good_waves], srt_fm[good_waves],srt_bl[good_waves]
+                #linelistdict[lamp] = (out_wm_vac,out_fm_vac)
+                selectedlinesdict[lamp] = (out_wm_vac[out_bl],out_fm_vac[out_bl])
+                all_wms.extend(out_wm_vac.tolist())
+
+        #return linelistdict, selectedlinesdict, all_wms
+        return selectedlinesdict, np.asarray(all_wms)
+
+
+    def load_salt_calibration_lines_dict(self,cal_lamp,wavemincut=4000,wavemaxcut=10000,use_selected=False):
         """Assumes the format of the salt linelist csvs privuded with this package"""
         from calibration_funcs import air_to_vacuum
         #linelistdict = {}
