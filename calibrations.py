@@ -13,7 +13,7 @@ from calibration_funcs import compare_outputs, \
     automated_calib_wrapper_script, interactive_plot, \
     get_highestflux_waves, update_default_dict, \
     top_peak_wavelengths,pix_to_wave_fifthorder,\
-    ensure_match, find_devs
+    ensure_match, find_devs, coarse_calib_configure_tables
 
 from linebrowser import LineBrowser
 from collections import Counter
@@ -32,6 +32,8 @@ class Calibrations:
         self.config = instrument.configuration
         self.lamptypesc = instrument.coarse_lamp_names
         self.lamptypesf = instrument.fine_lamp_names
+        self.wavemin = instrument.wavemin
+        self.wavemax = instrument.wavemax
         self.default_fit_key = default_fit_key
         self.savetemplate_funcs = filemanager.get_saveplot_template
 
@@ -41,7 +43,8 @@ class Calibrations:
         self.show_plots = show_plots
 
         #self.linelistc,selected_linesc,all_linesc = filemanager.load_calibration_lines_dict(lamptypesc,use_selected=use_selected_calib_lines)
-        self.linelistc,all_linesc = filemanager.load_calibration_lines_dict(self.lamptypesc,use_selected=use_selected_calib_lines)
+        self.linelistc,all_linesc = filemanager.load_calibration_lines_dict(self.lamptypesc,wavemincut=self.wavemin, \
+                                                                wavemaxcut=self.wavemax,use_selected=use_selected_calib_lines)
 
         self.load_history = load_history
         self.coarse_calibrations = coarse_calibrations
@@ -61,7 +64,8 @@ class Calibrations:
             self.lampstr_c += '-'+str(lamp)
 
         if self.do_fine_calib:
-            self.linelistf,self.all_lines = filemanager.load_calibration_lines_dict(self.lamptypesf,use_selected=use_selected_calib_lines)
+            self.linelistf,self.all_lines = filemanager.load_calibration_lines_dict(self.lamptypesf,wavemincut=self.wavemin, \
+                                                                wavemaxcut=self.wavemax,use_selected=use_selected_calib_lines)
             #self.linelistf,self.selected_lines,self.all_lines = filemanager.load_calibration_lines_dict(lamptypesf,use_selected=use_selected_calib_lines)
             self.fine_calibrations = fine_calibrations
             for lamp in self.lamptypesf:
@@ -157,14 +161,27 @@ class Calibrations:
         for pairnum,(cc_filnum, throwaway) in self.pairings.items():
 
             comp_data = Table(self.coarse_calibrations[cc_filnum].data)
-
+            print("\n\n#########################################")
+            print("####   Now running {:d} (filnum={:04d})   ####".format(pairnum,cc_filnum))
+            print("#########################################\n")
             if self.single_core:
                 obs1 = {
                     'coarse_comp': comp_data, 'complinelistdict': self.linelistc,
-                    'print_itters': False, 'last_obs': histories,'only_use_peaks': only_use_peaks
-                }
+                    'last_obs': histories     }
 
-                out_calib = automated_calib_wrapper_script(obs1)
+                out = automated_calib_wrapper_script(obs1)
+                tabs = coarse_calib_configure_tables(out)
+                out_calib = tabs['coefs']
+                out_calib = out_calib[self.instrument.full_fibs[self.camera].tolist()]
+
+                out_metric = tabs['metric']
+                out_metric = out_metric[self.instrument.full_fibs[self.camera].tolist()]
+
+                out_lines = tabs['clines']
+                out_lines = out_lines[self.instrument.full_fibs[self.camera].tolist()]
+
+                out_pixels = tabs['pixels']
+                out_pixels = out_pixels[self.instrument.full_fibs[self.camera].tolist()]
             else:
                 fib1s = np.append(self.instrument.lower_half_fibs[self.camera],self.instrument.overlapping_fibs[self.camera][1])
                 fib2s = np.append(self.instrument.upper_half_fibs[self.camera],self.instrument.overlapping_fibs[self.camera][0])
@@ -176,10 +193,8 @@ class Calibrations:
                     hist1,hist2 = None, None
                 coarse_comp_data_hist = None
                 # coarse_comp_data_hist = Table.read("out_coefs_{}.fits".format(filenum_hist),format='fits')
-                obs1 = {'coarse_comp': comp_data[fib1s.tolist()], 'complinelistdict': self.linelistc,
-                    'print_itters': False,'last_obs': hist1,'only_use_peaks': only_use_peaks}
-                obs2 = {'coarse_comp': comp_data[fib2s.tolist()], 'complinelistdict': self.linelistc,
-                    'print_itters': False,'last_obs':hist2,'only_use_peaks': only_use_peaks}
+                obs1 = {'coarse_comp': comp_data[fib1s.tolist()], 'complinelistdict': self.linelistc, 'last_obs': hist1}
+                obs2 = {'coarse_comp': comp_data[fib2s.tolist()], 'complinelistdict': self.linelistc, 'last_obs': hist2}
 
                 all_obs = [obs1, obs2]
                 if len(all_obs) < 4:
@@ -188,40 +203,65 @@ class Calibrations:
                     NPROC = 4
 
                 with Pool(NPROC) as pool:
-                    tabs = pool.map(automated_calib_wrapper_script, all_obs)
+                    outs = pool.map(automated_calib_wrapper_script, all_obs)
+
+                # out = {'coefs': coeftab,
+                #        'metric': metrictab,
+                #        'clines': linestab,
+                #        'pixels': pixtab}
+                tabs0 = coarse_calib_configure_tables(outs[0])
+                tabs1 = coarse_calib_configure_tables(outs[1])
 
                 overlaps = self.instrument.overlapping_fibs[self.camera]
-                if pairnum == 0:
-                    template = self.savetemplate_funcs(cam=str(cc_filnum) + '_', ap='{fiber}', imtype='coarse_calib',
-                                                       step='calib_directionfit_comparison', comment='auto')
-                    matches = compare_outputs(comp_data, tabs[0], tabs[1],save_template=template,\
-                                              save_plots=self.save_plots,show_plots=self.show_plots)
-                    matches = list(matches)
 
-                    if np.any(np.sort(overlaps) != np.sort(matches)):
-                        print("The overlaps returned from the matching didn't match the overlaps")
-                        print("that were explicitly defined: {}  {}".format(matches, overlaps))
-                else:
+                template = self.savetemplate_funcs(cam=str(cc_filnum) + '_', ap='{fiber}', imtype='coarse_calib',
+                                                   step='calib_directionfit_comparison', comment='auto')
+                matches = compare_outputs(comp_data, tabs0['coefs'],tabs1['coefs'],save_template=template,\
+                                          save_plots=self.save_plots,show_plots=self.show_plots)
+                matches = list(matches)
+
+                if np.any(np.sort(overlaps) != np.sort(matches)):
+                    print("The overlaps returned from the matching didn't match the overlaps")
+                    print("that were explicitly defined: {}  {}".format(matches, overlaps))
+                if pairnum > 0:
                     lastcc,lastfc = self.pairings[pairnum-1]
                     template = self.savetemplate_funcs(cam='{}-{}_'.format(cc_filnum,lastcc), ap='{fiber}',
                                                        imtype='coarse_calib',
                                                        step='calib_time_comparison', comment='auto')
-                    matches = compare_outputs(comp_data, tabs[0][overlaps.tolist()],\
+                    matches = compare_outputs(comp_data, tabs0['coefs'][overlaps.tolist()],\
                                               self.coarse_calibration_coefs[pairnum-1][overlaps.tolist()],\
                                               save_template=template, \
                                               save_plots=self.save_plots, show_plots=self.show_plots)
+                for tab in tabs0:
+                    tab.remove_column(overlaps[1])
+                for tab in tabs1:
+                    tab.remove_column(overlaps[0])
 
-                tabs[0].remove_column(overlaps[1])
-                tabs[1].remove_column(overlaps[0])
-
-                out_calib = hstack([tabs[0], tabs[1]])
+                out_calib = hstack([tabs0['coefs'], tabs1['coefs']])
                 out_calib = out_calib[self.instrument.full_fibs[self.camera].tolist()]
 
-            self.coarse_calibration_coefs[pairnum] = out_calib.copy()
+                out_metric = hstack([tabs0['metric'], tabs1['metric']])
+                out_metric = out_metric[self.instrument.full_fibs[self.camera].tolist()]
 
-            self.filemanager.save_basic_calib_dict(out_calib, self.lampstr_c, self.camera, self.config, filenum=cc_filnum)
+                out_lines = hstack([tabs0['clines'], tabs1['clines']])
+                out_lines = out_lines[self.instrument.full_fibs[self.camera].tolist()]
+
+                out_pixels = hstack([tabs0['pixels'], tabs1['pixels']])
+                out_pixels = out_pixels[self.instrument.full_fibs[self.camera].tolist()]
+
+            self.coarse_calibration_coefs[pairnum] = out_calib.copy()
+            prim = fits.PrimaryHDU(header=self.coarse_calibrations[cc_filnum].header)
+            calibs = fits.BinTableHDU(data=out_calib, name='calib coefs')
+            varis = fits.BinTableHDU(data=out_metric, name='metric')
+            lambs = fits.BinTableHDU(data=out_lines, name='wavelengths')
+            pix = fits.BinTableHDU(data=out_pixels, name='pixels')
+            hdulist = fits.HDUList([prim, calibs, lambs, pix, varis])
+
+            self.filemanager.save_full_calib_dict(hdulist, self.lampstr_c, self.camera, self.config, filenum=cc_filnum)
 
             histories = out_calib
+
+
 
     def run_final_calibrations(self,initial_priors='parametric'):
         if not self.do_fine_calib:
@@ -254,41 +294,6 @@ class Calibrations:
             initial_coef_table = Table(self.get_parametricfits_of(caltype='coarse'))
 
         for pairnum,filnums in self.pairings.items():
-
-            # if pairnum == 0:
-            #     from astropy.io import fits
-            #     first = fits.open('/nfs/kremin/M2FS_analysis/data/A11/calibrations/r_calibration_full-ThAr_11D_1725_387164.fits')
-            #     initial_coef_table = Table(first[1].data)
-            #     self.fine_calibration_coefs[0] = initial_coef_table.copy()
-            #     select_lines = False
-            #     wm,fm = self.selected_lines['ThAr']
-            #     select_linedict = {}
-            #     waves = Table(first[2].data)
-            #     for fib in waves.colnames:
-            #         curwaves = waves[fib]
-            #         itterwm,itterfm = [],[]
-            #         for wave in curwaves:
-            #             if wave == 0.:
-            #                 continue
-            #             loc = np.argmin(np.abs(wave-wm))
-            #             itterwm.append(wm[loc])
-            #             itterfm.append(fm[loc])
-            #         select_linedict[fib] = (np.array(itterwm),np.array(itterfm))
-            #     self.selected_lines = select_linedict
-            #     continue
-            # elif pairnum == 1:
-            #     second = fits.open('/nfs/kremin/M2FS_analysis/data/A11/calibrations/r_calibration_full-ThAr_11D_1732_387164.fits')
-            #     initial_coef_table = Table(second[1].data)
-            #     self.fine_calibration_coefs[1] = initial_coef_table.copy()
-            #     devs = 0
-            #     continue
-            # elif pairnum == 2:
-            #     second = fits.open('/nfs/kremin/M2FS_analysis/data/A11/calibrations/r_calibration_full-ThAr_11D_1947_387164.fits')
-            #     initial_coef_table = Table(second[1].data)
-            #     self.fine_calibration_coefs[1] = initial_coef_table.copy()
-            #     devs = 0
-            #     continue
-
             filenum = filnums[self.filenum_ind]
 
             data = Table(self.fine_calibrations[filenum].data)

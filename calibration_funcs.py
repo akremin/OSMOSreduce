@@ -15,9 +15,10 @@ from astropy.table import Table
 
 from scipy.signal import medfilt
 from scipy.signal import find_peaks
+from scipy.optimize import curve_fit
 import numpy as np
 from scipy.signal import argrelmax
-
+from collections import OrderedDict
 deltat = np.datetime64('now' ,'m').astype(int) -np.datetime64('2018-06-01T00:00' ,'m').astype(int)
 print(deltat)
 
@@ -25,280 +26,213 @@ print(deltat)
 
 import numpy as np
 
-def run_automated_calibration(coarse_comp, complinelistdict, last_obs=None, print_itters = True, only_use_peaks = True):
-    precision = 1e-4
-    convergence_criteria = 1.0e-5 # change in correlation value from itteration to itteration
-    waves, fluxes = generate_synthetic_spectra(complinelistdict, precision=precision,\
-                                               maxheight=10000.,minwave=3400,maxwave=7500)
+def run_automated_calibration(coarse_comp, complinelistdict, last_obs=None):
+    calibrationline_fluxcut = 0.
+    n_attempts_beforebad = 100
+    n_resolution_iters = 100
+
+    # elements = ['Hg', 'Ne']
+    euc_tolerance_perpix = 0.08  # 0.14
+    frac_reduction, stepfrac = 0.6, 0.1
+
+    ## 5063.36264  9.98328419e-01 -1.51722887e-06
+    abound_mean, abound_hw = 5000.0, 600.0  # 5063.36264, 40.0
+    bbound_mean, bbound_hw = 1.0, 0.1  # 9.98328419e-01, 0.01
+    cbound_mean, cbound_hw = 0.0, 2.0e-5  # -1.51722887e-06, 2.0e-6#
 
     ## Make sure the information is in astropy table format
     coarse_comp = Table(coarse_comp)
-    # for fib in ['r209','r711','r808']:
-    #     if fib in coarse_comp.colnames:
-    #         coarse_comp.remove_column(fib)
-    ## Define loop params
-    counter = 0
 
-    ## Initiate arrays/dicts for later appending inside loop (for keeping in scope)
-    all_coefs = {}
-    all_flags = {}
+    # select_complinelistdict = {element: complinelistdict[element] for element in elements if element in complinelistdict.keys()}
+    # wm, fm = get_wm_fm(select_complinelistdict, cut=calibrationline_fluxcut)
+    wm, fm = get_wm_fm(complinelistdict, cut=calibrationline_fluxcut)
 
-    ## Loop over fiber names (strings e.g. 'r101')
-    ##hack!
-    cam = coarse_comp.colnames[0][0]
+    mat_wm = wm.reshape((wm.size, 1)).T
 
-    if cam =='b':
-        numerics = np.asarray([(16 * (9 - int(fiber[1]))) + int(fiber[2:]) for fiber in coarse_comp.colnames])
-    else:
-        numerics = np.asarray([(16 * int(fiber[1])) + int(fiber[2:]) for fiber in coarse_comp.colnames])
+    frac = 1.0 / frac_reduction
+    specs_to_run = np.array(coarse_comp.colnames)  # [::20]:['r216','r301','r302','r309','r310','r311','r312']
+    calib_coefs = OrderedDict()
+    for attempt in range(n_attempts_beforebad):
+        last_good = {'euc': 1e8, 'a': abound_mean, 'b': bbound_mean, 'c': cbound_mean}
+        n_baddist_skip = int(attempt)
+        bad_specs = []
+        for specname in specs_to_run:
+            specflux, pix, ph, ppix = get_peaks(coarse_comp, specname=specname)
 
-    sorted = np.argsort(numerics)
-    fibernames = np.array(coarse_comp.colnames)[sorted]
+            mat_ppix = ppix.reshape((ppix.size, 1))
 
-    if cam == 'r' and int(fibernames[0][1]) > 3:
-        fibernames = fibernames[::-1]
-    elif cam =='b' and int(fibernames[0][1]) < 6:
-        fibernames = fibernames[::-1]
-
-    burnin = 6;
-    fibernames = np.concatenate([fibernames[:burnin], fibernames[1:burnin - 1][::-1], fibernames])
-
-    for counter,fiber_identifier in enumerate(fibernames):#['r101','r408','r409','r608','r816']:
-        #print("\n\n", fiber_identifier)
-
-        ## Get the spectra (column with fiber name as column name)
-        comp_spec = np.asarray(coarse_comp[fiber_identifier])
-
-        if only_use_peaks:
-            ## Find just the peaks in the calibration spectrum
-            c_peak_inds, c_peak_props = find_peaks(comp_spec, height=(400, None), width=(0.1, 20), \
-                                                   threshold=(None, None),
-                                                   prominence=(200, None), wlen=101)
-
-            ## create pixel array for mapping to wavelength
-            c_peak_inds = np.asarray(c_peak_inds)
-            np.random.seed(int(np.sum(comp_spec)))
-            randoms = np.random.randint(low=0,high=len(comp_spec),size=len(comp_spec)//4)
-            #randoms = np.arange(len(comp_spec))[::2]
-            pix1 = np.concatenate((c_peak_inds,c_peak_inds-1,c_peak_inds+1,c_peak_inds-2,c_peak_inds+2,randoms))
-            pix1 = np.unique(np.sort(pix1))
-            pix1 = pix1[pix1<len(comp_spec)]
-            comp_spec = comp_spec[pix1]
-            #comp_spec[pix1<400] *= 100.
-        else:
-            pix1 = np.arange(len(comp_spec))
-
-        abest, bbest, cbest, corrbest = 0., 0., 0., 0.
-        alow, ahigh = 3000, 8000
-        awidth, bwidth, cwidth = 12, 0.005, 5.0e-6
-
-        if last_obs is None or fiber_identifier not in last_obs.keys():
-            if counter == 0:
-                avals = (alow, ahigh+1, 1)
-                bvals = (1.0,1.01,0.1)
-                cvals = (0, 1.0, 2)
-                if print_itters:
-                    print("\nItter 1 results, (fixing c to 0.):")
-                abest, trashb, trashc, corrbest = fit_using_crosscorr(pixels=pix1, raw_spec=comp_spec,
-                                                                      comp_highres_fluxes=fluxes, \
-                                                                      avals=avals, bvals=bvals, cvals=cvals, \
-                                                                      calib_wave_start=waves[0],
-                                                                      flux_wave_precision=precision,\
-                                                                      print_itters=print_itters)
-
-
-                avals = (abest-40, abest+41, 0.5)
-                bvals = (0.96,1.04,0.005)
-                cvals = (-1.0e-5, 1.0e-5, 1.0e-6)
-                if print_itters:
-                    print("\nItter 1 results, (fixing c to 0.):")
-                abest, bbest, cbest, corrbest = fit_using_crosscorr(pixels=pix1, raw_spec=comp_spec,
-                                                                      comp_highres_fluxes=fluxes, \
-                                                                      avals=avals, bvals=bvals, cvals=cvals, \
-                                                                      calib_wave_start=waves[0],
-                                                                      flux_wave_precision=precision,\
-                                                                      print_itters=print_itters)
-
-            elif counter < 3:
-                compare_fiber = fibernames[counter - 1]
-                [trasha, bbest, cbest, trash1, trash2, trash3] = all_coefs[compare_fiber]
-                if (bbest < 0.96) or (bbest>1.04):
-                    bbest = 1.0
-                    cbest = 0.
-                astep,bstep,cstep = 0.5, 0.04, 8.0e-6
-                avals = (alow,   ahigh+astep,  astep)
-                bvals = (bbest , bbest+bstep , bstep)
-                cvals = (cbest , cbest+cstep , cstep)
-                if print_itters:
-                    print("\nItter 1 results, (fixing b and c to past vals):")
-                abest, trashb, trashc, corrbest = fit_using_crosscorr(pixels=pix1, raw_spec=comp_spec,
-                                                                    comp_highres_fluxes=fluxes, \
-                                                                    avals=avals, bvals=bvals, cvals=cvals, \
-                                                                    calib_wave_start=waves[0],
-                                                                    flux_wave_precision=precision,\
-                                                                      print_itters=print_itters)
+            if last_obs is not None and specname in last_obs.colnames:
+                best = {}
+                best['a'],best['b'],best['c'] = last_obs[specname][0:3]
             else:
-                compare_fiber1 = fibernames[counter - 1]
-                [a1, b1, c1, trash1, trash2, trash3] = all_coefs[compare_fiber1]
-                compare_fiber2 = fibernames[counter - 2]
-                [a2, b2, c2, trash1, trash2, trash3] = all_coefs[compare_fiber2]
-                compare_fiber3 = fibernames[counter - 3]
-                [a3, b3, c3, trash1, trash2, trash3] = all_coefs[compare_fiber3]
-                abest = np.median([a1, a2, a3])
-                bbest = np.median([b1, b2, b3])
-                cbest = np.median([c1, c2, c3])
+                best = last_good.copy()
+            best['euc'], best['nlines'] = 1e8, 1
+            best['clines'],best['pixels'] = [],[]
+            euc_tolerance = euc_tolerance_perpix * (len(ppix) - n_baddist_skip)
 
-                if (bbest < 0.96) or (bbest>1.04):
-                    bbest = 1.0
-                    cbest = 0.
-                astep,bstep,cstep = 0.5, 0.04, 8.0e-6
-                aw = 30
-                avals = (abest-aw,   abest+aw+astep,  astep)
-                bvals = (bbest , bbest+bstep , bstep)
-                cvals = (cbest , cbest+cstep , cstep)
-                if print_itters:
-                    print("\nItter 1 results, (fixing b and c to past vals):")
-                abest, trashb, trashc, corrbest = fit_using_crosscorr(pixels=pix1, raw_spec=comp_spec,
-                                                                    comp_highres_fluxes=fluxes, \
-                                                                    avals=avals, bvals=bvals, cvals=cvals, \
-                                                                    calib_wave_start=waves[0],
-                                                                    flux_wave_precision=precision,\
-                                                                      print_itters=print_itters)
+            nochange = 0
+            for iter in np.arange(n_resolution_iters):
+                frac = frac_reduction * frac
+                aas = make_range(best['a'], abound_hw * frac, step_fraction=stepfrac)
+                bs = make_range(best['b'], bbound_hw * frac, step_fraction=stepfrac)
+                cs = make_range(best['c'], cbound_hw * frac, step_fraction=stepfrac)
 
-                #awidth, bwidth, cwidth = 10,\
-                #                         max([  min([  bwidth,np.max(bbest)-np.min(bbest)  ]),  1.0e-3    ]),\
-                #                         max([  min([  cwidth,np.max(cbest)-np.min(cbest)  ]),  1.0e-7   ])
+                old_bests = np.array([best['a'], best['b'], best['c']], copy=True)
+                for c in cs:
+                    cterm = (c * mat_ppix * mat_ppix)
+                    for b in bs:
+                        bcterm = (b * mat_ppix) + cterm
+                        for a in aas:
+                            guess = a + bcterm
+                            dists_locs = np.argmin(np.abs(mat_wm - guess), axis=1)
+                            dists = np.abs(wm[dists_locs] - guess.flatten())
+                            if n_baddist_skip > 0:
+                                sorted_inds = np.argsort(dists)[:-n_baddist_skip]  # [:int(0.5*len(ppix))]
+                                cdists = dists[sorted_inds]
+                            else:
+                                cdists = dists
+                            euc_dist = np.sqrt(np.dot(cdists, cdists))
 
+                            if euc_dist < best['euc']:
+                                best['euc'] = euc_dist
+                                best['nlines'] = len(cdists)
+                                if n_baddist_skip > 0:
+                                    best['clines'] = wm[dists_locs][sorted_inds]
+                                    best['pixels'] = ppix[sorted_inds]
+                                else:
+                                    best['clines'] = wm[dists_locs]
+                                    best['pixels'] = ppix
+                                best['a'] = a
+                                best['b'] = b
+                                best['c'] = c
+                if np.all(np.abs(old_bests - np.array([best['a'], best['b'], best['c']])) / old_bests < 0.00001):
+                    # print(specname,(old_bests - np.array([best['a'], best['b'], best['c']])) / old_bests )
+                    nochange += 1
+                else:
+                    nochange = 0
+                if best['euc'] < euc_tolerance or nochange > 5:
+                    break
+            calib_coefs[specname] = best.copy()
+            print(specname, '---->\tmin_dist={:0.2f}, with nlines={:02d} ({:0.4f} dist/line)\n\t\t\ta=\t{:0.2f}\t\tb=\t{:0.04f}\t\tc=\t{:0.04e}\n\t\t\tMet Threshold?: {}'.format(best['euc'],best['nlines'],best['euc']/best['nlines'],best['a'],best['b'],best['c'],best['euc'] < euc_tolerance))
+            if best['euc'] < 2 * euc_tolerance:
+                last_good = best.copy()
+            if best['euc'] > 4 * euc_tolerance:
+                if best['nlines'] > 3:  # 3 coefs, reducing nlines by 1 each iteration
+                    if len(bad_specs)+1 > 20:
+                        current_loop_loc = np.where(specs_to_run==specname)[0][0]
+                        bad_specs.extend(specs_to_run[current_loop_loc:].tolist())
+                        specs_to_run = np.array(bad_specs, copy=True)
+                        print("\nMore than 20 bad specs found in this iteration. Possibly too many lines used. Rerunning with fewer.")
+                        print("\n\n\tRerunning: {}".format(specs_to_run))
+                        break
+                    else:
+                        bad_specs.append(specname)
+                else:
+                    print(
+                        "{} only has 3 lines remaining. A better fit cannot be made. Not continuing with that fiber".format(
+                            specname))
+                # plt.figure()
+                # plt.title(specname)
+                # plt.plot(get_waves_fromdict(pix, best), specflux, label='r816')
+                # plt.plot(get_waves_fromdict(ppix, best), ph, 'r*')
+                # best_guess = get_waves_fromdict(ppix, best)
+                # matched_wm_inds = np.argmin(np.abs(mat_wm - guess), axis=1)
+                # calibflux = fm[matched_wm_inds]
+                # spec_adjusted_calibflux = specflux.max() * calibflux / calibflux.max()
+                # plt.plot(wm[matched_wm_inds], spec_adjusted_calibflux, 'b^')
+                # plt.show()
+            del best
+            ## Don't divide by frac, meaning all iterations after the first
+            ## will start with smaller step sizes by that factor
+            frac = 1.
+
+        specs_to_run = np.array(bad_specs, copy=True)
+        if len(bad_specs) == 0:
+            break
         else:
-            [abest, bbest, cbest, trash1, trash2, trash3] = last_obs[fiber_identifier]
-            awidth, bwidth, cwidth = awidth/2., bwidth/2., cwidth/2.
-            if print_itters:
-                print("\nItter 1 results:")
-                print("--> Using previous obs value of:   a={:.2f}, b={:.5f}, c={:.2e}".format(abest, bbest, cbest))
+            print("\n\n\tRerunning: {}".format(specs_to_run))
 
-        astep,bstep,cstep = 0.5, bwidth/10., cwidth/10.
+    return calib_coefs
 
-        dcorr = 1.
-        for itter in range(100):
-            if print_itters:
-                print("\nItter {:d} results:".format(itter+2))
-            last_corrbest = corrbest
-            incremental_res_div = 4.
-            astep, bstep, cstep = astep/incremental_res_div, bstep/incremental_res_div, cstep/incremental_res_div
-            awidth,bwidth,cwidth = awidth/incremental_res_div,bwidth/incremental_res_div,cwidth/incremental_res_div
-            avals = ( abest-awidth, abest+awidth+astep, astep )
-            bvals = ( bbest-bwidth, bbest+bwidth+bstep, bstep )
-            cvals = ( cbest-cwidth, cbest+cwidth+cstep, cstep )
-            abest_itt, bbest_itt, cbest_itt, corrbest = fit_using_crosscorr(pixels=pix1, raw_spec=comp_spec, comp_highres_fluxes=fluxes, \
-                                                                avals=avals, bvals=bvals, cvals=cvals, \
-                                                                calib_wave_start=waves[0], flux_wave_precision=precision,\
-                                                                      print_itters=print_itters)
-            if corrbest > last_corrbest:
-                abest,bbest,cbest = abest_itt, bbest_itt, cbest_itt
 
-            dcorr = np.abs(corrbest-last_corrbest)
-            if dcorr < convergence_criteria:
-                break
+def poly5(x,a,b,c,d,e,f):
+    return a+ b*x + c*x*x + d*np.power(x,3) + \
+           e * np.power(x, 4) + f*np.power(x,5)
+def poly2(x,a,b,c):
+    return a+ b*x + c*x*x
 
-        print("\n\n", fiber_identifier)
-        print("--> Results:   a={:.2f}, b={:.5f}, c={:.2e}".format(abest, bbest, cbest))
+def make_range(mean_val,bound_hw,step_fraction= 0.1):
+    lower_bound = mean_val-bound_hw
+    upper_bound = mean_val+bound_hw
+    step_size = step_fraction*bound_hw
+    return np.arange(lower_bound,upper_bound+step_size,step_size)
 
-        all_coefs[fiber_identifier] = [abest, bbest, cbest, 0., 0., 0.]
-        all_flags[fiber_identifier] = corrbest
+def get_waves_fromdict(pixels,diction):
+    a,b,c = diction['a'],diction['b'],diction['c']
+    return a+b*pixels+c*pixels*pixels
 
-    return Table(all_coefs)
 
-def fit_using_crosscorr(pixels, raw_spec, comp_highres_fluxes, avals, bvals, cvals, calib_wave_start, flux_wave_precision,print_itters):
-    alow, ahigh, astep = avals
-    blow, bhigh, bstep = bvals
-    clow, chigh, cstep = cvals
+def get_wm_fm(complinelistdict,cut= 10000.):
+    wm, fm = [], []
 
-    pix1 = pixels
-    pix2 = pixels*pixels
-    prec_multiplier = int(1/flux_wave_precision)
-    if print_itters:
-        print("--> Looking for best fit within:   a=({:.2f}, {:.2f})  b=({:.5f}, {:.5f})  c=({:.2e}, {:.2e})  with steps=({:.2f}, {:.1e}, {:.1e})".format(alow, ahigh-astep,\
-                                                                                                      blow, bhigh-bstep,\
-                                                                                                      clow, chigh-cstep,\
-                                                                                                      astep, bstep,cstep))
+    # plt.figure()
+    for element, (xe0, xe1) in complinelistdict.items():
+        xe1f = xe1.copy()
+        xe1f[xe1f < 1.] = 1.
+        xe0c = xe0[xe1f > cut].copy()
+        xe1c = xe1f[xe1f > cut].copy()
+        wm.extend(xe0c.tolist())
+        fm.extend(xe1c.tolist())
+    wm,fm = np.array(wm),np.array(fm)
+    # fm = fm[((wm>5200)&(wm<7100))]
+    # wm = wm[((wm>5200)&(wm<7100))]
+    sortd = np.argsort(wm)
+    return wm[sortd],fm[sortd]
 
-    aitterbest, bitterbest, citterbest,corrbest = 0., 0., 0.,0.
-    for b in np.arange(blow,bhigh,bstep):
-        pixb = b * pix1
-        for c in np.arange(clow,chigh,cstep):
-            pixbc = pixb + (c * pix2)
-            pixinds = (pixbc * prec_multiplier).astype(int)
-            for a in np.arange(alow,ahigh,astep):
-                indoffset = int((a - calib_wave_start) * prec_multiplier)
-                synthwaveinds = pixinds + indoffset
-                cut_comp_spec = raw_spec
-                if len(synthwaveinds) == 0:
-                    continue
-                elif len(synthwaveinds)>40 and (synthwaveinds[-40] < 0. or synthwaveinds[40] >= len(comp_highres_fluxes)):
-                    continue
-                elif synthwaveinds[0] < 0. or synthwaveinds[-1] >= len(comp_highres_fluxes):
-                    waverestrict_cut = np.where(((synthwaveinds >= 0) & (synthwaveinds < len(comp_highres_fluxes))))[0]
-                    synthwaveinds = synthwaveinds[waverestrict_cut]
-                    cut_comp_spec = raw_spec[waverestrict_cut]
-                synthflux = comp_highres_fluxes[synthwaveinds]
-                #corr, pval = pearsonr(synthflux, cut_comp_spec)
-                corrs = np.correlate(synthflux, cut_comp_spec)
-                corr = np.sqrt(np.dot(corrs,corrs))
-                if corr > corrbest:
-                    aitterbest, bitterbest, citterbest, corrbest = a, b, c, corr
+def get_peaks(coarse_comp,specname='r816'):
+    min_height = 200.
+    spec = coarse_comp[specname]
+    pix = np.arange(len(spec)).astype(float)
+    nppix = 0.
+    itter = 1
+    maxspec = np.max(spec)
+    while nppix < 22:
+        ppix, peaks = find_peaks(spec, height=maxspec / (2+itter), prominence=maxspec / (2+itter),wlen=100)
+        nppix = len(ppix)
+        itter += 1
+    ph = np.array(peaks['peak_heights'])
+    proms = np.array(peaks['prominences'])
+    ppix = np.array(ppix)
+    return spec,pix,ph[proms>min_height],ppix[proms>min_height]
 
-    if print_itters:
-        if (aitterbest == alow) or (aitterbest == (ahigh-astep)):
-            if ahigh != alow+astep:
-                print("!--> Warning: best fit return a boundary of the search region: alow={:.2f}, ahigh={:.2f}, abest={:.2f}".format(alow,ahigh,aitterbest))
-        if (bitterbest == blow) or (bitterbest == (bhigh-bstep)):
-            if bhigh != blow+bstep:
-                print("!--> Warning: best fit return a boundary of the search region: blow={:.5f}, bhigh={:.5f}, bbest={:.5f}".format(blow,bhigh,bitterbest))
-        if (citterbest == clow) or (citterbest == (chigh-cstep)):
-            if chigh != clow+cstep:
-              print("!--> Warning: best fit return a boundary of the search region: clow={:.2e}, chigh={:.2e}, cbest={:.2e}".format(clow,chigh,citterbest))
 
-        print("--> --> Best fit correlation value: {}    with fits a={:.2f}, b={:.5f}, c={:.2e}".format(corrbest,aitterbest, bitterbest, citterbest))
+def coarse_calib_configure_tables(dict_of_dicts):
+    maxlines = np.max([val['nlines'] for val in dict_of_dicts.values()])
+    coeftab,metrictab,linestab,pixtab = Table(),Table(),Table(),Table()
 
-    return aitterbest, bitterbest, citterbest, corrbest
+    for fib,fibdict in dict_of_dicts.items():
+        coefcolvals = np.array([fibdict['a'], fibdict['b'], fibdict['c'], 0., 0., 0.])
+        coefcol = Table.Column(name=fib,data=coefcolvals)
+        coeftab.add_column(coefcol)
 
-def gaussian(x0,height,xs):
-    width = 1.0+0.2*np.log(height)/np.log(500.)
-    twosig2 = 2.*width*width
-    dx = xs-x0
-    fluxes = height*np.exp(-(dx*dx)/twosig2)
-    return fluxes
+        metcol = Table.Column(name=fib,data=np.array([fibdict['euc']]))
+        metrictab.add_column(metcol)
 
-def generate_synthetic_spectra(compdict,precision=1.e-4,maxheight=10000.,\
-                               minwave = 3400, maxwave = 7500):
-    heights,waves = [],[]
+        lines = np.append(fibdict['clines'],np.zeros(maxlines-fibdict['nlines']))
+        pixels = np.append(fibdict['pixels'],np.zeros(maxlines-fibdict['nlines']))
 
-    for compname,(itterwaves,itterheights) in compdict.items():
-        normalized_height = maxheight*np.asarray(itterheights).astype(np.float)/np.max(itterheights)
-        if compname == 'Xe':
-            normalized_height = normalized_height / 100.
-        waves.extend(list(itterwaves))
-        heights.extend(normalized_height.tolist())
+        linecol = Table.Column(name=fib,data=lines)
+        linestab.add_column(linecol)
 
-    wave_order = np.argsort(waves)
-    heights = np.asarray(heights)[wave_order]
-    waves = np.asarray(waves)[wave_order]
-    wavecut = ((waves>minwave)&(waves<maxwave))
-    heights,waves = heights[wavecut],waves[wavecut]
+        pixelcol = Table.Column(name=fib,data=pixels)
+        pixtab.add_column(pixelcol)
 
-    minwave,maxwave = np.floor(waves.min()),np.ceil(waves.max())
-    wavelengths = np.arange(minwave,maxwave,precision)
-    fluxes = np.zeros(len(wavelengths)).astype(np.float)
+    out = {'coefs': coeftab,
+           'metric': metrictab,
+           'clines': linestab,
+           'pixels': pixtab  }
+    return out
 
-    idxs = ((waves - minwave) / precision).astype(int)
-    idx_width = int(20/precision)
-    for idx,center,height in zip(idxs,waves,heights):
-        itterwaves = wavelengths[idx-idx_width:idx+idx_width+1]
-        itterflux = gaussian(center,height,itterwaves)
-        fluxes[idx-idx_width:idx+idx_width+1] += itterflux
-
-    #plt.figure(); plt.plot(wavelengths,fluxes,'r-'); plt.plot(waves,maxheight*heights,'b.'); plt.show()
-    return wavelengths,fluxes
 
 def compare_outputs(raw_data,table1,table2,save_template='{fiber}.png',save_plots=True,show_plots=False):
     def waves(pixels, a, b, c,d,e,f):

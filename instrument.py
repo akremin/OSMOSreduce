@@ -13,13 +13,17 @@ class InstrumentState:
              self.resolution='LowRes'
              self.filter=None
              self.configuration=None
-             self.coarse_lamp_names = ['HgAr', 'NeAr', 'Xe']
-             self.fine_lamp_names = ['ThAr']
+             self.wavemin = 4500
+             self.wavemax = 7500
+             self.coarse_lamp_names = ['Hg','Ne'] #['Hg','Ar', 'Ne', 'Xe']
+             self.fine_lamp_names = ['Th', 'Ar'] #['ThAr']
         else:
             self.binning = obs_config['CCDS']['binning']
             self.readout = obs_config['CCDS']['readout_speed']
             self.resolution = obs_config['INSTRUMENT']['m2fs_res_mode']
             self.configuration = obs_config['INSTRUMENT']['config']
+            self.wavemin = float(obs_config['INSTRUMENT']['wavemin'])
+            self.wavemax = float(obs_config['INSTRUMENT']['wavemax'])
 
             self.cameras =  self.str_listify(obs_config['CCDS']['cameras'],expected_type=str)
             self.opamps =  self.str_listify(obs_config['CCDS']['opamps'],expected_type=int)

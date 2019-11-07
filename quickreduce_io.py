@@ -377,7 +377,7 @@ class FileManager:
         #linelistdict = {}
         selectedlinesdict = {}
         print(('Using calibration lamps: ', cal_lamp))
-        possibilities = ['Xe','Ar','Hg','Ne','Th','He']
+        possibilities = ['Xe','Ar','Hg','Ne','ThAr','He']
         all_wms = []
         for lamp in possibilities:
             if lamp in cal_lamp:
@@ -387,11 +387,19 @@ class FileManager:
                 pathname = os.path.join(self.directory.lampline_dir,filname)
                 sel_pathname = os.path.join(self.directory.lampline_dir,sel_filname)
                 if use_selected and os.path.exists(sel_pathname):
-                    tab = Table.read(sel_pathname,format='ascii.csv',dtype=[float,float,str,str])
+                    tab = Table.read(sel_pathname,format='ascii.csv')
                 else:
                     tab = Table.read(pathname, format='ascii.csv')
-                fm = tab['intensity'].data
-                wm_air,wm_air_uncs = tab['obs_wl_air(A)'].data,tab['unc_obs_wl'].data
+                if lamp == 'ThAr':
+                    flux_name = 'Relative_Intensity'
+                    wave_name = 'Measured_Wavelength_(A)'
+                    wave_unc = 'Measured_Wavelength_Uncertainty_(A)'
+                else:
+                    flux_name = 'intensity'
+                    wave_name = 'obs_wl_air(A)'
+                    wave_unc = 'unc_obs_wl'
+                fm = tab[flux_name].data
+                wm_air,wm_air_uncs = tab[wave_name].data,tab[wave_unc].data
                 if 'Use' in tab.colnames:
                     boolean = np.array([val.lower()=='y' for val in tab['Use']]).astype(bool)
                 else:

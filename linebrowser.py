@@ -35,7 +35,7 @@ class LineBrowser:
 
         deviation = edge_line_distance
         good_waves = ((wm>(xspectra[0]-deviation))&(wm<(xspectra[-1]+deviation)))
-        wm,fm = wm[good_waves],fm[good_waves]
+        wm,fm = wm[good_waves],fm[good_waves]/3.
         good_waves = ((all_wms>(xspectra[0]-deviation))&(all_wms<(xspectra[-1]+deviation)))
         all_wms = all_wms[good_waves]
         del good_waves
@@ -514,3 +514,6 @@ def least_squares_fit(coefs,pixels,wavelengths,bounds):
         resid = 1e6
 
     return params,cov, resid
+
+
+
