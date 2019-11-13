@@ -17,7 +17,8 @@ from scipy import signal
 
 
 import numpy as np
-
+from fine_calibration import get_psf
+from scipy.ndimage import gaussian_filter
 
 def fifth_order_poly(p_x, zeroth, first, second, third, fourth, fifth):
     return zeroth + (first * p_x) + (second * np.power(p_x,2)) + (third * np.power(p_x,3)) + \
@@ -25,7 +26,7 @@ def fifth_order_poly(p_x, zeroth, first, second, third, fourth, fifth):
 
 
 class LineBrowser:
-    def __init__(self, wm, fm, f_x, coefs, all_wms, bounds=None,edge_line_distance=0.,initiate=True, fibname=''):
+    def __init__(self, wm,fm,all_wms,mock_spec_w,mock_spec_f, f_x, coefs, bounds=None,edge_line_distance=0.,initiate=True, fibname=''):
         self.bounds = bounds
         self.coefs = np.asarray(coefs,dtype=np.float64)
 
@@ -40,8 +41,17 @@ class LineBrowser:
         all_wms = all_wms[good_waves]
         del good_waves
 
+        if mock_spec_f is not None:
+            psf = get_psf(f_x, step=1, prom_quantile=0.68, npeaks=6)
+            convd_mock_spec_f = gaussian_filter(mock_spec_f, sigma=psf / (mock_spec_w[1] - mock_spec_w[0]), order=0)
+            good_waves = ((mock_spec_w>(xspectra[0]-deviation))&(mock_spec_w<(xspectra[-1]+deviation)))
+            mock_spec_w = mock_spec_w[good_waves]
+            convd_mock_spec_f = convd_mock_spec_f[good_waves]
+            convd_mock_spec_f = 0.8*f_x.max()*convd_mock_spec_f/convd_mock_spec_f.min()
+
+
         fydat = f_x - signal.medfilt(f_x, 171)
-        fyreal = (f_x - f_x.min()) / 10.0
+        fyreal = (f_x - f_x.min()) #/ 10.0
 
         peaks,properties = signal.find_peaks(fydat)  # find peaks
         fxpeak = xspectra[peaks]  # peaks in wavelength
@@ -73,6 +83,8 @@ class LineBrowser:
         self.wm = wm
         self.fm = fm
 
+        self.mock_spec_w = mock_spec_w
+        self.mock_spec_f = convd_mock_spec_f
         self.xspectra = xspectra
         self.yspectra = yspectra
         self.peaks = peaks
@@ -93,8 +105,11 @@ class LineBrowser:
 
         plt.subplots_adjust(right=0.8, left=0.05, bottom=0.20)
 
+        if self.mock_spec_w is not None:
+            ax.fill_between(self.mock_spec_w, self.mock_spec_f, y2=0, color='gray', alpha=0.2)
         for w in self.all_wms:
             ax.axvline(w, color='gray', alpha=0.2)
+
 
         vlines = []
         for w in self.wm:

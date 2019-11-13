@@ -366,28 +366,25 @@ class FileManager:
         #     for camera,hdu in all_hdus.items():
         #         self.write_zfit(outhdu=hdu,camera=camera,step=step)
 
-    def load_calibration_lines_dict(self, cal_lamp, wavemincut=4000, wavemaxcut=10000, use_selected=False):
+    def load_calibration_lines_dict(self, cal_lamp, wavemincut=4000, wavemaxcut=10000, use_selected=True):
         # return self.load_salt_calibration_lines_dict(cal_lamp,wavemincut=wavemincut,wavemaxcut=wavemaxcut,use_selected=use_selected)
         return self.load_nist_calibration_lines_dict(cal_lamp,wavemincut=wavemincut,wavemaxcut=wavemaxcut,use_selected=use_selected)
 
-
-    def load_nist_calibration_lines_dict(self, cal_lamp, wavemincut=4000, wavemaxcut=10000, use_selected=False):
+    def load_synth_calibration_spec(self,cal_lamp, wavemincut=3000., wavemaxcut=8000.):
         """Assumes the format of the nist linelist csvs privuded with this package"""
         from calibration_helper_funcs import air_to_vacuum
-        #linelistdict = {}
-        selectedlinesdict = {}
         print(('Using calibration lamps: ', cal_lamp))
-        possibilities = ['Xe','Ar','Hg','Ne','ThAr','He']
-        all_wms = []
+        possibilities = ['Xe', 'Ar', 'Hg', 'Ne', 'ThAr', 'He']
+        all_wms,all_fms = [],[]
         for lamp in possibilities:
             if lamp in cal_lamp:
                 print(lamp)
-                filname = self.lampline_template.format(mod='',lamp=lamp)
-                sel_filname = self.lampline_template.format(mod='selected_',lamp=lamp)
-                pathname = os.path.join(self.directory.lampline_dir,filname)
-                sel_pathname = os.path.join(self.directory.lampline_dir,sel_filname)
-                if use_selected and os.path.exists(sel_pathname):
-                    tab = Table.read(sel_pathname,format='ascii.csv')
+                filname = self.lampline_template.format(mod='', lamp=lamp)
+                full_filname = filname.replace('_cleaned_','_fullres_')
+                pathname = os.path.join(self.directory.lampline_dir, filname)
+                full_pathname = os.path.join(self.directory.lampline_dir, full_filname)
+                if os.path.exists(full_pathname):
+                    tab = Table.read(full_pathname, format='ascii.csv')
                 else:
                     tab = Table.read(pathname, format='ascii.csv')
                 if lamp == 'ThAr':
@@ -399,8 +396,52 @@ class FileManager:
                     wave_name = 'obs_wl_air(A)'
                     wave_unc = 'unc_obs_wl'
                 fm = tab[flux_name].data
-                wm_air,wm_air_uncs = tab[wave_name].data,tab[wave_unc].data
+                wm_air, wm_air_uncs = tab[wave_name].data, tab[wave_unc].data
                 if 'Use' in tab.colnames:
+                    boolean = np.array([val.lower() == 'y' for val in tab['Use']]).astype(bool)
+                else:
+                    boolean = np.ones(len(tab)).astype(bool)
+                good_measurements = ((((wm_air_uncs / wm_air) * (3e5)) < 20)  & boolean) ## km/s
+                fm = fm[good_measurements]
+                wm_air = wm_air[good_measurements]
+                wm_vac = air_to_vacuum(wm_air)
+
+                ## sort lines by wavelength
+                sortd = np.argsort(wm_vac)
+                srt_wm_vac, srt_fm = wm_vac[sortd], fm[sortd]
+                good_waves = np.where((srt_wm_vac >= wavemincut) & (srt_wm_vac <= wavemaxcut))[0]
+                out_wm_vac, out_fm_vac = srt_wm_vac[good_waves], srt_fm[good_waves]
+                all_wms.extend(out_wm_vac.tolist())
+                all_fms.extend(out_fm_vac.tolist())
+
+        return np.asarray(all_wms), np.asarray(all_wms)
+
+    def load_nist_calibration_lines_dict(self, cal_lamp, wavemincut=4000, wavemaxcut=10000, use_selected=True):
+        """Assumes the format of the nist linelist csvs privuded with this package"""
+        from calibration_helper_funcs import air_to_vacuum
+        #linelistdict = {}
+        selectedlinesdict = {}
+        print(('Using calibration lamps: ', cal_lamp))
+        possibilities = ['Xe','Ar','Hg','Ne','ThAr','He']
+        all_wms = []
+        for lamp in cal_lamp:
+            if lamp in possibilities:
+                print(lamp)
+                filname = self.lampline_template.format(mod='',lamp=lamp)
+                sel_filname = self.lampline_template.format(mod='selected_',lamp=lamp)
+                pathname = os.path.join(self.directory.lampline_dir,filname)
+                sel_pathname = os.path.join(self.directory.lampline_dir,sel_filname)
+                if use_selected and os.path.exists(sel_pathname):
+                    tab = Table.read(sel_pathname,format='ascii.csv')
+                else:
+                    tab = Table.read(pathname, format='ascii.csv')
+
+                flux_name = 'intensity'
+                wave_name = 'obs_wl_air(A)'
+                wave_unc = 'unc_obs_wl'
+                fm = tab[flux_name].data
+                wm_air,wm_air_uncs = tab[wave_name].data,tab[wave_unc].data
+                if 'Use' in tab.colnames and use_selected:
                     boolean = np.array([val.lower()=='y' for val in tab['Use']]).astype(bool)
                 else:
                     boolean = np.ones(len(tab)).astype(bool)

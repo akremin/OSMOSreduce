@@ -306,8 +306,42 @@ def create_simple_line_spectra(elements, linelistdict, wave_low, wave_high, clab
     else:
         return cut_waves,cut_flux
 
+def update_coeficients_deviations(fiber,coef_table,completed_coefs):
+    curtet = int(fiber[1])
+    tets, fibs = [], []
+    for fib in completed_coefs.keys():
+        tets.append(int(fib[1]))
+        fibs.append(fib)
+    tets, fibs = np.array(tets), np.array(fibs)
+    if 9 - curtet in tets:
+        key = fibs[np.where((9 - curtet) == tets)[0][0]]
+        coef_dev_med = np.asarray(completed_coefs[key]) - np.asarray(coef_table[key])
+    else:
+        coef_devs = np.zeros(shape=(len(completed_coefs), 6)).astype(np.float64)
+        for ii, (key, key_coefs) in enumerate(completed_coefs.items()):
+            dev = np.asarray(key_coefs) - np.asarray(coef_table[key])
+            coef_devs[ii, :] = dev
+        coef_dev_med = np.median(coef_devs, axis=0)
+
+    return coef_dev_med
 
 
+def get_fiber_number(fibername='r101', cam=None):
+    if type(fibername) is str:
+        fibername = [fibername]
+    if cam is None:
+        cam = fibername[0][0]
+    if cam not in ['b','r']:
+        return None
+    if cam == 'b':
+        fibern = [(16 * (9 - int(fibnm[1]))) + int(fibnm[2:]) for fibnm in fibername]
+    else:
+        fibern = [(16 * int(fibnm[1])) + int(fibnm[2:]) for fibnm in fibername]
+
+    if len(fibern) == 1:
+        return fibern[0]
+    else:
+        return fibern
 
 
 
@@ -732,11 +766,3 @@ if __name__ == '__main__':
                      linelistdict=linelistdict, gal_identifier=fiber_identifier, \
                      default_dict=default_dict, steps=steps, default_key=default_key)
 
-def get_fiber_number(fibername='r101', cam=None):
-    if cam is None:
-        cam = fibername[0]
-    if cam == 'b':
-        fibern = (16 * (9 - int(fibername[1]))) + int(fibername[2:])
-    else:
-        fibern = (16 * int(fibername[1])) + int(fibername[2:])
-    return fibern
