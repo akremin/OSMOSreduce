@@ -3,18 +3,25 @@ import pickle as pkl
 import gc
 from collections import OrderedDict
 from multiprocessing import Pool
-
+import datetime as dt
 import matplotlib.pyplot as plt
 import numpy as np
 from astropy.io import fits
 from astropy.table import Table, hstack
 
-from calibration_funcs import compare_outputs, \
-    automated_calib_wrapper_script, interactive_plot, \
-    get_highestflux_waves, update_default_dict, \
-    top_peak_wavelengths,pix_to_wave_fifthorder,\
-    ensure_match, find_devs, coarse_calib_configure_tables
+from scipy.signal import medfilt
+from scipy.signal import find_peaks
+from scipy.optimize import curve_fit
+from scipy.ndimage import gaussian_filter
 
+from calibration_helper_funcs import compare_outputs, interactive_plot, \
+    get_highestflux_waves, update_default_dict, \
+    top_peak_wavelengths, pix_to_wave,\
+    ensure_match, find_devs, coarse_calib_configure_tables,\
+    get_fiber_number, pix_to_wave_explicit_coefs2, get_meantime_and_date
+
+from coarse_calibration import run_automated_calibration, run_automated_calibration_wrapper
+from fine_calibration import auto_wavelength_fitting_by_lines, auto_wavelength_fitting_by_lines_wrapper
 from linebrowser import LineBrowser
 from collections import Counter
 
@@ -100,13 +107,14 @@ class Calibrations:
         self.fine_calibration_coefs = OrderedDict()
         self.final_calibrated_hdulists = OrderedDict()
         self.evolution_in_coarse_coefs = OrderedDict()
+        self.fine_calibration_date_info = OrderedDict()
+        self.interpolated_coef_fits = OrderedDict()
 
         self.load_default_coefs()
         if load_history:
             self.load_most_recent_coefs()
 
     def load_default_coefs(self):
-        from calibration_funcs import aperature_number_pixoffset
         self.default_calibration_coefs = self.filemanager.load_calib_dict('default', self.camera, self.config)
 
     def load_most_recent_coefs(self):
@@ -134,6 +142,75 @@ class Calibrations:
                     calib_tab = calib
                 self.history_calibration_coefs[pairnum] = calib_tab
 
+    def generate_time_interpolated_calibration(self,science_hdu):
+        if len(self.interpolated_coef_fits) == 0:
+            self.interpolate_final_calibrations()
+        mean_timestamp, mean_datetime, night = get_meantime_and_date(science_hdu.header)
+
+        night_interpolator,fit_model = self.interpolated_coef_fits[night]
+        out_cols = []
+        for fib, coefs in night_interpolator.items():
+            fitted_coefs = []
+            for coef_name, coefvals in coefs.items():
+                fitted_coef = fit_model(mean_timestamp,*coefvals)
+                fitted_coefs.append(fitted_coef)
+            out_cols.append(Table.Column(name=fib,data=fitted_coefs))
+        out_table = Table(out_cols)
+        return out_table
+
+
+    def interpolate_final_calibrations(self):
+        assert(len(self.fine_calibration_date_info) > 0 and len(self.fine_calibration_coefs) > 0,\
+               "Can't interpolate data until the fine calibrations are performed and properly loaded. Exiting")
+
+        coef_names = ['a', 'b', 'c', 'd', 'e', 'f']
+        pairnums_by_night,mean_timestamp_by_night = {},{}
+        for pairnum in self.fine_calibration_coefs.keys():
+            mean_timestamp, mean_datetime, night = self.fine_calibration_date_info[pairnum]
+            if night in pairnums_by_night.keys():
+                pairnums_by_night[night].append(pairnum)
+                mean_timestamp_by_night[night].append(mean_timestamp)
+            else:
+                pairnums_by_night[night] = [pairnum]
+                mean_timestamp_by_night[night] =[mean_timestamp]
+        for night, pairnums in pairnums_by_night.items():
+            fiber_fit_dict = OrderedDict()
+            if len(pairnums) == 1:
+                ## no interpolation
+                def fit_model(xs, a):
+                    return a
+            else:
+                if len(pairnums) == 2:
+                    ## linear interp
+                    p0 = [0, 0]
+                    def fit_model(xs, a, b):
+                        return a + b * xs
+                else:
+                    ## quadratic
+                    p0 = [0, 0, 0]
+                    def fit_model(xs, a, b, c):
+                        return a + b * xs + c * xs * xs
+
+            for fib in self.fine_calibration_coefs[pairnums[0]].colnames:
+                coef_arrs,coef_fits = OrderedDict(), OrderedDict()
+
+                for coef in coef_names:
+                    coef_arrs[coef] = []
+                for pairnum in pairnums:
+                    for ii, coef in enumerate(coef_arrs.keys()):
+                        coef_arrs[coef].append(self.fine_calibration_coefs[pairnum][fib][ii])
+                    if len(pairnums) == 1:
+                        for coef, coef_arr in coef_arrs.items():
+                            coef_fits[coef] = coef_arr
+                    else:
+                        for coef,coef_arr in coef_arrs.items():
+                            p0[0] = coef_arr[0]
+                            params,cov = curve_fit(fit_model,mean_timestamp_by_night[night],coef_arr,p0=p0)
+                            coef_fits[coef] = params
+                fiber_fit_dict[fib] = coef_fits
+            self.interpolated_coef_fits[night] = (fiber_fit_dict, fit_model)
+
+
 
     def run_initial_calibrations(self,skip_coarse=False,use_history_calibs=False,only_use_peaks = True):
         if skip_coarse:
@@ -150,11 +227,8 @@ class Calibrations:
             if match > 0:
                 return
 
-        if use_history_calibs:
-            if self.history_calibration_coefs[0] is not None:
-                histories = self.get_medianfits_of(self.history_calibration_coefs)
-            else:
-                histories = None
+        if use_history_calibs and self.history_calibration_coefs[0] is not None:
+            histories = self.get_medianfits_of(self.history_calibration_coefs)
         else:
             histories = None
 
@@ -169,7 +243,7 @@ class Calibrations:
                     'coarse_comp': comp_data, 'complinelistdict': self.linelistc,
                     'last_obs': histories     }
 
-                out = automated_calib_wrapper_script(obs1)
+                out = run_automated_calibration_wrapper(obs1)
                 tabs = coarse_calib_configure_tables(out)
                 out_calib = tabs['coefs']
                 out_calib = out_calib[self.instrument.full_fibs[self.camera].tolist()]
@@ -203,7 +277,7 @@ class Calibrations:
                     NPROC = 4
 
                 with Pool(NPROC) as pool:
-                    outs = pool.map(automated_calib_wrapper_script, all_obs)
+                    outs = pool.map(run_automated_calibration_wrapper, all_obs)
 
                 # out = {'coefs': coeftab,
                 #        'metric': metrictab,
@@ -262,7 +336,6 @@ class Calibrations:
             histories = out_calib
 
 
-
     def run_final_calibrations(self,initial_priors='parametric'):
         if not self.do_fine_calib:
             print("There doesn't seem to be a fine calibration defined. Using the supplied coarse calibs")
@@ -297,6 +370,7 @@ class Calibrations:
             filenum = filnums[self.filenum_ind]
 
             data = Table(self.fine_calibrations[filenum].data)
+            self.fine_calibration_date_info[pairnum] = get_meantime_and_date(self.fine_calibrations[filenum].header)
 
             linelist = self.selected_lines
 
@@ -518,7 +592,7 @@ class Calibrations:
                         coef_xys[ii]['x'].append(yval)
 
         for ii in range(ncoefs):
-            fit_params,cov = curve_fit(f=quadratic,xdata=coef_xys[ii]['x'],ydata=coef_xys[ii]['y'])
+            fit_params,cov = curve_fit(f=pix_to_wave_explicit_coefs2,xdata=coef_xys[ii]['x'],ydata=coef_xys[ii]['y'])
             yparametrized_coefs[:,ii] = fit_params
 
         out_dict = OrderedDict()
@@ -848,280 +922,10 @@ class Calibrations:
 
         return out_coefs, app_specific_linelists, app_fit_lambs, app_fit_pix, variances, wm, fm
 
-
-    def run_interactive_slider_calibration(self,coarse_comp, complinelistdict, default_vals=None,history_vals=None,\
-                                   steps = None, default_key = None, trust_initial = False):
-
-        init_default = (4523.4,1.0007,-1.6e-6)
-
-        default_dict = {    'default': init_default,
-                            'predicted from prev spec': init_default,
-                            'cross correlation': init_default           }
-
-        do_history = False
-        if history_vals is not None:
-            default_dict['from history'] = init_default
-            do_history = True
-
-        if steps is None:
-            steps = (1, 0.01, 0.00001)
-
-        if default_key is None:
-            default_key = 'cross correlation'
-
-        ## Find the highest flux wavelengths in the calibrations
-        wsorted_top_wave, wsorted_top_flux = get_highestflux_waves(complinelistdict)
-        ## Make sure the information is in astropy table format
-        coarse_comp = Table(coarse_comp)
-        ## Define loop params
-        counter = 0
-        first_iteration = True
-
-        ## Initiate arrays/dicts for later appending inside loop (for keeping in scope)
-        matched_peak_waves, matched_peak_flux = [], []
-        matched_peak_index = []
-        all_coefs = {}
-        all_flags = {}
-
-        ## Loop over fiber names (strings e.g. 'r101')
-        for fiber_identifier in coarse_comp.colnames:
-            counter += 1
-            print(fiber_identifier)
-
-            ## Get the spectra (column with fiber name as column name)
-            comp_spec = np.asarray(coarse_comp[fiber_identifier])
-
-            ## create pixel array for mapping to wavelength
-            pixels = np.arange(len(comp_spec))
-
-            ## Update the defaults using history or cross correlation if available,
-            ## and also update with a fitted function for the offsets
-            default_dict = update_default_dict(default_dict,fiber_identifier,default_vals, history_vals, \
-                                               pixels, comp_spec,matched_peak_waves,\
-                                               do_history,first_iteration)
-
-            ## Do an interactive second order fit to the spectra
-            if trust_initial and counter != 1:
-                good_spec = True
-                out_coef = {}
-                out_coef['a'],out_coef['b'],out_coef['c'] = default_dict[default_key]
-                print("\t\tYou trusted {} which gave: a={} b={} c={}".format(default_key,*default_dict[default_key]))
-            else:
-                good_spec,out_coef = interactive_plot(pixels=pixels, spectra=comp_spec,\
-                                 linelistdict=complinelistdict, gal_identifier=fiber_identifier,\
-                                 default_dict=default_dict,steps=steps,default_key=default_key)
-
-            ## If it's the first iteration, use the results to compute the largest
-            ## flux lines and their true wavelength values
-            ## these are used in all future iterations of this loop in the cross cor
-            if first_iteration and good_spec:
-                top_peak_waves = top_peak_wavelengths(pixels, comp_spec, out_coef)
-
-                for peak in top_peak_waves:
-                    index = np.argmin(np.abs(wsorted_top_wave-peak))
-                    matched_peak_waves.append(wsorted_top_wave[index])
-                    matched_peak_flux.append(wsorted_top_flux[index])
-                    matched_peak_index.append(index)
-
-                matched_peak_waves = np.asarray(matched_peak_waves)
-                matched_peak_flux = np.asarray(matched_peak_flux)
-                matched_peak_index = np.asarray(matched_peak_index)
-                print("Returned waves: {}\nMatched_waves:{}\n".format(top_peak_waves,matched_peak_waves))
-
-            ## Save the flag
-            all_flags[fiber_identifier] = good_spec
-
-            ## Save the coefficients if it's good
-            if good_spec:
-                default_dict['predicted from prev spec'] = (out_coef['a'],out_coef['b'],out_coef['c'])
-                all_coefs[fiber_identifier] = [out_coef['a'],out_coef['b'],out_coef['c'],0.,0.,0.]
-                first_iteration = False
-            else:
-                all_coefs[fiber_identifier] = [0.,0.,0.,0.,0.,0.]
-
-            if counter == 999:
-                counter = 0
-                with open('_temp_wavecalib.pkl','wb') as temp_pkl:
-                    pkl.dump([all_coefs,all_flags],temp_pkl)
-                print("Saving an incremental backup to _temp_wavecalib.pkl")
-                cont = str(input("\n\n\tDo you want to continue? (y or n)\t\t"))
-                if cont.lower() == 'n':
-                    break
-
-        return Table(all_coefs)
-
-def auto_wavelength_fitting_by_lines_wrapper(input_dict):
-    return auto_wavelength_fitting_by_lines(**input_dict)
+    from calibration_helper_funcs import run_interactive_slider_calibration
 
 
-def auto_wavelength_fitting_by_lines(comp, fulllinelist, coef_table, linelistdict,all_coefs,user_input='some',filenum='',\
-                                     bounds=None, save_plots = True,  savetemplate_funcs='{}{}{}{}{}'.format):
-    if 'ThAr' in linelistdict.keys():
-        wm, fm = linelistdict['ThAr']
-        app_specific = False
-    else:
-        app_specific = True
-    comp = Table(comp)
 
-    variances = {}
-    app_fit_pix = {}
-    app_fit_lambs = {}
-    outlinelist = {}
-    hand_fit_subset = np.array(list(all_coefs.keys()))
-
-    cam = comp.colnames[0][0]
-
-    if cam =='b':
-        numeric_hand_fit_names = np.asarray([ (16*(9-int(fiber[1])))+int(fiber[2:]) for fiber in hand_fit_subset])
-    else:
-        numeric_hand_fit_names = np.asarray([ (16*int(fiber[1]))+int(fiber[2:]) for fiber in hand_fit_subset])
-
-    coef_table = Table(coef_table)
-
-    if cam =='b':
-        numerics = np.asarray([(16 * (9 - int(fiber[1]))) + int(fiber[2:]) for fiber in comp.colnames])
-    else:
-        numerics = np.asarray([(16 * int(fiber[1])) + int(fiber[2:]) for fiber in comp.colnames])
-
-    sorted = np.argsort(numerics)
-    all_fibers = np.array(comp.colnames)[sorted]
-    del sorted,numerics
-
-    # ## go from outside in
-    # if cam == 'r' and int(all_fibers[0][1]) > 3:
-    #     all_fibers = all_fibers[::-1]
-    # elif cam =='b' and int(all_fibers[0][1]) < 6:
-    #     all_fibers = all_fibers[::-1]
-
-    ## go from inside out
-    if cam == 'r' and int(all_fibers[0][1]) < 4:
-        all_fibers = all_fibers[::-1]
-    elif cam =='b' and int(all_fibers[0][1]) > 5:
-        all_fibers = all_fibers[::-1]
-
-    upper_limit_resid = 0.4
-    for itter in range(20):
-        badfits = []
-        maxdevs = []
-        upper_limit_resid += 0.01
-        for fiber in all_fibers:
-            if fiber in hand_fit_subset:
-                continue
-            if fiber not in coef_table.colnames:
-                continue
-            if app_specific:
-                wm,fm = linelistdict[fiber]
-            coefs = np.asarray(coef_table[fiber])
-            f_x = comp[fiber].data
-
-            if cam == 'b':
-                fibern = (16 * (9 - int(fiber[1]))) + int(fiber[2:])
-            else:
-                fibern = (16 * int(fiber[1])) + int(fiber[2:])
-
-            if len(hand_fit_subset)==0:
-                adjusted_coefs_guess = coefs
-            elif len(hand_fit_subset)==1:
-                nearest_fib = hand_fit_subset[0]
-                diffs_fib1 = np.asarray(all_coefs[nearest_fib]) - np.asarray(coef_table[nearest_fib])
-                diffs_mean = diffs_fib1
-                adjusted_coefs_guess = coefs + diffs_mean
-            else:
-                # if len(hand_fit_subset)>1:
-                #     dists = np.abs(fibern-numeric_hand_fit_names)
-                #     closest = np.argsort(dists)[:2]
-                #     nearest_fibs = hand_fit_subset[closest]
-                #     # diffs_fib1 = np.asarray(all_coefs[nearest_fibs[0]]) - np.asarray(coef_table[nearest_fibs[0]])
-                #     # diffs_fib2 = np.asarray(all_coefs[nearest_fibs[1]]) - np.asarray(coef_table[nearest_fibs[1]])
-                #     # d1,d2 = dists[closest[0]], dists[closest[1]]
-                #     # diffs_hfib = (d2*diffs_fib1 + d1*diffs_fib2)/(d1+d2)
-                #     diffs_hfib = closest
-                # else:
-                #     nearest_fibs = hand_fit_subset[np.argsort(np.abs(fibern-numeric_hand_fit_names))]
-                #     diffs_fib1 = np.asarray(all_coefs[nearest_fibs[0]]) - np.asarray(coef_table[nearest_fibs[0]])
-                #     diffs_hfib = diffs_fib1
-                #
-                # if last_fiber is None:
-                #     last_fiber = nearest_fibs[0]
-                #
-                # nearest_fib = np.asarray(all_coefs[last_fiber]) - np.asarray(coef_table[last_fiber])
-                #
-                # diffs_mean = (0.5*diffs_hfib)+(0.5*nearest_fib)
-                #
-                # adjusted_coefs_guess = coefs+diffs_mean
-                nearest_fibs = hand_fit_subset[np.argsort(np.abs(fibern - numeric_hand_fit_names))]
-                diffs_fib1 = np.asarray(all_coefs[nearest_fibs[0]]) - np.asarray(coef_table[nearest_fibs[0]])
-                diffs_mean = diffs_fib1
-                adjusted_coefs_guess = coefs + diffs_mean
-
-            browser = LineBrowser(wm,fm, f_x, adjusted_coefs_guess, fulllinelist, bounds=None, edge_line_distance=(-20.0),initiate=False)
-
-            params,covs, resid = browser.fit()
-
-            print('\n\n',fiber,'{:.2f} {:.6e} {:.6e} {:.6e} {:.6e} {:.6e}'.format(*params))
-            fitlamb = np.polyval(params[::-1],np.asarray(browser.line_matches['peaks_p']))
-            dlamb = fitlamb - browser.line_matches['lines']
-            print("  ----> mean={}, median={}, std={}, sqrt(resid)={}".format(np.mean(dlamb),np.median(dlamb),np.std(dlamb),np.sqrt(resid)))
-
-            if np.sqrt(resid) < upper_limit_resid:
-                if save_plots:
-                    template = savetemplate_funcs(cam=str(filenum) + '_', ap=fiber, imtype='calib', step='finalfit',
-                                                  comment='auto')
-                    browser.initiate_browser()
-                    browser.create_saveplot(params, covs, template)
-
-                all_coefs[fiber] = params
-                variances[fiber] = covs.diagonal()
-                outlinelist[fiber] = (wm, fm)
-                app_fit_pix[fiber] = browser.line_matches['peaks_p']
-                app_fit_lambs[fiber] = browser.line_matches['lines']
-                # if np.sqrt(resid) < upper_limit_resid:
-                numeric_hand_fit_names = np.append(numeric_hand_fit_names,fibern)
-                hand_fit_subset = np.append(hand_fit_subset,fiber)
-            else:
-                badfits.append(fiber)
-                if np.sqrt(resid) < 3.0:
-                    guessed_waves = np.polyval(np.asarray(adjusted_coefs_guess)[::-1], browser.line_matches['peaks_p'])
-                    lines = browser.line_matches['lines']
-                    dlines = np.array(lines) - np.array(guessed_waves)
-
-                    sorted_args = np.argsort(np.abs(dlines))
-                    sorted_dlamb = np.abs(dlines)[sorted_args]
-                    if (sorted_dlamb[-1] > 10.0) and sorted_dlamb[-3] < 4.0:
-                        maxdev_line = lines[sorted_args[-1]]
-
-                        if app_specific and len(wm) > 11:
-                            print(
-                                "\n\n\nDetermined that line={} is causing bad fit for fiber={}. Dev:{}  vs 3rd:{}\n\n\n".format( \
-                                    maxdev_line, fiber, sorted_dlamb[-1], sorted_dlamb[-3]))
-                            wm_loc = np.where(wm == maxdev_line)[0][0]
-                            wmlist, fmlist = wm.tolist(), fm.tolist()
-                            wmlist.pop(wm_loc)
-                            fmlist.pop(wm_loc)
-                            linelistdict[fiber] = (np.asarray(wmlist), np.asarray(fmlist))
-                        else:
-                            maxdevs.append(maxdev_line)
-
-            plt.close()
-            del browser
-
-        if (not app_specific) and (len(maxdevs) > (len(all_fibers)//4)) and (len(wm) > 11):
-            count = Counter(maxdevs)
-            line, num = count.most_common(1)[0]
-            if (num >= (len(maxdevs)//3)):
-                print(
-                    "\n\n\nDetermined that line={} is causing bad fits, {} of {} had problems with it out of {} fibers\n\n\n".format( \
-                        line, num, len(maxdevs), len(all_fibers)))
-
-                wm_loc = np.where(wm == line)[0][0]
-                wmlist,fmlist = wm.tolist(),fm.tolist()
-                wmlist.pop(wm_loc)
-                fmlist.pop(wm_loc)
-                wm,fm = np.asarray(wmlist),np.asarray(fmlist)
-
-        all_fibers = np.array(badfits)[::-1]
-
-    return all_coefs, outlinelist, app_fit_lambs, app_fit_pix, variances, all_fibers
 
 
 def quadratic(xs,a,b,c):

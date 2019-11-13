@@ -373,7 +373,7 @@ class FileManager:
 
     def load_nist_calibration_lines_dict(self, cal_lamp, wavemincut=4000, wavemaxcut=10000, use_selected=False):
         """Assumes the format of the nist linelist csvs privuded with this package"""
-        from calibration_funcs import air_to_vacuum
+        from calibration_helper_funcs import air_to_vacuum
         #linelistdict = {}
         selectedlinesdict = {}
         print(('Using calibration lamps: ', cal_lamp))
@@ -426,7 +426,7 @@ class FileManager:
 
     def load_salt_calibration_lines_dict(self,cal_lamp,wavemincut=4000,wavemaxcut=10000,use_selected=False):
         """Assumes the format of the salt linelist csvs privuded with this package"""
-        from calibration_funcs import air_to_vacuum
+        from calibration_helper_funcs import air_to_vacuum
         #linelistdict = {}
         selectedlinesdict = {}
         print(('Using calibration lamps: ', cal_lamp))

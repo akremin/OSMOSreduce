@@ -5,7 +5,7 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 import astropy.units as u
-from calibration_funcs import air_to_vacuum
+from calibration_helper_funcs import air_to_vacuum
 from scipy.signal import medfilt, resample
 from scipy.interpolate import CubicSpline
 

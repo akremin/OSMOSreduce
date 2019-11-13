@@ -1,6 +1,6 @@
 from astropy.io import fits
 import numpy as np
-from calibration_funcs import air_to_vacuum
+from calibration_helper_funcs import air_to_vacuum
 from scipy.interpolate import CubicSpline
 import matplotlib.pyplot as plt
 from scipy import signal

@@ -10,12 +10,12 @@ from matplotlib.widgets import MultiCursor
 from matplotlib.widgets import CheckButtons
 from matplotlib.widgets import RadioButtons
 from matplotlib.widgets import Slider, Button
-
+import datetime
 from astropy.table import Table
 
 from scipy.signal import medfilt
 from scipy.signal import find_peaks
-from scipy.optimize import curve_fit
+
 import numpy as np
 from scipy.signal import argrelmax
 from collections import OrderedDict
@@ -24,198 +24,16 @@ print(deltat)
 
 
 
-import numpy as np
-
-def run_automated_calibration(coarse_comp, complinelistdict, last_obs=None):
-    calibrationline_fluxcut = 0.
-    n_attempts_beforebad = 100
-    n_resolution_iters = 100
-
-    # elements = ['Hg', 'Ne']
-    euc_tolerance_perpix = 0.08  # 0.14
-    frac_reduction, stepfrac = 0.6, 0.1
-
-    ## 5063.36264  9.98328419e-01 -1.51722887e-06
-    abound_mean, abound_hw = 5000.0, 600.0  # 5063.36264, 40.0
-    bbound_mean, bbound_hw = 1.0, 0.1  # 9.98328419e-01, 0.01
-    cbound_mean, cbound_hw = 0.0, 2.0e-5  # -1.51722887e-06, 2.0e-6#
-
-    ## Make sure the information is in astropy table format
-    coarse_comp = Table(coarse_comp)
-
-    # select_complinelistdict = {element: complinelistdict[element] for element in elements if element in complinelistdict.keys()}
-    # wm, fm = get_wm_fm(select_complinelistdict, cut=calibrationline_fluxcut)
-    wm, fm = get_wm_fm(complinelistdict, cut=calibrationline_fluxcut)
-
-    mat_wm = wm.reshape((wm.size, 1)).T
-
-    frac = 1.0 / frac_reduction
-    specs_to_run = np.array(coarse_comp.colnames)  # [::20]:['r216','r301','r302','r309','r310','r311','r312']
-    calib_coefs = OrderedDict()
-    for attempt in range(n_attempts_beforebad):
-        last_good = {'euc': 1e8, 'a': abound_mean, 'b': bbound_mean, 'c': cbound_mean}
-        n_baddist_skip = int(attempt)
-        bad_specs = []
-        for specname in specs_to_run:
-            specflux, pix, ph, ppix = get_peaks(coarse_comp, specname=specname)
-
-            mat_ppix = ppix.reshape((ppix.size, 1))
-
-            if last_obs is not None and specname in last_obs.colnames:
-                best = {}
-                best['a'],best['b'],best['c'] = last_obs[specname][0:3]
-            else:
-                best = last_good.copy()
-            best['euc'], best['nlines'] = 1e8, 1
-            best['clines'],best['pixels'] = [],[]
-            euc_tolerance = euc_tolerance_perpix * (len(ppix) - n_baddist_skip)
-
-            nochange = 0
-            for iter in np.arange(n_resolution_iters):
-                frac = frac_reduction * frac
-                aas = make_range(best['a'], abound_hw * frac, step_fraction=stepfrac)
-                bs = make_range(best['b'], bbound_hw * frac, step_fraction=stepfrac)
-                cs = make_range(best['c'], cbound_hw * frac, step_fraction=stepfrac)
-
-                old_bests = np.array([best['a'], best['b'], best['c']], copy=True)
-                for c in cs:
-                    cterm = (c * mat_ppix * mat_ppix)
-                    for b in bs:
-                        bcterm = (b * mat_ppix) + cterm
-                        for a in aas:
-                            guess = a + bcterm
-                            dists_locs = np.argmin(np.abs(mat_wm - guess), axis=1)
-                            dists = np.abs(wm[dists_locs] - guess.flatten())
-                            if n_baddist_skip > 0:
-                                sorted_inds = np.argsort(dists)[:-n_baddist_skip]  # [:int(0.5*len(ppix))]
-                                cdists = dists[sorted_inds]
-                            else:
-                                cdists = dists
-                            euc_dist = np.sqrt(np.dot(cdists, cdists))
-
-                            if euc_dist < best['euc']:
-                                best['euc'] = euc_dist
-                                best['nlines'] = len(cdists)
-                                if n_baddist_skip > 0:
-                                    best['clines'] = wm[dists_locs][sorted_inds]
-                                    best['pixels'] = ppix[sorted_inds]
-                                else:
-                                    best['clines'] = wm[dists_locs]
-                                    best['pixels'] = ppix
-                                best['a'] = a
-                                best['b'] = b
-                                best['c'] = c
-                if np.all(np.abs(old_bests - np.array([best['a'], best['b'], best['c']])) / old_bests < 0.00001):
-                    # print(specname,(old_bests - np.array([best['a'], best['b'], best['c']])) / old_bests )
-                    nochange += 1
-                else:
-                    nochange = 0
-                if best['euc'] < euc_tolerance or nochange > 5:
-                    break
-            calib_coefs[specname] = best.copy()
-            print(specname, '---->\tmin_dist={:0.2f}, with nlines={:02d} ({:0.4f} dist/line)\n\t\t\ta=\t{:0.2f}\t\tb=\t{:0.04f}\t\tc=\t{:0.04e}\n\t\t\tMet Threshold?: {}'.format(best['euc'],best['nlines'],best['euc']/best['nlines'],best['a'],best['b'],best['c'],best['euc'] < euc_tolerance))
-            if best['euc'] < 2 * euc_tolerance:
-                last_good = best.copy()
-            if best['euc'] > 4 * euc_tolerance:
-                if best['nlines'] > 3:  # 3 coefs, reducing nlines by 1 each iteration
-                    if len(bad_specs)+1 > 20:
-                        current_loop_loc = np.where(specs_to_run==specname)[0][0]
-                        bad_specs.extend(specs_to_run[current_loop_loc:].tolist())
-                        specs_to_run = np.array(bad_specs, copy=True)
-                        print("\nMore than 20 bad specs found in this iteration. Possibly too many lines used. Rerunning with fewer.")
-                        print("\n\n\tRerunning: {}".format(specs_to_run))
-                        break
-                    else:
-                        bad_specs.append(specname)
-                else:
-                    print(
-                        "{} only has 3 lines remaining. A better fit cannot be made. Not continuing with that fiber".format(
-                            specname))
-                # plt.figure()
-                # plt.title(specname)
-                # plt.plot(get_waves_fromdict(pix, best), specflux, label='r816')
-                # plt.plot(get_waves_fromdict(ppix, best), ph, 'r*')
-                # best_guess = get_waves_fromdict(ppix, best)
-                # matched_wm_inds = np.argmin(np.abs(mat_wm - guess), axis=1)
-                # calibflux = fm[matched_wm_inds]
-                # spec_adjusted_calibflux = specflux.max() * calibflux / calibflux.max()
-                # plt.plot(wm[matched_wm_inds], spec_adjusted_calibflux, 'b^')
-                # plt.show()
-            del best
-            ## Don't divide by frac, meaning all iterations after the first
-            ## will start with smaller step sizes by that factor
-            frac = 1.
-
-        specs_to_run = np.array(bad_specs, copy=True)
-        if len(bad_specs) == 0:
-            break
-        else:
-            print("\n\n\tRerunning: {}".format(specs_to_run))
-
-    return calib_coefs
-
-
-def poly5(x,a,b,c,d,e,f):
-    return a+ b*x + c*x*x + d*np.power(x,3) + \
-           e * np.power(x, 4) + f*np.power(x,5)
-def poly2(x,a,b,c):
-    return a+ b*x + c*x*x
-
-def make_range(mean_val,bound_hw,step_fraction= 0.1):
-    lower_bound = mean_val-bound_hw
-    upper_bound = mean_val+bound_hw
-    step_size = step_fraction*bound_hw
-    return np.arange(lower_bound,upper_bound+step_size,step_size)
-
-def get_waves_fromdict(pixels,diction):
-    a,b,c = diction['a'],diction['b'],diction['c']
-    return a+b*pixels+c*pixels*pixels
-
-
-def get_wm_fm(complinelistdict,cut= 10000.):
-    wm, fm = [], []
-
-    # plt.figure()
-    for element, (xe0, xe1) in complinelistdict.items():
-        xe1f = xe1.copy()
-        xe1f[xe1f < 1.] = 1.
-        xe0c = xe0[xe1f > cut].copy()
-        xe1c = xe1f[xe1f > cut].copy()
-        wm.extend(xe0c.tolist())
-        fm.extend(xe1c.tolist())
-    wm,fm = np.array(wm),np.array(fm)
-    # fm = fm[((wm>5200)&(wm<7100))]
-    # wm = wm[((wm>5200)&(wm<7100))]
-    sortd = np.argsort(wm)
-    return wm[sortd],fm[sortd]
-
-def get_peaks(coarse_comp,specname='r816'):
-    min_height = 200.
-    spec = coarse_comp[specname]
-    pix = np.arange(len(spec)).astype(float)
-    nppix = 0.
-    itter = 1
-    maxspec = np.max(spec)
-    while nppix < 22:
-        ppix, peaks = find_peaks(spec, height=maxspec / (2+itter), prominence=maxspec / (2+itter),wlen=100)
-        nppix = len(ppix)
-        itter += 1
-    ph = np.array(peaks['peak_heights'])
-    proms = np.array(peaks['prominences'])
-    ppix = np.array(ppix)
-    return spec,pix,ph[proms>min_height],ppix[proms>min_height]
-
-
 def coarse_calib_configure_tables(dict_of_dicts):
     maxlines = np.max([val['nlines'] for val in dict_of_dicts.values()])
     coeftab,metrictab,linestab,pixtab = Table(),Table(),Table(),Table()
 
     for fib,fibdict in dict_of_dicts.items():
-        coefcolvals = np.array([fibdict['a'], fibdict['b'], fibdict['c'], 0., 0., 0.])
+        coefcolvals = np.array(fibdict['coefs'])
         coefcol = Table.Column(name=fib,data=coefcolvals)
         coeftab.add_column(coefcol)
 
-        metcol = Table.Column(name=fib,data=np.array([fibdict['euc']]))
+        metcol = Table.Column(name=fib,data=np.array([fibdict['metric']]))
         metrictab.add_column(metcol)
 
         lines = np.append(fibdict['clines'],np.zeros(maxlines-fibdict['nlines']))
@@ -235,20 +53,14 @@ def coarse_calib_configure_tables(dict_of_dicts):
 
 
 def compare_outputs(raw_data,table1,table2,save_template='{fiber}.png',save_plots=True,show_plots=False):
-    def waves(pixels, a, b, c,d,e,f):
-        return a + (b * pixels) + (c * pixels * pixels)+\
-               (d * np.power(pixels,3)) + (e * np.power(pixels,4))+ \
-               (f * np.power(pixels, 5))
     fib1s = set(table1.colnames)
     fib2s = set(table2.colnames)
     matches = fib1s.intersection(fib2s)
 
     for match in matches:
         pixels = np.arange(len(raw_data[match])).astype(np.float64)
-        a1,b1,c1,d1,e1,f1 = table1[match]
-        a2, b2, c2, d2, e2, f2 = table2[match]
-        waves1 = waves(pixels, a1,b1,c1,d1,e1,f1)
-        waves2 = waves(pixels, a2, b2, c2, d2, e2, f2)
+        waves1 = pix_to_wave(pixels, table1[match])
+        waves2 = pix_to_wave(pixels, table2[match])
         dwaves = waves1-waves2
         print("\n"+match)
         print("--> Max deviation: {}  mean: {}  median: {}".format(dwaves[np.argmax(np.abs(dwaves))], np.mean(np.abs(dwaves)), np.median(np.abs(dwaves))))
@@ -264,46 +76,6 @@ def compare_outputs(raw_data,table1,table2,save_template='{fiber}.png',save_plot
         plt.close()
     return matches
 
-def automated_calib_wrapper_script(input_dict):
-    return run_automated_calibration(**input_dict)
-
-
-def aperature_number_pixoffset(fibnum,camera='r'):
-    if type(fibnum) is str:
-        strpd_fibnum = fibnum.strip('rb')
-        if strpd_fibnum.isnumeric():
-            tet = np.int8(strpd_fibnum[0]) - 1.
-            fib = np.int8(strpd_fibnum[1:]) - 1.
-        else:
-            return 0.
-    elif np.isscalar(fibnum):
-        tet = fibnum // 16
-        fib = fibnum % 16
-
-    if camera.lower() != 'r':
-        orientation = 1.
-    else:
-        orientation = -1.
-    c1, c2, c3, c4, c5 = 1.023, 54.058, -6.962, 1.985, -0.5560
-    outval_mag = (c1) + (c2 * tet) + (c3 * tet * tet) + (c4 * fib) + (c5 * tet * fib)
-    return orientation * outval_mag
-
-def aperature_pixoffset_between2(fibnum,camera='r'):
-    if type(fibnum) is str:
-        strpd_fibnum = fibnum.strip('rb')
-        if strpd_fibnum.isnumeric():
-            tet = np.int8(strpd_fibnum[0]) - 1.
-            fib = np.int8(strpd_fibnum[1:]) - 1.
-        else:
-            return 0.
-        fibnum = 16*tet+fib
-    elif not np.isscalar(fibnum):
-        return 0.
-
-    if fibnum == 0:
-        return 0.
-    else:
-        return aperature_number_pixoffset(fibnum,camera)-aperature_number_pixoffset(fibnum-1,camera)
 
 
 def top_peak_wavelengths(pixels,spectra,coefs):
@@ -380,6 +152,171 @@ def update_default_dict(default_dict,fiber_identifier,default_vals, history_vals
             default_dict['predicted from prev spec'] = (adef, bpred, cpred)
     return default_dict
 
+
+
+
+def pix_to_wave(xs, coefs):
+    if type(coefs) is dict:
+        if 'd' in coefs.keys():
+            coefs = np.array([coefs['a'], coefs['b'], coefs['c'], coefs['d'], coefs['e'], coefs['f']])
+        else:
+            coefs = np.array([coefs['a'], coefs['b'], coefs['c']])
+    if coefs[0] > 10.:
+        return np.polyval(coefs[::-1], xs)
+    else:
+        return np.polyval(coefs, xs)
+
+def pix_to_wave_explicit_coefs5(xs, a,b,c,d,e,f):
+    return np.polyval([f,e,d,c,b,a], xs)
+
+def pix_to_wave_explicit_coefs2(xs, a,b,c):
+    return np.polyval([c, b, a], xs)
+
+def iterate_fib(fib,cam):
+    tetn = int(fib[1])
+    fibn = int(fib[2:])
+    if tetn == 8 and fibn >= 8:
+        fibn -= 1
+    elif tetn == 4 and fibn >= 8:
+        fibn -= 1
+    else:
+        fibn += 1
+        if fibn > 16:
+            tetn += 1
+            fibn = 1
+    outfib = '{}{}{:02d}'.format(cam, tetn, fibn)
+    return outfib
+
+def ensure_match(fib, allfibs, subset, cam):
+    print(fib)
+    outfib = fib
+    if outfib not in allfibs:
+        outfib = iterate_fib(outfib,cam)
+        outfib = ensure_match(outfib, allfibs, subset, cam)
+    if outfib in subset:
+        outfib = iterate_fib(outfib,cam)
+        outfib = ensure_match(outfib, allfibs, subset, cam)
+    return outfib
+
+def find_devs(table1,table2):
+    xs = np.arange(2000).astype(np.float64)
+    overlaps = list(set(list(table1.colnames)).intersection(set(list(table2.colnames))))
+    devs = []
+    for fib in overlaps:
+        coef_dev = np.asarray(table1[fib])-np.asarray(table2[fib])
+        full_devs = pix_to_wave(xs,coef_dev)
+        dev = np.std(full_devs)
+        devs.append(dev)
+    return np.mean(devs)
+
+
+def get_meantime_and_date(header):
+    jan12015 = datetime.datetime.timestamp(datetime.datetime(year=2015, month=1, day=1))
+    fmt = '%Y-%m-%d %H:%M:%S'
+    date = header['UT-DATE']
+    stime,etime = header['UT-TIME'], header['UT-END']
+    dt1 = datetime.datetime.timestamp(datetime.datetime.strptime(date + ' ' + stime,fmt))
+    dt2 = datetime.datetime.timestamp(datetime.datetime.strptime(date+' '+etime,fmt))
+    if int(stime[:2]) > int(etime[:2]):
+        dt2 += (24*60*60.)
+    mean_time = (dt1 + dt2) / 2.
+    meantime_dt = datetime.datetime.fromtimestamp(mean_time)
+    night = header['NIGHT']
+    return (mean_time-jan12015), meantime_dt, night
+
+
+def air_to_vacuum(airwl, nouvconv=True):
+    """
+    Returns vacuum wavelength of the provided air wavelength array or scalar.
+    Good to ~ .0005 angstroms.
+
+    If nouvconv is True, does nothing for air wavelength < 2000 angstroms.
+
+    Input must be in angstroms.
+
+    Adapted from idlutils airtovac.pro, based on the IAU standard
+    for conversion in Morton (1991 Ap.J. Suppl. 77, 119)
+    """
+    airwl = np.array(airwl, copy=False, dtype=float, ndmin=1)
+    isscal = airwl.shape == tuple()
+    if isscal:
+        airwl = airwl.ravel()
+
+    # wavenumber squared
+    sig2 = (1e4 / airwl) ** 2
+
+    convfact = 1. + 6.4328e-5 + 2.94981e-2 / (146. - sig2) + 2.5540e-4 / (41. - sig2)
+    newwl = airwl.copy()
+    if nouvconv:
+        convmask = newwl >= 2000
+        newwl[convmask] *= convfact[convmask]
+    else:
+        newwl[:] *= convfact
+    return newwl[0] if isscal else newwl
+
+def vacuum_to_air(vac_wave,resolution=1e-5):
+    if np.isscalar(vac_wave):
+        test_airs = np.arange(vac_wave-10.,vac_wave+10,resolution).astype(np.float64)
+        test_vacs = air_to_vacuum(test_airs)
+        index = np.argmin(np.abs(test_vacs-vac_wave))
+        return np.round(test_airs[index],decimals=int(-1*np.log10(resolution)))
+    else:
+        outwaves = []
+        for wave in vac_wave:
+            outwaves.append(vacuum_to_air(wave, resolution))
+        return np.array(outwaves)
+
+def get_psf(current_flux, step=1., prom_quantile = 0.68, npeaks=6):
+    peaks, props = find_peaks(current_flux, height=(np.mean(current_flux), 1e9), width=(2.355 / step, 6 * 2.355 / step))
+    prom_thresh = np.quantile(props['prominences'], prom_quantile)
+    sigma = step * np.mean(np.sort(props['widths'][props['prominences'] > prom_thresh])[:npeaks]) / 2.355
+    return sigma
+
+
+def create_simple_line_spectra(elements, linelistdict, wave_low, wave_high, clab_step=0.01,\
+                               return_individual=False,atm_weights={'Ne':1.,'Hg':0.2,'Ar':0.8}):
+    def generate_line_spectra(wl, fl, wave_low, wave_high, calib_step):
+        if type(fl) is Table.MaskedColumn:
+            fl = fl.filled().data
+        fl[np.isnan(fl)] = 0.
+        fl[fl < 0.] = 0.
+        cut = ((wl > wave_low) & (wl < wave_high))
+        cut_wl, cut_fl = wl[cut], fl[cut]
+        cut_waves = np.arange(wave_low, wave_high, calib_step).astype(np.float64)
+        cut_fluxes = np.zeros(len(cut_waves))
+        cal_line_inds = np.round(cut_wl / calib_step, 0).astype(int) - np.round(wave_low / calib_step, 0).astype(int)
+        cut_fluxes[cal_line_inds] = cut_fl
+
+        return cut_waves, cut_fluxes
+
+    cut_fluxes = {}
+    cut_flux = np.zeros(((wave_high - wave_low) / clab_step) + 1)
+    for el in elements:
+        if el in linelistdict.keys():
+            wl,fl = linelistdict[el]
+            cut_waves, cut_fluxes[el] = generate_line_spectra(wl,fl,wave_low,wave_high,clab_step)
+            cut_fluxes[el][cut_waves > 6700] = 0.16 * cut_fluxes[el][cut_waves > 6700]
+            if el in atm_weights.keys():
+                cut_fluxes[el] *= atm_weights[el]
+            cut_flux += cut_fluxes[el]
+    # cut_flux = cut_fluxes['Ne'] + cut_fluxes['Hg'] + cut_fluxes['Ar']
+    # cut_flux[cut_waves<5500] = 0.4*cut_flux[cut_waves<5500]
+    if return_individual:
+        return cut_waves, cut_flux, cut_fluxes
+    else:
+        return cut_waves,cut_flux
+
+
+
+
+
+
+
+
+
+###################################################################
+############       Start Deprecated Section         ###############
+###################################################################
 
 def interactive_plot(pixels,spectra,linelistdict,gal_identifier,\
                      default_dict, steps, default_key):
@@ -620,56 +557,6 @@ def interactive_plot(pixels,spectra,linelistdict,gal_identifier,\
     return spectra_is_good, coefs
 
 
-
-def pix_to_wave(xs, coefs):
-    return coefs['a'] + coefs['b'] * xs + coefs['c'] * np.power(xs, 2) #+ \
-           #coefs['d'] * np.power(xs, 3) + coefs['e'] * np.power(xs, 4) + \
-           #coefs['f'] * np.power(xs, 5)
-
-def pix_to_wave_fifthorder(xs, coefs):
-    return coefs[0] + coefs[1] * xs + coefs[2] * np.power(xs, 2) + \
-           coefs[3] * np.power(xs, 3) + coefs[4] * np.power(xs, 4) + \
-           coefs[5] * np.power(xs, 5)
-
-
-def iterate_fib(fib,cam):
-    tetn = int(fib[1])
-    fibn = int(fib[2:])
-    if tetn == 8 and fibn >= 8:
-        fibn -= 1
-    elif tetn == 4 and fibn >= 8:
-        fibn -= 1
-    else:
-        fibn += 1
-        if fibn > 16:
-            tetn += 1
-            fibn = 1
-    outfib = '{}{}{:02d}'.format(cam, tetn, fibn)
-    return outfib
-
-
-def ensure_match(fib, allfibs, subset, cam):
-    print(fib)
-    outfib = fib
-    if outfib not in allfibs:
-        outfib = iterate_fib(outfib,cam)
-        outfib = ensure_match(outfib, allfibs, subset, cam)
-    if outfib in subset:
-        outfib = iterate_fib(outfib,cam)
-        outfib = ensure_match(outfib, allfibs, subset, cam)
-    return outfib
-
-def find_devs(table1,table2):
-    xs = np.arange(2000).astype(np.float64)
-    overlaps = list(set(list(table1.colnames)).intersection(set(list(table2.colnames))))
-    devs = []
-    for fib in overlaps:
-        coef_dev = np.asarray(table1[fib])-np.asarray(table2[fib])
-        full_devs = np.polyval(coef_dev[::-1],xs)
-        dev = np.std(full_devs)
-        devs.append(dev)
-    return np.mean(devs)
-
 def split_params(off,lin,quad,offstep,linstep,quadstep):
     def_quad_fine = quad
     off_fine = off % offstep
@@ -688,34 +575,120 @@ def split_params(off,lin,quad,offstep,linstep,quadstep):
         def_lin_fine = lin_fine
     return def_off, def_off_fine, def_lin, def_lin_fine, def_quad_fine
 
-def air_to_vacuum(airwl, nouvconv=True):
-    """
-    Returns vacuum wavelength of the provided air wavelength array or scalar.
-    Good to ~ .0005 angstroms.
 
-    If nouvconv is True, does nothing for air wavelength < 2000 angstroms.
+def run_interactive_slider_calibration(self,coarse_comp, complinelistdict, default_vals=None,history_vals=None,\
+                               steps = None, default_key = None, trust_initial = False):
 
-    Input must be in angstroms.
+    init_default = (4523.4,1.0007,-1.6e-6)
 
-    Adapted from idlutils airtovac.pro, based on the IAU standard
-    for conversion in Morton (1991 Ap.J. Suppl. 77, 119)
-    """
-    airwl = np.array(airwl, copy=False, dtype=float, ndmin=1)
-    isscal = airwl.shape == tuple()
-    if isscal:
-        airwl = airwl.ravel()
+    default_dict = {    'default': init_default,
+                        'predicted from prev spec': init_default,
+                        'cross correlation': init_default           }
 
-    # wavenumber squared
-    sig2 = (1e4 / airwl) ** 2
+    do_history = False
+    if history_vals is not None:
+        default_dict['from history'] = init_default
+        do_history = True
 
-    convfact = 1. + 6.4328e-5 + 2.94981e-2 / (146. - sig2) + 2.5540e-4 / (41. - sig2)
-    newwl = airwl.copy()
-    if nouvconv:
-        convmask = newwl >= 2000
-        newwl[convmask] *= convfact[convmask]
-    else:
-        newwl[:] *= convfact
-    return newwl[0] if isscal else newwl
+    if steps is None:
+        steps = (1, 0.01, 0.00001)
+
+    if default_key is None:
+        default_key = 'cross correlation'
+
+    ## Find the highest flux wavelengths in the calibrations
+    wsorted_top_wave, wsorted_top_flux = get_highestflux_waves(complinelistdict)
+    ## Make sure the information is in astropy table format
+    coarse_comp = Table(coarse_comp)
+    ## Define loop params
+    counter = 0
+    first_iteration = True
+
+    ## Initiate arrays/dicts for later appending inside loop (for keeping in scope)
+    matched_peak_waves, matched_peak_flux = [], []
+    matched_peak_index = []
+    all_coefs = {}
+    all_flags = {}
+
+    ## Loop over fiber names (strings e.g. 'r101')
+    for fiber_identifier in coarse_comp.colnames:
+        counter += 1
+        print(fiber_identifier)
+
+        ## Get the spectra (column with fiber name as column name)
+        comp_spec = np.asarray(coarse_comp[fiber_identifier])
+
+        ## create pixel array for mapping to wavelength
+        pixels = np.arange(len(comp_spec))
+
+        ## Update the defaults using history or cross correlation if available,
+        ## and also update with a fitted function for the offsets
+        default_dict = update_default_dict(default_dict,fiber_identifier,default_vals, history_vals, \
+                                           pixels, comp_spec,matched_peak_waves,\
+                                           do_history,first_iteration)
+
+        ## Do an interactive second order fit to the spectra
+        if trust_initial and counter != 1:
+            good_spec = True
+            out_coef = {}
+            out_coef['a'],out_coef['b'],out_coef['c'] = default_dict[default_key]
+            print("\t\tYou trusted {} which gave: a={} b={} c={}".format(default_key,*default_dict[default_key]))
+        else:
+            good_spec,out_coef = interactive_plot(pixels=pixels, spectra=comp_spec,\
+                             linelistdict=complinelistdict, gal_identifier=fiber_identifier,\
+                             default_dict=default_dict,steps=steps,default_key=default_key)
+
+        ## If it's the first iteration, use the results to compute the largest
+        ## flux lines and their true wavelength values
+        ## these are used in all future iterations of this loop in the cross cor
+        if first_iteration and good_spec:
+            top_peak_waves = top_peak_wavelengths(pixels, comp_spec, out_coef)
+
+            for peak in top_peak_waves:
+                index = np.argmin(np.abs(wsorted_top_wave-peak))
+                matched_peak_waves.append(wsorted_top_wave[index])
+                matched_peak_flux.append(wsorted_top_flux[index])
+                matched_peak_index.append(index)
+
+            matched_peak_waves = np.asarray(matched_peak_waves)
+            matched_peak_flux = np.asarray(matched_peak_flux)
+            matched_peak_index = np.asarray(matched_peak_index)
+            print("Returned waves: {}\nMatched_waves:{}\n".format(top_peak_waves,matched_peak_waves))
+
+        ## Save the flag
+        all_flags[fiber_identifier] = good_spec
+
+        ## Save the coefficients if it's good
+        if good_spec:
+            default_dict['predicted from prev spec'] = (out_coef['a'],out_coef['b'],out_coef['c'])
+            all_coefs[fiber_identifier] = [out_coef['a'],out_coef['b'],out_coef['c'],0.,0.,0.]
+            first_iteration = False
+        else:
+            all_coefs[fiber_identifier] = [0.,0.,0.,0.,0.,0.]
+
+        if counter == 999:
+            counter = 0
+            with open('_temp_wavecalib.pkl','wb') as temp_pkl:
+                pkl.dump([all_coefs,all_flags],temp_pkl)
+            print("Saving an incremental backup to _temp_wavecalib.pkl")
+            cont = str(input("\n\n\tDo you want to continue? (y or n)\t\t"))
+            if cont.lower() == 'n':
+                break
+
+    return Table(all_coefs)
+
+
+###################################################################
+############       End Deprecated Section         #################
+###################################################################
+
+
+
+
+
+
+
+
 
 if __name__ == '__main__':
     #cal_lamp = ['Hg', 'He','Ar', 'Ne', 'Xe']  ## crc
@@ -759,4 +732,11 @@ if __name__ == '__main__':
                      linelistdict=linelistdict, gal_identifier=fiber_identifier, \
                      default_dict=default_dict, steps=steps, default_key=default_key)
 
-
+def get_fiber_number(fibername='r101', cam=None):
+    if cam is None:
+        cam = fibername[0]
+    if cam == 'b':
+        fibern = (16 * (9 - int(fibername[1]))) + int(fibername[2:])
+    else:
+        fibern = (16 * int(fibername[1])) + int(fibername[2:])
+    return fibern
