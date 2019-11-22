@@ -1,11 +1,34 @@
 
 
+import pickle as pkl
+import gc
+from collections import OrderedDict
+from multiprocessing import Pool
+import datetime as dt
+import matplotlib.pyplot as plt
+import numpy as np
+from astropy.io import fits
+from astropy.table import Table, hstack
+
+from scipy.signal import medfilt
+from scipy.signal import find_peaks
+from scipy.optimize import curve_fit
+from scipy.ndimage import gaussian_filter
+
+from calibration_helper_funcs import get_psf, \
+    get_highestflux_waves, update_default_dict, create_simple_line_spectra,\
+    top_peak_wavelengths, pix_to_wave,\
+    ensure_match, find_devs, coarse_calib_configure_tables,\
+    get_fiber_number, pix_to_wave_explicit_coefs2, get_meantime_and_date,\
+    update_coeficients_deviations
+
+
 
 
 def run_automated_calibration_wrapper(input_dict):
     return run_automated_calibration(**input_dict)
 
-def run_automated_calibration(coarse_comp, complinelistdict):#, last_obs=None):
+def run_automated_calibration(coarse_comp, complinelistdict, last_obs=None):
     assumed_pixscal_angstrom,calibration_wave_step = 1.,0.01
     wavelow,wavehigh = 4000,8000
     sumsqs,def_wavestart = 10., 5000.
@@ -21,7 +44,7 @@ def run_automated_calibration(coarse_comp, complinelistdict):#, last_obs=None):
 
     calib_coefs = OrderedDict()
 
-    for key in coarse_comp.colnames():  # ['r116','r101']:# keys:
+    for key in coarse_comp.colnames:  # ['r116','r101']:# keys:
         print("\n\n{}:\n".format(key))
         current_flux = np.array(coarse_comp[key].data, copy=True)
 
@@ -31,8 +54,10 @@ def run_automated_calibration(coarse_comp, complinelistdict):#, last_obs=None):
         convd_cut_flux = gaussian_filter(cut_flux, sigma=sigma / calibration_wave_step, order=0)
 
         topb = 1.0
-        if sumsqs < 0.4:
+        if sumsqs < 0.2:
             topa, da = params[0], 100.
+        elif sumsqs < 0.4:
+            topa, da = params[0], 200.
         else:
             topa, da = def_wavestart, 1000.
 
@@ -73,19 +98,20 @@ def fit_coarse_spectrum(current_flux, topa, da, topb, cut_waves, convd_cut_flux,
     dwaves_mat = np.abs(fibcut_waves[cpeaks].reshape((len(cpeaks), 1)) - peak_wavelengths.reshape((1, len(peaks))))
 
     dwaves = np.min(dwaves_mat, axis=0).flatten()
+    subset_cpeak = cpeaks[np.argmin(dwaves_mat, axis=0).flatten()]
 
     wave_dist_cut_size = 20.
     nbad = np.sum(dwaves >= wave_dist_cut_size)
-    print(nbad)
     if len(peaks) - nbad > 7:
         subset_peaks = peaks[dwaves < wave_dist_cut_size]
         subset_dwaves = dwaves[dwaves < wave_dist_cut_size]
+        subset_cpeak = subset_cpeak[dwaves < wave_dist_cut_size]
     else:
         subset_peaks = peaks
         subset_dwaves = dwaves
 
     params, cov = curve_fit(pix_to_wave_explicit_coefs2, subset_peaks.astype(np.float64), subset_dwaves, p0=(0., 0., 0.))
-    ddwaves = pix_to_wave(subset_peaks, *params) - subset_dwaves
+    ddwaves = pix_to_wave_explicit_coefs2(subset_peaks, *params) - subset_dwaves
 
     sumsqs = np.dot(ddwaves, ddwaves) / len(ddwaves)
     print("Fit Sumsq: {}".format(sumsqs))
@@ -96,8 +122,8 @@ def fit_coarse_spectrum(current_flux, topa, da, topb, cut_waves, convd_cut_flux,
 
     best = {}
     best['metric'] = sumsqs
-    best['nlines'] = len(subset_dwaves)
-    best['clines'] = fibcut_waves[cpeaks]
+    best['nlines'] = len(subset_peaks)
+    best['clines'] = fibcut_waves[subset_cpeak]
     best['pixels'] = subset_peaks
     best['coefs'] = params
     return best

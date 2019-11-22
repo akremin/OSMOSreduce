@@ -78,7 +78,7 @@ class Calibrations:
             mock_spec_wls, mock_spec_fls = filemanager.load_synth_calibration_spec(self.lamptypesf,
                                                                                          wavemincut=self.wavemin, \
                                                                                          wavemaxcut=self.wavemax)
-            self.mock_spec_w, self.mock_spec_f = create_simple_line_spectra('ThAr', {'ThAr': (mock_spec_wls, mock_spec_fls)}, \
+            self.mock_spec_w, self.mock_spec_f = create_simple_line_spectra(['ThAr'], {'ThAr': (mock_spec_wls, mock_spec_fls)}, \
                                wave_low=self.wavemin, wave_high=self.wavemax, clab_step=0.01)
 
             #self.linelistf,self.selected_lines,self.all_lines = filemanager.load_calibration_lines_dict(lamptypesf,use_selected=use_selected_calib_lines)
@@ -118,7 +118,6 @@ class Calibrations:
         self.evolution_in_coarse_coefs = OrderedDict()
         self.fine_calibration_date_info = OrderedDict()
         self.interpolated_coef_fits = OrderedDict()
-
 
         self.load_default_coefs()
         if load_history:
@@ -296,10 +295,14 @@ class Calibrations:
                                               save_template=template, \
                                               save_plots=self.save_plots, show_plots=self.show_plots)
                 tabs = {}
-                for tabname in tabs0.colnames:
+                # if type(tabs0) is not Table:
+                #     tabs0 = Table(tabs0)
+                # if type(tabs1) is not Table:
+                #     tabs1 = Table(tabs1)
+                for tabname in tabs0.keys():
                     tabs0[tabname].remove_column(overlaps[1])
                     tabs1[tabname].remove_column(overlaps[0])
-                    tabs[tabname] = hstack([tabs0,tabs1])
+                    tabs[tabname] = hstack([tabs0[tabname],tabs1[tabname]])
 
             ## Create hdulist to export
             out_hdus = [fits.PrimaryHDU(header=self.coarse_calibrations[cc_filnum].header)]
@@ -309,7 +312,7 @@ class Calibrations:
                 outtab = outtab[self.instrument.full_fibs[self.camera].tolist()]
                 out_hdus.append(fits.BinTableHDU(data=outtab.copy(), name=out_name))
                 if in_name == 'coefs':
-                    self.coarse_calibration_coefs_calibration_coefs[pairnum] = outtab.copy()
+                    self.coarse_calibration_coefs[pairnum] = outtab.copy()
 
             hdulist = fits.HDUList(out_hdus)
 
@@ -320,14 +323,28 @@ class Calibrations:
 
             histories = tabs['coefs']
 
+    def generate_evolution_tables(self):
+        for pairnum,filnums in self.pairings.items():
+            if pairnum == 0:
+                continue
+
+            current_calibs = Table(self.coarse_calibration_coefs[pairnum].copy())
+            past_calibs = Table(self.coarse_calibration_coefs[pairnum-1].copy())
+
+            for column in current_calibs.colnames:
+                current_calibs[column] = current_calibs[column] - past_calibs[column]
+
+            self.evolution_in_coarse_coefs[pairnum] = current_calibs.copy()
 
     def run_final_calibrations(self,initial_priors='parametric'):
+        self.generate_evolution_tables()
         output_names = ['calib coefs','fit variances','wavelengths','pixels']
         all_output_names = ['calib coefs', 'fit variances', 'wavelengths', 'pixels', 'linelist']
         mock_spec_w, mock_spec_f = self.mock_spec_w, self.mock_spec_f
 
         if not self.do_fine_calib:
             print("There doesn't seem to be a fine calibration defined. Using the supplied coarse calibs")
+
         select_lines = True
 
         dev_allowance = 1.
@@ -356,14 +373,21 @@ class Calibrations:
             initial_coef_table = Table(self.get_parametricfits_of(caltype='coarse'))
 
         for pairnum,filnums in self.pairings.items():
+            if pairnum > 0:
+                coarse_table_differences = self.evolution_in_coarse_coefs[pairnum]
+                for column in coarse_table_differences.colnames:
+                    initial_coef_table[column] = initial_coef_table[column] + coarse_table_differences[column]
+            ## HACK!!
+            if pairnum == 0 and self.camera=='r':
+                continue
+            ## END HACK!
             filenum = filnums[self.filenum_ind]
-
             data = Table(self.fine_calibrations[filenum].data)
             self.fine_calibration_date_info[pairnum] = get_meantime_and_date(self.fine_calibrations[filenum].header)
 
             linelist = self.selected_lines
 
-            effective_iteration = np.max([pairnum,int(using_defaults)])
+            effective_iteration = pairnum#np.max([pairnum,int(using_defaults)])
             if effective_iteration == 0:
                 user_input = 'some'
             elif effective_iteration == 1:
@@ -377,6 +401,7 @@ class Calibrations:
                 hand_fit_subset = list(initial_coef_table.colnames)
             elif user_input in ['some', 'minimal', 'single']:
                 if cam == 'r':
+                    # specific_set = [cam + '101', cam + '416']
                     specific_set = [cam + '101', cam + '816', cam + '416', cam + '501']
                 else:
                     specific_set = [cam + '116', cam + '801', cam + '516', cam + '401']
@@ -397,13 +422,56 @@ class Calibrations:
             else:
                 pass
 
-            hand_fit_subset = np.asarray(hand_fit_subset)
+            # hand_fit_subset = np.asarray(hand_fit_subset)
+
+            ##HACK!
+            # if pairnum == 0 and self.camera=='r':
+            #     altered_coef_table = initial_coef_table.copy()
+            #     hand_fit_subset = np.asarray(['r101','r816','r416','r501','r210','r602','r715'])
+            #     altered_coef_table = {}#initial_coef_table.copy()
+            #     altered_coef_table['r101'] = [5071.8187300612035, 0.9930979838081959, -5.769775729541421e-06,
+            #                                   1.6219475654346627e-08, -1.060536238512127e-11, 2.027614894968671e-15]
+            #
+            #     altered_coef_table['r816'] = [5064.941399949152, 0.9887048293667995, 4.829092351762018e-06,
+            #                                   5.280389577236655e-09, -5.618906483279477e-12, 1.1981097537960155e-15]
+            #
+            #     altered_coef_table['r416'] = [4966.43139830805, 0.9939388787553181, 5.244911711992524e-06,
+            #                                   1.2291548669411035e-09, - 2.0296595329597448e-12, 2.9050877132565224e-16]
+            #
+            #     altered_coef_table['r501'] = [4965.341783218052, 0.9873531089008049, 2.4560812264245633e-05,
+            #                                   -2.0293237635901715e-08, 8.081202360788054e-12, -1.397383927434781e-15]
+            #
+            #     altered_coef_table['r210'] = [5009.879532180203, 0.986418938077269,
+            #                                   2.1117286784979934e-05, - 1.612921025968839e-08, 6.307242237439978e-12,
+            #                                   -1.175841190977326e-15]
+            #
+            #     altered_coef_table['r309'] = [4981.847585300046, 0.9953409249278389, 6.616819915490353e-09,
+            #                                   7.072942793437885e-09, -4.7799815890757634e-12, 7.369734622022845e-16]
+            #
+            #     altered_coef_table['r602'] = [4975.080088016758, 0.9916173886456268, 7.811003804278236e-06,
+            #                                   1.1977785560589788e-09, -3.3762927213375386e-12, 7.593041888780153e-16]
+            #
+            #     altered_coef_table['r715'] = [5014.023681360571, 0.99147302071155, 4.748885129798807e-06,
+            #                                   3.1454713162197196e-09, -3.4683774647827705e-12, 6.101876288746191e-16]
+            #     handfit_fitting_dict = {}
+            #     handfit_fitting_dict['calib coefs'] = altered_coef_table
+            #     wm,fm = linelist['ThAr']
+            # else:
+            #     if pairnum==1 and self.camera=='r':
+            #         # altered_coef_table,thetype = self.filemanager.locate_calib_dict(fittype='full-ThAr', camera=self.camera,
+            #         #                                                  config=self.config, filenum=filenum)
+            #         # print(thetype, altered_coef_table)
+            #         altered_coef_table = self.filemanager.load_calib_dict(fittype='full-ThAr',cam=self.camera,config=self.config,filenum=1490,timestamp=679621)
+            #         initial_coef_table = Table(altered_coef_table['CALIB COEFS'].data)
+            ## End HACK!
+
 
             handfit_fitting_dict, wm, fm  = \
-                                    self.wavelength_fitting_by_line_selection(data, initial_coef_table,\
-                                    linelist, self.all_lines, self.mock_spec_w, self.mock_spec_f ,\
+                                    wavelength_fitting_by_line_selection(data, initial_coef_table,\
+                                    self.all_lines, linelist, self.mock_spec_w, self.mock_spec_f ,\
                                     select_lines=select_lines,save_plots=self.save_plots,savetemplate_funcs=self.savetemplate_funcs,\
-                                    filenum=filenum,subset=hand_fit_subset,completed_coefs={}) #bounds=None)
+                                    filenum=filenum,subset=hand_fit_subset,completed_coefs={})
+
 
             if select_lines:
                 linelistdict = {'ThAr': (wm, fm)}
@@ -412,14 +480,14 @@ class Calibrations:
 
             if self.single_core:
                 full_fitting_dict, badfits = \
-                    auto_wavelength_fitting_by_lines(data, handfit_fitting_dict['calib coefs'].copy(),  initial_coef_table, self.all_lines, linelistdict.copy(),\
+                    auto_wavelength_fitting_by_lines(data, initial_coef_table, handfit_fitting_dict['calib coefs'].copy(), self.all_lines, linelistdict.copy(),\
                                                           mock_spec_w=mock_spec_w,  mock_spec_f=mock_spec_f,\
                                                           filenum=filenum, \
                                                           save_plots=self.save_plots, savetemplate_funcs=self.savetemplate_funcs)
 
-                for datainfoname,datainfo in handfit_fitting_dict.items():
-                    for fib in datainfo.keys():
-                        full_fitting_dict[datainfoname][fib] = datainfo[fib]
+                # for datainfoname,datainfo in handfit_fitting_dict.items():
+                #     for fib in datainfo.keys():
+                #         full_fitting_dict[datainfoname][fib] = datainfo[fib]
 
                 badfits = np.array(badfits)
             else:
@@ -430,14 +498,14 @@ class Calibrations:
                     'comp': data[fib1s.tolist()], 'fulllinelist': self.all_lines.copy(),
                     'coarse_coefs': initial_coef_table, 'linelistdict':linelistdict.copy(), \
                     'mock_spec_w':mock_spec_w.copy(), 'mock_spec_f': mock_spec_f.copy(), \
-                    'all_coefs':handfit_fitting_dict['calib coefs'].copy(),'user_input': user_input, 'filenum':filenum,
+                    'out_coefs':handfit_fitting_dict['calib coefs'].copy(),'filenum':filenum,
                     'save_plots':self.save_plots, "savetemplate_funcs":self.savetemplate_funcs
                 }
                 obs2 = {
                     'comp': data[fib2s.tolist()], 'fulllinelist': self.all_lines.copy(),
                     'coarse_coefs': initial_coef_table.copy(), 'linelistdict':linelistdict.copy(), \
                     'mock_spec_w':mock_spec_w.copy(), 'mock_spec_f': mock_spec_f.copy(), \
-                    'all_coefs':handfit_fitting_dict['calib coefs'].copy(),'user_input': user_input, 'filenum':filenum,
+                    'out_coefs':handfit_fitting_dict['calib coefs'].copy(),'filenum':filenum,
                     'save_plots': self.save_plots, "savetemplate_funcs": self.savetemplate_funcs
                 }
 
@@ -450,17 +518,17 @@ class Calibrations:
                 full_fitting_dict,badfits = tabs[0]
                 full_fitting_dict2,badfits2 = tabs[1]
 
-                ## The hand fit calibrations are in both returned dicts, remove from the second
-                ## Assign the other calibration info from hand fits to the output dicts
-                for datainfoname, datainfo in handfit_fitting_dict.items():
-                    ## use the autofitted wavelength solution even for hand fits, note we're not
-                    ## assigning these values to the output array
-                    if 'coef' in datainfoname:
-                        for fib in datainfo.keys():
-                            full_fitting_dict2[datainfoname].pop(fib)
-                    else:
-                        for fib in datainfo.keys():
-                            full_fitting_dict[datainfoname][fib] = datainfo[fib]
+                # ## The hand fit calibrations are in both returned dicts, remove from the second
+                # ## Assign the other calibration info from hand fits to the output dicts
+                # for datainfoname, datainfo in handfit_fitting_dict.items():
+                #     ## use the autofitted wavelength solution even for hand fits, note we're not
+                #     ## assigning these values to the output array
+                #     if 'coef' in datainfoname:
+                #         for fib in datainfo.keys():
+                #             full_fitting_dict2[datainfoname].pop(fib)
+                #     else:
+                #         for fib in datainfo.keys():
+                #             full_fitting_dict[datainfoname][fib] = datainfo[fib]
 
                 ## The hand fit calibrations are in both returned dicts, remove from the second
                 ## Assign the other calibration info from hand fits to the output dicts
@@ -471,9 +539,12 @@ class Calibrations:
                 badfits = np.unique(np.append(badfits,badfits2))
 
             handfit_bad_subset_dict, wm, fm = \
-                self.wavelength_fitting_by_line_selection(data, linelistdict, initial_coef_table, select_lines=select_lines, \
-                                                          filenum=filenum, subset=badfits, completed_coefs=full_fitting_dict['calib coefs'].copy())
-
+                                                wavelength_fitting_by_line_selection(data, initial_coef_table, \
+                                                     self.all_lines, linelistdict, self.mock_spec_w, self.mock_spec_f, \
+                                                     select_lines=select_lines, save_plots=self.save_plots,
+                                                     savetemplate_funcs=self.savetemplate_funcs, \
+                                                     filenum=filenum, subset=badfits,
+                                                     completed_coefs=full_fitting_dict['calib coefs'].copy())
             for datainfoname, datainfo in handfit_bad_subset_dict.items():
                 for fib in datainfo.keys():
                     full_fitting_dict[datainfoname][fib] = datainfo[fib]
@@ -509,7 +580,7 @@ class Calibrations:
             if pairnum > 0:
                 devs = find_devs(initial_coef_table,full_fitting_dict['calib coefs'])
 
-            initial_coef_table = Table(full_fitting_dict['calib coefs']).copy()
+            initial_coef_table = Table(full_fitting_dict['calib coefs'].copy())
 
             self.final_calibrated_hdulists[pairnum] = hdulist
             self.filemanager.save_full_calib_dict(hdulist, self.lampstr_f, self.camera, self.config, filenum=filenum)
@@ -574,8 +645,6 @@ class Calibrations:
             for ii in range(ncoefs):
                 coefs[ii] = pix_to_wave_explicit_coefs2(yval,yparametrized_coefs[0,ii],yparametrized_coefs[1,ii],yparametrized_coefs[2,ii])
             out_dict[fiber] = coefs
-
-        import matplotlib.pyplot as plt
 
         offsets = np.array(coef_xys[0]['y'])
         min_off = np.min(offsets)

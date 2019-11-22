@@ -11,21 +11,25 @@ from matplotlib.widgets import CheckButtons
 from matplotlib.widgets import RadioButtons
 from matplotlib.widgets import Slider, Button
 import datetime
-from astropy.table import Table
-
-from scipy.signal import medfilt
-from scipy.signal import find_peaks
 
 import numpy as np
 from scipy.signal import argrelmax
 from collections import OrderedDict
 deltat = np.datetime64('now' ,'m').astype(int) -np.datetime64('2018-06-01T00:00' ,'m').astype(int)
 print(deltat)
+import matplotlib.pyplot as plt
+import numpy as np
+from astropy.table import Table, hstack
+
+from scipy.signal import medfilt
+from scipy.signal import find_peaks
+
+
 
 
 
 def coarse_calib_configure_tables(dict_of_dicts):
-    maxlines = np.max([val['nlines'] for val in dict_of_dicts.values()])
+    maxlines = np.max([len(val['clines']) for val in dict_of_dicts.values()])
     coeftab,metrictab,linestab,pixtab = Table(),Table(),Table(),Table()
 
     for fib,fibdict in dict_of_dicts.items():
@@ -36,8 +40,8 @@ def coarse_calib_configure_tables(dict_of_dicts):
         metcol = Table.Column(name=fib,data=np.array([fibdict['metric']]))
         metrictab.add_column(metcol)
 
-        lines = np.append(fibdict['clines'],np.zeros(maxlines-fibdict['nlines']))
-        pixels = np.append(fibdict['pixels'],np.zeros(maxlines-fibdict['nlines']))
+        lines = np.append(fibdict['clines'],np.zeros(maxlines-len(fibdict['clines'])))
+        pixels = np.append(fibdict['pixels'],np.zeros(maxlines-len(fibdict['clines'])))
 
         linecol = Table.Column(name=fib,data=lines)
         linestab.add_column(linecol)
@@ -200,6 +204,10 @@ def ensure_match(fib, allfibs, subset, cam):
 
 def find_devs(table1,table2):
     xs = np.arange(2000).astype(np.float64)
+    if type(table1) is dict:
+        table1 = Table(table1)
+    if type(table2) is dict:
+        table2 = Table(table2)
     overlaps = list(set(list(table1.colnames)).intersection(set(list(table2.colnames))))
     devs = []
     for fib in overlaps:
@@ -267,14 +275,22 @@ def vacuum_to_air(vac_wave,resolution=1e-5):
         return np.array(outwaves)
 
 def get_psf(current_flux, step=1., prom_quantile = 0.68, npeaks=6):
-    peaks, props = find_peaks(current_flux, height=(np.mean(current_flux), 1e9), width=(2.355 / step, 6 * 2.355 / step))
-    prom_thresh = np.quantile(props['prominences'], prom_quantile)
-    sigma = step * np.mean(np.sort(props['widths'][props['prominences'] > prom_thresh])[:npeaks]) / 2.355
+    for ii in np.arange(1,11, 1):
+        peaks, props = find_peaks(current_flux, height=(np.mean(current_flux)/float(ii), 1e9), width=(2.355 / step, 6 * 2.355 / step))
+        if len(peaks) < 6:
+            continue
+        prom_thresh = np.quantile(props['prominences'], prom_quantile)
+        if np.sum(props['prominences'] > prom_thresh) < npeaks:
+            continue
+        sigma = step * np.mean(np.sort(props['widths'][props['prominences'] > prom_thresh])[:npeaks]) / 2.355
+        break
     return sigma
 
 
 def create_simple_line_spectra(elements, linelistdict, wave_low, wave_high, clab_step=0.01,\
                                return_individual=False,atm_weights={'Ne':1.,'Hg':0.2,'Ar':0.8}):
+    if type(elements) is str:
+        elements = [elements]
     def generate_line_spectra(wl, fl, wave_low, wave_high, calib_step):
         if type(fl) is Table.MaskedColumn:
             fl = fl.filled().data
@@ -290,7 +306,7 @@ def create_simple_line_spectra(elements, linelistdict, wave_low, wave_high, clab
         return cut_waves, cut_fluxes
 
     cut_fluxes = {}
-    cut_flux = np.zeros(((wave_high - wave_low) / clab_step) + 1)
+    cut_flux = np.zeros(int((wave_high - wave_low) / clab_step)).astype(np.float64)
     for el in elements:
         if el in linelistdict.keys():
             wl,fl = linelistdict[el]
@@ -307,27 +323,40 @@ def create_simple_line_spectra(elements, linelistdict, wave_low, wave_high, clab
         return cut_waves,cut_flux
 
 def update_coeficients_deviations(fiber,coef_table,completed_coefs):
-    curtet = int(fiber[1])
-    tets, fibs = [], []
-    for fib in completed_coefs.keys():
-        tets.append(int(fib[1]))
-        fibs.append(fib)
-    tets, fibs = np.array(tets), np.array(fibs)
-    if 9 - curtet in tets:
-        key = fibs[np.where((9 - curtet) == tets)[0][0]]
-        coef_dev_med = np.asarray(completed_coefs[key]) - np.asarray(coef_table[key])
+    navg = 2
+    if type(completed_coefs) is dict:
+        allkeys = np.array(list(completed_coefs.keys()))
     else:
-        coef_devs = np.zeros(shape=(len(completed_coefs), 6)).astype(np.float64)
-        for ii, (key, key_coefs) in enumerate(completed_coefs.items()):
-            dev = np.asarray(key_coefs) - np.asarray(coef_table[key])
-            coef_devs[ii, :] = dev
-        coef_dev_med = np.median(coef_devs, axis=0)
+        allkeys = np.array(completed_coefs.colnames)
+    fibn = get_fiber_number(fibername=fiber)
+    all_fibns = np.array(get_fiber_number(fibername=allkeys))
+    if type(all_fibns) not in [np.array,np.ndarray]:
+        all_fibns = np.array([all_fibns])
+    sortd_locs = np.argsort(np.abs(fibn-all_fibns))
+    if len(sortd_locs) == 1:
+        keys = allkeys
+        diffs2 = np.asarray([(all_fibns - fibn) * (all_fibns - fibn)])
+    else:
+        if len(sortd_locs)>navg:
+            locs = sortd_locs[:navg]
+        else:
+            locs = sortd_locs
+        keys = allkeys[locs]
+        diffs2 = (all_fibns[locs] - fibn) * (all_fibns[locs] - fibn)
 
+    total = np.sum(diffs2)
+    invw2 = {}
+    for key,diff in zip(keys,diffs2):
+        invw2[key] = diff
+    # coef_devs = np.asarray([np.power(np.asarray(completed_coefs[key]) - np.asarray(coef_table[key]),2)*invw2[key] for key in keys])
+    # coef_dev_med = np.sqrt(np.sum(coef_devs,axis=0)/total)
+    coef_devs = np.asarray([(np.asarray(completed_coefs[key]) - np.asarray(coef_table[key]))*invw2[key] for key in keys])
+    coef_dev_med = np.sum(coef_devs,axis=0)/total
     return coef_dev_med
 
 
 def get_fiber_number(fibername='r101', cam=None):
-    if type(fibername) is str:
+    if type(fibername) not in [list,np.array,np.ndarray,Table.Column]:
         fibername = [fibername]
     if cam is None:
         cam = fibername[0][0]
@@ -341,7 +370,7 @@ def get_fiber_number(fibername='r101', cam=None):
     if len(fibern) == 1:
         return fibern[0]
     else:
-        return fibern
+        return np.array(fibern)
 
 
 
