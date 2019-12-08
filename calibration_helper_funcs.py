@@ -1,7 +1,6 @@
 
 import matplotlib
 matplotlib.use('Qt5Agg')
-import matplotlib.pyplot as plt
 ##  a zoom in window
 ##  mutlicursor
 ## And checkboxes
@@ -14,12 +13,12 @@ import datetime
 
 import numpy as np
 from scipy.signal import argrelmax
-from collections import OrderedDict
+
 deltat = np.datetime64('now' ,'m').astype(int) -np.datetime64('2018-06-01T00:00' ,'m').astype(int)
 print(deltat)
 import matplotlib.pyplot as plt
 import numpy as np
-from astropy.table import Table, hstack
+from astropy.table import Table
 
 from scipy.signal import medfilt
 from scipy.signal import find_peaks

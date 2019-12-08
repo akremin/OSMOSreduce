@@ -1,7 +1,3 @@
-
-
-import numpy as np
-from scipy.optimize import curve_fit
 ##  a zoom in window
 ##  mutlicursor
 ## And checkboxes
@@ -10,7 +6,7 @@ import matplotlib
 matplotlib.use('Qt5Agg')
 import matplotlib.pyplot as plt
 
-from matplotlib.widgets import Slider, Button
+from matplotlib.widgets import Button
 from scipy import signal
 
 

@@ -1,10 +1,12 @@
+import os
+
 import matplotlib.pyplot as plt
 import numpy as np
 from astropy.io import fits
-from scipy.signal import find_peaks
-import os
-from scipy.signal import medfilt
 from astropy.table import Table
+from scipy.signal import find_peaks
+from scipy.signal import medfilt
+
 
 def cutout_all_apperatures(all_hdus,cameras,deadfibers=[],summation_preference='simple',\
                             show_plots=True,save_plots=False,save_template='{}{}{}{}{}.png'):

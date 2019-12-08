@@ -1,6 +1,7 @@
+import matplotlib.pyplot as plt
 import numpy as np
 from astropy.io import fits
-import matplotlib.pyplot as plt
+
 
 def bias_subtract(all_hdus,date,strategy='median',convert_adu_to_e=True,\
                   save_plots=False,show_plots=True,savetemplate='{}{}{}{}{}.png'):

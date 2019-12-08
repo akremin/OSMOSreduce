@@ -1,6 +1,5 @@
 import numpy as np
 from astropy.io import fits
-import matplotlib.pyplot as plt
 
 
 def stitch_all_images(all_hdus,date):

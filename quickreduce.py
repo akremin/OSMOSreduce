@@ -60,41 +60,16 @@ def pipeline(maskname=None,obs_config_name=None,io_config_name=None, pipe_config
     pipe_config = configparser.ConfigParser(interpolation=configparser.ExtendedInterpolation())
     pipe_config.read(pipe_config_name)
 
-
     if maskname is None:
         try:
             maskname = pipe_config['GENERAL']['mask_name']
         except:
             raise (IOError, "I don't know the necessary configuration file information. Exiting")
-    if obs_config_name is None:
-        if 'obsconf' in pipe_config['CONFS'].keys():
-            obs_config_name = pipe_config['CONFS']['obsconf']
-        else:
-            obs_config_name = './configs/obs_{}.ini'.format(maskname)
-    if '/configs' not in obs_config_name and not os.path.exists(obs_config_name):
-        obs_config_name = './configs/{}'.format(obs_config_name)
-    if io_config_name is None:
-        if 'ioconf' in pipe_config['CONFS'].keys():
-            io_config_name = pipe_config['CONFS']['ioconf']
-        else:
-            io_config_name = './configs/io_{}.ini'.format(maskname)
-    if '/configs' not in io_config_name and not os.path.exists(io_config_name):
-        io_config_name = './configs/{}'.format(io_config_name)
 
-    obs_config = configparser.ConfigParser()
-    obs_config.read(obs_config_name)
-
-    io_config = configparser.ConfigParser(interpolation=configparser.ExtendedInterpolation())
-    io_config.add_section('GENERAL')
-    io_config['GENERAL']['mask_name'] = pipe_config['GENERAL']['mask_name']
-    if 'path_to_masks' in pipe_config['GENERAL'].keys() and str(pipe_config['GENERAL']['path_to_masks']).lower() != 'none':
-        io_config.add_section('PATHS')
-        io_config['PATHS']['path_to_masks'] = pipe_config['GENERAL']['path_to_masks']
-    if 'raw_data_loc' in pipe_config['GENERAL'].keys() and str(pipe_config['GENERAL']['raw_data_loc']).lower() != 'none':
-        if 'PATHS' not in io_config.sections():
-            io_config.add_section('PATHS')
-        io_config['PATHS']['raw_data_loc'] = pipe_config['GENERAL']['raw_data_loc']
-    io_config.read(io_config_name)
+    ## Check that the configs are there or defined in the pipeline conf file
+    ## read in the confs if they are there, otherwise return none
+    obs_config = read_obs_config(obs_config_name, pipe_config['CONFS'], maskname)
+    io_config = read_io_config(io_config_name, pipe_config, maskname)
 
     ####         Beginning of Code
     ## Ingest steps and determine where to start
@@ -109,10 +84,11 @@ def pipeline(maskname=None,obs_config_name=None,io_config_name=None, pipe_config
     filemanager = FileManager( io_config )
     instrument = InstrumentState( obs_config )
     obj_info = obs_config['TARGET']
+
     ## Get specific pipeline options
     pipe_options = dict(pipe_config['PIPE_OPTIONS'])
 
-    if pipe_options['make_mtl'].lower() == 'true' and \
+    if boolify(pipe_options['make_mtl']) and \
             io_config['SPECIALFILES']['mtl'].lower() != 'none':
         from create_merged_target_list import create_mtl
         create_mtl(io_config,filenumbers['science'][0],vizier_catalogs=['sdss12'], \
@@ -152,9 +128,8 @@ def pipeline(maskname=None,obs_config_name=None,io_config_name=None, pipe_config
                     pkl.dump(data.all_hdus,crashsave)
                 raise()
     ##HACK!!
-    make_mtlz = (str(pipe_options['make_mtlz']).lower()=='true')
-    mtlz_hasname = (str(io_config['SPECIALFILES']['mtlz'].lower()) != 'none')
-    if make_mtlz and mtlz_hasname:
+
+    if boolify(pipe_options['make_mtlz']) and ((io_config['SPECIALFILES']['mtlz'].lower()) != 'none'):
         cams = instrument.cameras
         imtype = 'zfits'
         if not do_step_bool:
@@ -180,7 +155,7 @@ def pipeline(maskname=None,obs_config_name=None,io_config_name=None, pipe_config
             else:
                 hdus.append(None)
 
-        find_extra_redshifts = (str(pipe_options['find_extra_redshifts']).lower()=='true')
+        find_extra_redshifts = boolify(pipe_options['find_extra_redshifts'])
         mtlz_path = os.path.join(io_config['PATHS']['catalog_loc'],io_config['DIRS']['mtl'])
         mtlz_name = io_config['SPECIALFILES']['mtlz']
         outfile = os.path.join(mtlz_path,mtlz_name)
@@ -190,16 +165,60 @@ def pipeline(maskname=None,obs_config_name=None,io_config_name=None, pipe_config
     else:
         return
 
+
+
 def get_steps(pipe_config):
     ## Ingest steps and determine where to start
     steps = OrderedDict(pipe_config['STEPS'])
     pipe_config.remove_section('STEPS')
     start = str(list(steps.keys())[-1])
     for key,val in steps.items():
-        if val.upper()=='TRUE':
+        if boolify(val):
             start = key
             break
     return steps, start, pipe_config
+
+def check_confname(confname, conftype, pipe_config_dict, maskname):
+    if confname is None:
+        if conftype in pipe_config_dict.keys():
+            confname = pipe_config_dict[conftype]
+        else:
+            confname = './configs/{}_{}.ini'.format(conftype[:-4],maskname)
+    if '/configs' not in confname and not os.path.exists(confname):
+        confname = './configs/{}'.format(confname)
+    return confname
+
+def read_obs_config(obs_config_name, pipe_config_dict, maskname):
+    obs_config_name = check_confname(obs_config_name, 'obsconf', pipe_config_dict, maskname)
+    if os.path.exists(obs_config_name):
+        obs_config = configparser.ConfigParser()
+        obs_config.read(obs_config_name)
+        return obs_config
+    else:
+        return None
+
+def read_io_config(io_config_name, pipe_dict, maskname):
+    io_config_name = check_confname(io_config_name, 'ioconf', pipe_dict['CONFS'], maskname)
+    if os.path.exists(io_config_name):
+        io_config = configparser.ConfigParser(interpolation=configparser.ExtendedInterpolation())
+        io_config.add_section('GENERAL')
+        io_config['GENERAL']['mask_name'] = pipe_dict['GENERAL']['mask_name']
+        if 'path_to_masks' in pipe_dict['GENERAL'].keys() and str(
+                pipe_dict['GENERAL']['path_to_masks']).lower() != 'none':
+            io_config.add_section('PATHS')
+            io_config['PATHS']['path_to_masks'] = pipe_dict['GENERAL']['path_to_masks']
+        if 'raw_data_loc' in pipe_dict['GENERAL'].keys() and str(
+                pipe_dict['GENERAL']['raw_data_loc']).lower() != 'none':
+            if 'PATHS' not in io_config.sections():
+                io_config.add_section('PATHS')
+            io_config['PATHS']['raw_data_loc'] = pipe_dict['GENERAL']['raw_data_loc']
+        io_config.read(io_config_name)
+        return io_config
+    else:
+        return None
+
+def boolify(parameter):
+    return (str(parameter).lower()=='true')
 
 def parse_command_line(argv):
     from optparse import OptionParser

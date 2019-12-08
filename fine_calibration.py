@@ -1,17 +1,14 @@
 
 
+from collections import Counter
+
 import matplotlib.pyplot as plt
 import numpy as np
-from astropy.io import fits
-from astropy.table import Table, hstack
+from astropy.table import Table
 
-
-from calibration_helper_funcs import pix_to_wave,\
-    get_fiber_number, pix_to_wave_explicit_coefs2, get_meantime_and_date,\
-    update_coeficients_deviations,vacuum_to_air
-
+from calibration_helper_funcs import pix_to_wave, \
+    get_fiber_number, update_coeficients_deviations, vacuum_to_air
 from linebrowser import LineBrowser
-from collections import Counter
 
 
 def auto_wavelength_fitting_by_lines_wrapper(input_dict):

@@ -1,19 +1,12 @@
-from astropy.io import fits
+import matplotlib.pyplot as plt
 import numpy as np
-import numpy as np
-from astropy.io import fits
 from astropy.table import Table
 from scipy.interpolate import CubicSpline
-from scipy.signal import medfilt, find_peaks
-from scipy.signal.windows import gaussian as gaussian_kernel
 from scipy.ndimage import median_filter
-from collections import OrderedDict
-from calibrations import Calibrations
-from observations import Observations
-import matplotlib.pyplot as plt
+from scipy.signal import find_peaks
+from scipy.signal.windows import gaussian as gaussian_kernel
+from scipy.ndimage import gaussian_filter
 
-
-from quickreduce_funcs import smooth_and_dering
 def gauss(lams, offset, mean, sig, amp):
     return offset + (amp * np.exp(-(lams - mean) * (lams - mean) / (2 * sig * sig))) / np.sqrt(
         2 * np.pi * sig * sig)
@@ -43,9 +36,37 @@ def replace_nans(flux_array,wave_pix_multiplier = 4):
         outfluxarray[nanlocs] = background[nanlocs]
     return outfluxarray
 
+def find_continuum(spec, pix_per_wave, csize = 701, quant = 0.9):
+    modspec = np.clip(spec,-100,np.nanquantile(spec,quant))
+    nanlocs = np.where(np.bitwise_not(np.isnan(modspec)))[0]
+    if len(nanlocs)>0 and nanlocs[0]>0:
+        modspec[:nanlocs[0]] = modspec[nanlocs[0]]
+    if len(nanlocs)>0 and nanlocs[-1]<(len(spec)-1):
+        modspec[nanlocs[-1]:] = modspec[nanlocs[-1]]
+    medfit = buffered_smooth(modspec, csize+2, csize, 'median')
+    for attempt in range(0,100,2):
+        devs = (modspec-medfit)
+        dev_quant = np.nanquantile(devs,quant-(attempt/200.))
+        modspec[devs>dev_quant] = medfit[devs>dev_quant] + dev_quant
+        medfit = buffered_smooth(modspec, csize+10, csize, 'median')
+    sig = 8 * pix_per_wave
+    nzpad = int(4 * sig)
+    cont = buffered_smooth(medfit, nzpad, sig, 'gaussian')
+    return cont + np.nanquantile(spec-cont,0.16)
+
+def buffered_smooth(arr,bufsize,smoothsize,smoothtype):
+    zeropadded = np.pad(arr, (bufsize, bufsize), 'constant',
+                        constant_values=(np.median(arr[:bufsize]), np.median(arr[-bufsize:])))
+    if smoothtype.lower()[0] == 'g':
+        cont = gaussian_filter(zeropadded, sigma=smoothsize, order=0)[bufsize:-bufsize]
+    else:
+        cont = median_filter(zeropadded, size=smoothsize, mode='nearest')[bufsize:-bufsize]
+    return cont
+
 def subtract_sky(galflux,skyflux,gallams,galmask):
     pix_per_wave = int(np.ceil(1/np.nanmedian(gallams[1:]-gallams[:-1])))
-    continuum_median_kernalsize = 371
+    continuum_median_kernalsize = 280#371
+
     if int(np.ceil(pix_per_wave)) % 2 == 0:
         continuum_median_kernalsize = (continuum_median_kernalsize*pix_per_wave) + 1
     else:
@@ -58,66 +79,105 @@ def subtract_sky(galflux,skyflux,gallams,galmask):
     galflux = replace_nans(galflux, wave_pix_multiplier=pix_per_wave)
     skyflux = replace_nans(skyflux, wave_pix_multiplier=pix_per_wave)
 
-    gcont = median_filter(galflux, size=continuum_median_kernalsize,mode='nearest')
-    scont = median_filter(skyflux, size=continuum_median_kernalsize,mode='nearest')
+    gcont = find_continuum(galflux.copy(), pix_per_wave=pix_per_wave, csize=continuum_median_kernalsize)
+    scont = find_continuum(skyflux.copy(), pix_per_wave=pix_per_wave, csize=continuum_median_kernalsize)
     gal_contsub = galflux - gcont
     sky_contsub = skyflux - scont
+    # plt.figure()
+    # plt.plot(gallams,gcont,alpha=0.2,label='gcont')
+    # plt.plot(gallams, scont, alpha=0.2, label='scont')
+    # plt.plot(gallams, galflux, alpha=0.2, label='gal')
+    # plt.plot(gallams, skyflux, alpha=0.2, label='sky')
+    # plt.plot(gallams, gal_contsub, alpha=0.2, label='gal contsub')
+    # plt.plot(gallams, sky_contsub, alpha=0.2, label='sky contsub')
+    # plt.legend()
+    # plt.figure()
+    # plt.plot(gallams,galflux-skyflux)
+    # plt.show()
     median_sky_continuum_height = np.nanmedian(scont)
-    s_peak_inds, s_peak_props = find_peaks(sky_contsub, height=(sky_contsub.max() / 10, None), width=(0.5*pix_per_wave, 8*pix_per_wave), \
+    g_peak_inds, g_peak_props = find_peaks(gal_contsub, height=(gal_contsub.max() / 8, None),
+                                           width=(0.5 * pix_per_wave, 8 * pix_per_wave), \
                                            threshold=(None, None),
-                                           prominence=(sky_contsub.max() / 5, None), wlen=int(24*pix_per_wave))
+                                           prominence=(gal_contsub.max() / 8, None), wlen=int(24 * pix_per_wave))
 
-    g_peak_inds, g_peak_props = find_peaks(gal_contsub, height=(gal_contsub.max() / 10, None), width=(0.5*pix_per_wave, 8*pix_per_wave), \
-                                           threshold=(None, None),
-                                           prominence=(gal_contsub.max() / 5, None), wlen=int(24*pix_per_wave))
 
-    g_peak_inds_matched = []
     if len(g_peak_inds) == 0:
-        g_peak_inds, g_peak_props = find_peaks(gal_contsub, height=(gal_contsub.max() / 20, None), width=(0.5*pix_per_wave, 8*pix_per_wave), \
+        g_peak_inds, g_peak_props = find_peaks(gal_contsub, height=(gal_contsub.max() / 20, None),
+                                               width=(0.5 * pix_per_wave, 8 * pix_per_wave), \
                                                threshold=(None, None),
-                                               prominence=(gal_contsub.max() / 10, None), wlen=int(24*pix_per_wave))
+                                               prominence=(gal_contsub.max() / 20, None), wlen=int(24 * pix_per_wave))
         if len(g_peak_inds) == 0:
-            return (gal_contsub + gcont), skyflux*(np.median(gcont/scont)), gcont, np.zeros(len(galflux)).astype(bool)
+            print("Couldn't identify any peaks, returning scaled sky for direct subtraction")
+            return (gal_contsub + gcont), skyflux * (np.median(gcont / scont)), gcont, np.zeros(len(galflux)).astype(
+                bool)
 
-    for peak in s_peak_inds:
-        ind = np.argmin(np.abs(gallams[g_peak_inds] - gallams[peak]))
-        g_peak_inds_matched.append(g_peak_inds[ind])
+    for runnum in range(10):
+        s_peak_inds, s_peak_props = find_peaks(sky_contsub, height=(sky_contsub.max() / 8, None), width=(0.5*pix_per_wave, 8*pix_per_wave), \
+                                               threshold=(None, None),
+                                               prominence=(sky_contsub.max() / 8, None), wlen=int(24*pix_per_wave))
 
-    g_peak_inds_matched = np.asarray(g_peak_inds_matched).astype(int)
+        g_peak_inds_matched = []
+        for peak in s_peak_inds:
+            ind = np.argmin(np.abs(gallams[g_peak_inds] - gallams[peak]))
+            g_peak_inds_matched.append(g_peak_inds[ind])
 
-    # s_peak_fluxes = sky_contsub[s_peak_inds]
-    # g_peak_fluxes = gal_contsub[g_peak_inds_matched]
-    s_peak_fluxes = skyflux[s_peak_inds]
-    g_peak_fluxes = galflux[g_peak_inds_matched]
-    # differences = g_peak_fluxes - s_peak_fluxes
-    # normd_diffs = differences/s_peak_fluxes
-    # median_normd_diff = np.median(normd_diffs)
-    peak_ratio = g_peak_fluxes / s_peak_fluxes
-    median_ratio = np.median(peak_ratio)
-    # print(peak_ratio, median_ratio)
+        g_peak_inds_matched = np.asarray(g_peak_inds_matched).astype(int)
 
-    skyflux *= median_ratio
-    scont = median_filter(skyflux, size=continuum_median_kernalsize,mode='nearest')
-    sky_contsub = skyflux - scont
+        s_peak_fluxes = sky_contsub[s_peak_inds]
+        g_peak_fluxes = gal_contsub[g_peak_inds_matched]
+        s_peak_total_fluxes = skyflux[s_peak_inds]
+        # g_peak_fluxes = galflux[g_peak_inds_matched]
+        differences = g_peak_fluxes - s_peak_fluxes
+        peak_ratios = differences / s_peak_total_fluxes
+        # print(np.median(peak_ratios),peak_ratios)
+        if np.median(peak_ratios) < 0.001:
+            break
+        # normd_diffs = differences/s_peak_fluxes
+        # median_normd_diff = np.median(normd_diffs)
+        # peak_ratios = g_peak_fluxes / s_peak_fluxes
+        median_ratio = 1.0+np.median(peak_ratios)
 
-    sky_too_large = np.where(scont>gcont)[0]
-    if len(sky_too_large) > 0.2*len(gal_contsub):
-        adjusted_skyflux_ratio = np.median(gcont[sky_too_large]/scont[sky_too_large])
-        skyflux *= adjusted_skyflux_ratio
-        scont = median_filter(skyflux, size=continuum_median_kernalsize,mode='nearest')
+        skyflux *= median_ratio
+        scont = find_continuum(skyflux.copy(), pix_per_wave=pix_per_wave, csize=continuum_median_kernalsize)
         sky_contsub = skyflux - scont
 
-    remaining_sky = skyflux.copy()
+    not_masked = np.bitwise_not(galmask)
+    sky_too_large = np.where(scont[not_masked][50:-50]>gcont[not_masked][50:-50])[0]
+    flux_too_large = np.where(skyflux[not_masked][50:-50] > galflux[not_masked][50:-50])[0]
+    if len(sky_too_large) > 0.4*len(gal_contsub[not_masked][50:-50]) and skyflux.max() > 2000. and \
+        len(flux_too_large) > 0.2*len(gal_contsub[not_masked][50:-50]):
+        # plt.subplots(2,1,sharex=True)
+        # plt.subplot(211)
+        # plt.plot(gallams, skyflux,alpha=0.2,label='scaled orig sky')
+        # plt.plot(gallams, galflux, alpha=0.2, label='orig gal')
+        # plt.plot(gallams, scont, alpha=0.2, label='scaled cont sky')
+        # plt.plot(gallams, gcont, alpha=0.2, label='cont gal')
+        # plt.legend()
+        # plt.subplot(212)
+        # plt.plot(gallams, sky_contsub, alpha=0.2, label='scaled contsub sky')
+        # plt.plot(gallams, gal_contsub, alpha=0.2, label='cont sub gal')
+        # plt.legend()
+        # plt.show()
 
-    s_peak_inds, s_peak_props = find_peaks(sky_contsub, height=(30, None), width=(0.1*pix_per_wave, 10*pix_per_wave), \
+        adjusted_skyflux_ratio = np.median(gcont[not_masked][50:-50][sky_too_large]/scont[not_masked][50:-50][sky_too_large])
+        skyflux *= adjusted_skyflux_ratio
+        scont = find_continuum(skyflux.copy(), pix_per_wave=pix_per_wave, csize=continuum_median_kernalsize)
+        sky_contsub = skyflux - scont
+        print("Needed to rescale the sky because the initial adjustment was too large: ", adjusted_skyflux_ratio)
+
+    remaining_sky = skyflux.copy()
+    sprom = np.quantile(sky_contsub, 0.8)
+    gprom = np.quantile(gal_contsub, 0.8)
+    s_peak_inds, s_peak_props = find_peaks(sky_contsub, height=(None, None), width=(0.1*pix_per_wave, 10*pix_per_wave), \
                                            threshold=(None, None),
-                                           prominence=(10, None), wlen=int(101*pix_per_wave))
-    g_peak_inds, g_peak_props = find_peaks(gal_contsub, height=(30, None), width=(0.1*pix_per_wave, 10*pix_per_wave), \
+                                           prominence=(sprom, None), wlen=24*pix_per_wave)
+    g_peak_inds, g_peak_props = find_peaks(gal_contsub, height=(None, None), width=(0.1*pix_per_wave, 10*pix_per_wave), \
                                            threshold=(None, None),
-                                           prominence=(10, None), wlen=int(101*pix_per_wave))
+                                           prominence=(gprom, None), wlen=24*pix_per_wave)
 
     outgal = gal_contsub.copy()
     line_pairs = []
+
     for ii in range(len(s_peak_inds)):
         pair = {}
 
@@ -140,195 +200,194 @@ def subtract_sky(galflux,skyflux,gallams,galmask):
 
         line_pairs.append(pair)
 
-    sky_smthd_contsub = np.convolve(sky_contsub, [1 / 15., 3 / 15., 7 / 15., 3 / 15., 1 / 15.], 'same')
-    gal_smthd_contsub = np.convolve(gal_contsub, [1 / 15., 3 / 15., 7 / 15., 3 / 15., 1 / 15.], 'same')
+    # sky_smthd_contsub = np.convolve(sky_contsub, [1 / 15., 3 / 15., 7 / 15., 3 / 15., 1 / 15.], 'same')
+    # gal_smthd_contsub = np.convolve(gal_contsub, [1 / 15., 3 / 15., 7 / 15., 3 / 15., 1 / 15.], 'same')
+    sky_smthd_contsub = gaussian_filter(sky_contsub, sigma=0.25 * pix_per_wave, order=0)
+    gal_smthd_contsub = gaussian_filter(gal_contsub, sigma=0.5 * pix_per_wave, order=0)
+    sky_smthd_contsub = sky_smthd_contsub * sky_contsub.sum() / sky_smthd_contsub.sum()
+    gal_smthd_contsub = gal_smthd_contsub * gal_contsub.sum() / gal_smthd_contsub.sum()
+    # plt.subplots(2,1,sharex=True)
+    # plt.subplot(211)
+    # plt.plot(gallams, skyflux,alpha=0.2,label='scaled orig sky')
+    # plt.plot(gallams, galflux, alpha=0.2, label='orig gal')
+    # plt.plot(gallams, scont, alpha=0.2, label='scaled cont sky')
+    # plt.plot(gallams, gcont, alpha=0.2, label='cont gal')
+    # plt.legend()
+    # plt.subplot(212)
+    # plt.plot(gallams, sky_contsub, alpha=0.2, label='scaled contsub sky')
+    # plt.plot(gallams, gal_contsub, alpha=0.2, label='cont sub gal')
+    # plt.legend()
+    # plt.show()
+
+    print("Identified {} lines to subtract".format(len(line_pairs)))
+    seen_before = np.zeros(len(outgal)).astype(bool)
     for pair in line_pairs:
         need_to_mask = False
         g1_peak = pair['gal']['peak']
         s1_peak = pair['sky']['peak']
 
-        itterleft = int(s1_peak)
+        itterleft = int(np.min([s1_peak,g1_peak]))
         keep_going = True
-        nextset = np.arange(1, 4*pix_per_wave).astype(int)
+        n_angs = 1
+        nextset = np.arange(1, n_angs*pix_per_wave).astype(int)
         while keep_going:
-            if itterleft == 0:
+            if itterleft < np.max([1,(n_angs*pix_per_wave)//2]):
+                if itterleft < 0:
+                    itterleft = 0
                 g_select = False
                 s_select = False
-            elif itterleft > 2*pix_per_wave:
+            elif itterleft > n_angs*pix_per_wave:
                 g_select = np.any(gal_smthd_contsub[itterleft - nextset] < gal_smthd_contsub[itterleft])
                 s_select = np.any(sky_smthd_contsub[itterleft - nextset] < sky_smthd_contsub[itterleft])
             else:
                 to_start = itterleft
-                endcut = -3*pix_per_wave + to_start
+                endcut = -(n_angs-1)*pix_per_wave + to_start
                 g_select = np.any(
                     gal_smthd_contsub[itterleft - nextset[:endcut]] < gal_smthd_contsub[itterleft])
                 s_select = np.any(
                     sky_smthd_contsub[itterleft - nextset[:endcut]] < sky_smthd_contsub[itterleft])
 
-            over_zero_select = ((gal_smthd_contsub[itterleft] > -10.) & (sky_smthd_contsub[itterleft] > -10.))
-            if g_select and s_select and over_zero_select:
-                itterleft -= 1
+            over_zero_select = True#((gal_smthd_contsub[itterleft] > -10.) & (sky_smthd_contsub[itterleft] > -10.))
+            if (g_select or s_select) and over_zero_select:
+                itterleft -= np.max([1,(n_angs*pix_per_wave)//2])
             else:
                 keep_going = False
 
-        itterright = int(s1_peak)
+        itterright = int(np.max([s1_peak,g1_peak]))
         keep_going = True
-        nextset = np.arange(1, 4*pix_per_wave).astype(int)
+        nextset = np.arange(1, n_angs*pix_per_wave).astype(int)
         while keep_going:
             if (len(pixels) - itterright) == 1:
                 g_select = False
                 s_select = False
-            elif (len(pixels) - itterright) >= 4*pix_per_wave:
+            elif (len(pixels) - itterright) >= n_angs*pix_per_wave:
                 g_select = np.any(gal_smthd_contsub[itterright + nextset] < gal_smthd_contsub[itterright])
                 s_select = np.any(sky_smthd_contsub[itterright + nextset] < sky_smthd_contsub[itterright])
             else:
-                to_end = len(pixels) - itterright
-                endcut = -4*pix_per_wave + to_end
+                to_end = len(pixels) - itterright - 1
+                endcut = -n_angs*pix_per_wave + to_end
                 g_select = np.any(
                     gal_smthd_contsub[itterright + nextset[:endcut]] < gal_smthd_contsub[itterright])
                 s_select = np.any(
                     sky_smthd_contsub[itterright + nextset[:endcut]] < sky_smthd_contsub[itterright])
 
-            over_zero_select = ((gal_smthd_contsub[itterright] > -10.) & (sky_smthd_contsub[itterright] > -10.))
-            if g_select and s_select and over_zero_select:
-                itterright += 1
+            over_zero_select = True#((gal_smthd_contsub[itterright] > -10.) & (sky_smthd_contsub[itterright] > -10.))
+            if (g_select or s_select) and over_zero_select:
+                itterright += np.max([1,(n_angs*pix_per_wave)//2])
             else:
                 keep_going = False
 
         slower_wave_ind = int(itterleft)
         supper_wave_ind = int(itterright) + 1
-        extended_lower_ind = np.clip(slower_wave_ind - 10, 0, npixels - 1)
-        extended_upper_ind = np.clip(supper_wave_ind + 10, 0, npixels - 1)
+
+        if np.any(seen_before[slower_wave_ind:supper_wave_ind]):
+            print("some of these have already been seen")
+            if np.sum(seen_before[slower_wave_ind:supper_wave_ind])>(supper_wave_ind-slower_wave_ind-2):
+                continue
+            locs = np.where(np.bitwise_not(seen_before[slower_wave_ind:supper_wave_ind]))[0]
+            print("was: ",slower_wave_ind,supper_wave_ind)
+            supper_wave_ind = slower_wave_ind + locs[-1] + 1
+            slower_wave_ind += locs[0]
+            print('now: ',slower_wave_ind,supper_wave_ind)
+        if slower_wave_ind == supper_wave_ind:
+            print("Lower and upper inds somehow were the same. Skipping this peak")
+            print("was: ",slower_wave_ind,supper_wave_ind)
+            continue
+
+        seen_before[slower_wave_ind:supper_wave_ind] = True
+
+        # extended_lower_ind = np.clip(slower_wave_ind - 10, 0, npixels - 1)
+        # extended_upper_ind = np.clip(supper_wave_ind + 10, 0, npixels - 1)
 
         g_distrib = gal_contsub[slower_wave_ind:supper_wave_ind].copy()
-        min_g_distrib = g_distrib.min()
-        g_distrib = g_distrib - min_g_distrib + 0.00001
-        # g_lams = gallams[slower_wave_ind:supper_wave_ind]
-        # g_dlams = gallams[slower_wave_ind+1:supper_wave_ind+1]-\
-        #           gallams[slower_wave_ind:supper_wave_ind]
-        # integral_g = np.dot(g_distrib,g_dlams)
-        integral_g = np.sum(g_distrib)/pix_per_wave
+        if np.any(g_distrib<0.):
+            min_g_distrib = g_distrib.min()
+        else:
+            min_g_distrib = 0.
+        g_distrib = g_distrib - min_g_distrib
+        integral_g = np.sum(g_distrib)#/pix_per_wave
         normd_g_distrib = g_distrib / integral_g
 
         s_distrib = sky_contsub[slower_wave_ind:supper_wave_ind].copy()
-        min_s_distrib = s_distrib.min()
-        s_distrib = s_distrib - min_s_distrib + 0.00001
-        # s_lams = gallams[slower_wave_ind:supper_wave_ind]
-        # s_dlams = gallams[slower_wave_ind+1:supper_wave_ind+1]-\
-        #           gallams[slower_wave_ind:supper_wave_ind]
-        # integral_s = np.dot(s_distrib,s_dlams)
-        integral_s = np.sum(s_distrib)/pix_per_wave
+        if np.any(s_distrib < 0.):
+            min_s_distrib = s_distrib.min()
+        else:
+            min_s_distrib = 0.
+        s_distrib = s_distrib - min_s_distrib
+        integral_s = np.sum(s_distrib)#/pix_per_wave
 
         # local_vals = gal_contsub[slower_wave_ind-10*:supper_wave_ind]
         # dint = g_distrib*(1 - (integral_s / integral_g))
         ## Distrib is cont subtracted, so this requires masking if the original peak
         ## is at least twice as tall as the continuum
-        if np.nanmax(s_distrib) > median_sky_continuum_height:
-            need_to_mask = True
+        # if np.nanmax(s_distrib) > median_sky_continuum_height:
+        #     need_to_mask = True
+        ## Only if it's twice the GALAXY continuum
+        # if np.nanmax(s_distrib) > np.nanmedian(gcont[slower_wave_ind:supper_wave_ind]):
+        #     need_to_mask = True
 
+        mean_s_ppix = np.mean(s_distrib)
+        mean_g_ppix = np.mean(g_distrib)
         if integral_s > (1.1 * integral_g):
             need_to_mask = True
             integral_s = (1.1 * integral_g)
 
-        if integral_s > (30.0 + integral_g):
+        if integral_s < (0.9 * integral_g):
             need_to_mask = True
-            integral_s = (30.0 + integral_g)
+            integral_s = (0.9 * integral_g)
 
-        if integral_g > (60.0 + integral_s):
+        if mean_s_ppix > (30.0 + mean_g_ppix):
             need_to_mask = True
-            integral_s = integral_g - 60.0
+            integral_s = (30.0*len(s_distrib)) + integral_g
 
+        if mean_g_ppix > (30.0 + mean_s_ppix):
+            need_to_mask = True
+            integral_s = integral_g - 30.0*len(s_distrib)
+
+        # if integral_s > 1000:
+        #     print("lessgo")
         sky_g_distrib = normd_g_distrib * integral_s
-        if len(sky_g_distrib) > 3:
-            nzpad = 5
-            nkern = 3
-            subd = gal_contsub[slower_wave_ind:supper_wave_ind].copy() - sky_g_distrib
-            zeropadded = np.pad(subd,(nzpad,nzpad),'constant',constant_values=0.)
-            gkern = gaussian_kernel(nkern,nkern/6.,sym=True)
-            norm_gkern = gkern/gkern.sum()
-            removedlineflux = np.convolve(zeropadded, norm_gkern, 'same')[nzpad:-nzpad]
-            del subd,zeropadded
-        else:
-            removedlineflux = (gal_contsub[slower_wave_ind:supper_wave_ind].copy() - sky_g_distrib)
+        subd = gal_contsub[slower_wave_ind:supper_wave_ind].copy() - sky_g_distrib
 
-        if slower_wave_ind > 100:
-            prior_vals = gal_contsub[slower_wave_ind-100:supper_wave_ind-100].copy()
-            prior_vals = prior_vals[np.bitwise_not(masked[slower_wave_ind-100:supper_wave_ind-100])]
-            if len(prior_vals)>10:
-                plqart, pmed, puqart = np.nanquantile(prior_vals,[0.25,0.5,0.75])
-                prior_var = (puqart-plqart)*0.5
-                removedlineflux = np.clip(removedlineflux,a_min=1.5*prior_vals.min(),a_max= 1.5*prior_vals.max())
-                removedlineflux = np.clip(removedlineflux, a_min=pmed-3*prior_var, a_max=pmed+3*prior_var)
-
-        doplots = False
-        dips_low = np.any((gal_contsub[slower_wave_ind:supper_wave_ind] - sky_g_distrib) < (-60))
-        all_above = np.all((gal_contsub[slower_wave_ind:supper_wave_ind]) > (-60))
-        if (dips_low and all_above):
+        if len(subd) == 0:
+            print(slower_wave_ind,supper_wave_ind,subd, gal_contsub[slower_wave_ind:supper_wave_ind].copy(), sky_g_distrib,normd_g_distrib, s_distrib,g_distrib)
+            continue
+        if np.max(subd) > 300. or np.min(subd) < -100.:
             need_to_mask = True
-        if doplots:  # or (dips_low and all_above):
-            speaks, sheights, swheights = gallams[int(s1_peak)], pair['sky']['height'], pair['sky']['wheight']
-            gpeaks, gheights, gwheights = gallams[int(g1_peak)], pair['gal']['height'], pair['gal']['wheight']
-            slefts, glefts = gallams[int(pair['sky']['left'])], gallams[int(pair['gal']['left'])]
-            srights, grights = gallams[int(pair['sky']['right'])], gallams[int(pair['gal']['right'])]
 
-            plt.subplots(1, 3)
+        if len(sky_g_distrib) > pix_per_wave:
+            nkern = (0.5*pix_per_wave)
+            nzpad = int(nkern * 5)
+            # if supper_wave_ind+1 < len(gal_contsub):
+            #     zeropadded = np.pad(subd,(nzpad,nzpad),'constant',constant_values=(outgal[slower_wave_ind-1],outgal[supper_wave_ind+1]))
+            # else:
+            #     zeropadded = np.pad(subd,(nzpad,nzpad),'constant',constant_values=(outgal[slower_wave_ind-1],outgal[supper_wave_ind]))
+            zeropadded = np.pad(subd,(nzpad,nzpad),'constant',constant_values=(outgal[slower_wave_ind-1],0.))
+            zpad_smthd = gaussian_filter(zeropadded,sigma=nkern, order=0)
+            removedlineflux = zpad_smthd[nzpad:-nzpad] #* subd.sum() / np.sum(zpad_smthd[nzpad:-nzpad])
+            del zeropadded,zpad_smthd#,subd
+        else:
+            removedlineflux = subd#gal_contsub[slower_wave_ind:supper_wave_ind].copy() - sky_g_distrib
 
-            plt.subplot(131)
-            plt.plot(gallams[extended_lower_ind:extended_upper_ind], \
-                     sky_contsub[extended_lower_ind:extended_upper_ind], label='sky', alpha=0.4)
-            plt.plot(speaks, sheights, 'k*', label='peaks')
-            plt.plot(slefts, swheights, 'k>')
-            plt.plot(srights, swheights, 'k<')
-            plt.xlim(gallams[extended_lower_ind], gallams[extended_upper_ind])
+        # if need_to_mask:
+        #     plt.figure()
+        #     plt.plot(gallams[slower_wave_ind:supper_wave_ind],gal_contsub[slower_wave_ind:supper_wave_ind],alpha=0.2,label='gal')
+        #     if np.abs(np.sum(gal_contsub[slower_wave_ind:supper_wave_ind]-outgal[slower_wave_ind:supper_wave_ind])) < 0.1:
+        #         plt.plot(gallams[slower_wave_ind:supper_wave_ind], outgal[slower_wave_ind:supper_wave_ind],alpha=0.2, label='out gal')
+        #
+        #     if min_g_distrib < 0.:
+        #         plt.plot(gallams[slower_wave_ind:supper_wave_ind], g_distrib, alpha=0.2,label='gal adj')
+        #     plt.plot(gallams[slower_wave_ind:supper_wave_ind],sky_contsub[slower_wave_ind:supper_wave_ind],alpha=0.2,label='sky')
+        #     if min_s_distrib < 0.:
+        #         plt.plot(gallams[slower_wave_ind:supper_wave_ind], s_distrib, alpha=0.2,label='sky adj')
+        #     plt.plot(gallams[slower_wave_ind:supper_wave_ind], sky_g_distrib, alpha=0.2,label='sky nrmd')
+        #     plt.plot(gallams[slower_wave_ind:supper_wave_ind], subd, alpha=0.2, label='subd')
+        #     plt.plot(gallams[slower_wave_ind:supper_wave_ind], removedlineflux, alpha=0.2, label='smthd subd')
+        #     plt.plot(gallams[slower_wave_ind:supper_wave_ind], gal_contsub[slower_wave_ind:supper_wave_ind]-sky_contsub[slower_wave_ind:supper_wave_ind], alpha=0.2, label='naive')
+        #     plt.legend()
+        #     plt.show()
 
-            ymin, ymax = plt.ylim()
-            plt.vlines(gallams[slower_wave_ind], ymin, ymax)
-            plt.vlines(gallams[supper_wave_ind - 1], ymin, ymax)
-            plt.legend(loc='best')
 
-            plt.subplot(132)
-            plt.plot(gallams[extended_lower_ind:extended_upper_ind], \
-                     gal_contsub[extended_lower_ind:extended_upper_ind], label='gal', alpha=0.4)
-            plt.plot(gpeaks, gheights, 'k*', label='peaks')
-            plt.plot(glefts, gwheights, 'k>')
-            plt.plot(grights, gwheights, 'k<')
-            plt.xlim(gallams[extended_lower_ind], gallams[extended_upper_ind])
-            ymin, ymax = plt.ylim()
-            plt.vlines(gallams[slower_wave_ind], ymin, ymax)
-            plt.vlines(gallams[supper_wave_ind - 1], ymin, ymax)
-            plt.legend(loc='best')
-
-            plt.subplot(133)
-            plt.plot(gallams[slower_wave_ind:supper_wave_ind],
-                     gal_contsub[slower_wave_ind:supper_wave_ind] - sky_g_distrib, label='new sub',
-                     alpha=0.4)
-            plt.plot(gallams[slower_wave_ind:supper_wave_ind], removedlineflux, label='new smth sub', alpha=0.4)
-
-            plt.plot(gallams[slower_wave_ind:supper_wave_ind], sky_g_distrib, alpha=0.4,
-                     label='transformed sky')
-            plt.plot(gallams[extended_lower_ind:extended_upper_ind],
-                     gal_contsub[extended_lower_ind:extended_upper_ind], alpha=0.2, label='gal')
-            plt.plot(gallams[slower_wave_ind:supper_wave_ind], s_distrib, alpha=0.4, label='sky')
-
-            plt.plot(speaks, sheights, 'k*', label='sky peak')
-            plt.plot(slefts, swheights, 'k>')
-            plt.plot(srights, swheights, 'k<')
-
-            plt.plot(gpeaks, gheights, 'c*', label='gal peak')
-            plt.plot(glefts, gwheights, 'c>')
-            plt.plot(grights, gwheights, 'c<')
-            # plt.plot(lams,gauss(lams,*gfit_coefs),label='galfit')
-            plt.xlim(gallams[extended_lower_ind], gallams[extended_upper_ind])
-            ymin, ymax = plt.ylim()
-            plt.vlines(gallams[slower_wave_ind], ymin, ymax)
-            plt.vlines(gallams[supper_wave_ind - 1], ymin, ymax)
-            # min1,min2 = plt.ylim()
-            # plt.ylim(min1,ymax)
-            plt.legend(loc='best')
-
-            plt.show()
-            if (dips_low and all_above):
-                print("That didn't go well")
         # 1/np.sqrt(2*np.pi*sig*sig)
         # print(*gfit_coefs,*sfit_coefs)
         outgal[slower_wave_ind:supper_wave_ind] = removedlineflux
@@ -339,9 +398,32 @@ def subtract_sky(galflux,skyflux,gallams,galmask):
         if need_to_mask:
             masked[(slower_wave_ind-maskbuffer):(supper_wave_ind+maskbuffer)] = True
 
+    remaining_sky_devs = remaining_sky - scont
+    twosig = np.nanquantile(np.abs(remaining_sky_devs),0.9)
+    test_bools = ((remaining_sky_devs>(4*twosig)) & np.bitwise_not(masked))
+    angstrom_buffer = 0.5
+    if np.any(test_bools):
+        print("Found points that didn't get removed properly",np.sum(test_bools)*pix_per_wave*2*angstrom_buffer)
+        locs = np.where(test_bools)[0]
+        for maskiter in np.arange(int(np.floor(-angstrom_buffer*pix_per_wave)),int(np.ceil(angstrom_buffer*pix_per_wave))+1):
+            it_locs = np.clip(locs+int(maskiter),0,len(masked)-1)
+            masked[it_locs] = True
+        #
+        # plt.figure()
+        # plt.plot(gallams,remaining_sky,alpha=0.2,label='sky')
+        # plt.plot(gallams[locs], remaining_sky[locs], '.', alpha=0.2, label='sky flagged')
+        # plt.plot(gallams,outgal + gcont,alpha=0.2,label='gal')
+        # plt.legend()
+        # plt.figure()
+        # plt.plot(gallams,remaining_sky_devs,alpha=0.2,label='sky')
+        # plt.plot(gallams[locs], remaining_sky_devs[locs], '.', alpha=0.2, label='sky flagged')
+        # plt.plot(gallams,outgal,alpha=0.2,label='gal')
+        # plt.legend()
+        # plt.show()
+
     outgal = outgal + gcont - remaining_sky
 
-    return outgal, remaining_sky, gcont, masked
+    return outgal, remaining_sky, gcont, scont, masked
 
 
 
@@ -533,7 +615,7 @@ def investigate_app_naming(self, cam):
         skyflux[np.isnan(skyflux)] = 0.
         skyflux[lamcut] = 0.
 
-        gcont = medfilt(galflux, 371)
-        scont = medfilt(skyflux, 371)
+        gcont = find_continuum(galflux.copy(), pix_per_wave=4., csize=701)
+        scont = find_continuum(skyflux.copy(), pix_per_wave=4., csize=701)
         gal_contsub = galflux - gcont
         sky_contsub = skyflux - scont

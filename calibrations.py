@@ -1,37 +1,26 @@
-
-import pickle as pkl
 import gc
 from collections import OrderedDict
 from multiprocessing import Pool
-import datetime as dt
+
 import matplotlib.pyplot as plt
 import numpy as np
 from astropy.io import fits
 from astropy.table import Table, hstack
-
-from scipy.signal import medfilt
-from scipy.signal import find_peaks
 from scipy.optimize import curve_fit
-from scipy.ndimage import gaussian_filter
 
-from calibration_helper_funcs import compare_outputs, interactive_plot, \
-    get_highestflux_waves, update_default_dict, create_simple_line_spectra,\
-    top_peak_wavelengths, pix_to_wave,\
-    ensure_match, find_devs, coarse_calib_configure_tables,\
-    get_fiber_number, pix_to_wave_explicit_coefs2, get_meantime_and_date,\
-    update_coeficients_deviations
-
-from coarse_calibration import run_automated_calibration, run_automated_calibration_wrapper
+from calibration_helper_funcs import compare_outputs, create_simple_line_spectra, \
+    ensure_match, find_devs, coarse_calib_configure_tables, \
+    pix_to_wave_explicit_coefs2, get_meantime_and_date
+from coarse_calibration import run_automated_calibration_wrapper
 from fine_calibration import auto_wavelength_fitting_by_lines, auto_wavelength_fitting_by_lines_wrapper, \
     wavelength_fitting_by_line_selection
-from linebrowser import LineBrowser
-from collections import Counter
+
 
 class Calibrations:
     def __init__(self, camera, instrument, coarse_calibrations, filemanager,  \
                  fine_calibrations=None, pairings=None, load_history=True, trust_after_first=False,\
                  default_fit_key='cross correlation',use_selected_calib_lines=False, \
-                 single_core=False, save_plots=False, show_plots=False):
+                 single_core=False, save_plots=False, show_plots=False, try_load_finals=False):
 
         self.imtype = 'comp'
 
@@ -89,7 +78,7 @@ class Calibrations:
             self.linelistf = self.linelistc.copy()
             #self.selected_lines = selected_linesc
             self.all_lines = all_linesc
-            self.lampstr_f = self.lamstr_c.replace('basic','full')
+            self.lampstr_f = self.lampstr_c.replace('basic','full')
             self.fine_calibrations = coarse_calibrations
             self.mock_spec_w, self.mock_spec_f = None, None
 
@@ -119,9 +108,41 @@ class Calibrations:
         self.fine_calibration_date_info = OrderedDict()
         self.interpolated_coef_fits = OrderedDict()
 
-        self.load_default_coefs()
-        if load_history:
-            self.load_most_recent_coefs()
+        if try_load_finals:
+            self.load_final_calib_hdus()
+        else:
+            self.load_default_coefs()
+            if load_history:
+                self.load_most_recent_coefs()
+
+            if try_load_finals:
+                self.load_final_calib_hdus()
+
+    def load_final_calib_hdus(self):
+        couldntfind = False
+
+        if type(self.lamptypesf) in [list, np.ndarray]:
+            name = 'full-' + '-'.join(self.lamptypesf)
+        else:
+            name = 'full-' + self.lamptypesf
+        for pairnum, filnums in self.pairings.items():
+            filnum = filnums[self.filenum_ind]
+            calib, thetype = self.filemanager.locate_calib_dict(name, self.camera, self.instrument.configuration,
+                                                                filnum, locate_type='full')
+            if calib is None:
+                couldntfind = True
+                break
+            elif thetype != 'full':
+                print("Something went wrong when loading calibrations")
+                print("Specified 'full' but got back {}".format(thetype))
+                couldntfind = True
+                break
+            else:
+                self.final_calibrated_hdulists[pairnum] = calib
+                self.fine_calibration_coefs[pairnum] = Table(calib['calib coefs'].data)
+        if couldntfind:
+            print("Couldn't find matching calibrations. Please make sure the step has been run fully")
+
 
     def load_default_coefs(self):
         self.default_calibration_coefs = self.filemanager.load_calib_dict('default', self.camera, self.config)
@@ -169,56 +190,160 @@ class Calibrations:
 
 
     def interpolate_final_calibrations(self):
-        assert(len(self.fine_calibration_date_info) > 0 and len(self.fine_calibration_coefs) > 0,\
-               "Can't interpolate data until the fine calibrations are performed and properly loaded. Exiting")
+        doquadratic = False
+        if len(self.fine_calibration_coefs) == 0:
+            print("Can't interpolate data until the fine calibrations are performed and properly loaded. Exiting")
 
         coef_names = ['a', 'b', 'c', 'd', 'e', 'f']
-        pairnums_by_night,mean_timestamp_by_night = {},{}
-        for pairnum in self.fine_calibration_coefs.keys():
-            mean_timestamp, mean_datetime, night = self.fine_calibration_date_info[pairnum]
+        pairnums_by_night,mean_timestamps_by_night = {},{}
+        for pairnum,(cc_filnum,cf_filnum) in self.pairings.items():
+            mean_timestamp, mean_datetime, night = get_meantime_and_date(self.final_calibrated_hdulists[pairnum][0].header)
+            self.fine_calibration_date_info[pairnum] = (mean_timestamp, mean_datetime, night)
             if night in pairnums_by_night.keys():
                 pairnums_by_night[night].append(pairnum)
-                mean_timestamp_by_night[night].append(mean_timestamp)
+                mean_timestamps_by_night[night].append(mean_timestamp)
             else:
                 pairnums_by_night[night] = [pairnum]
-                mean_timestamp_by_night[night] =[mean_timestamp]
+                mean_timestamps_by_night[night] = [mean_timestamp]
+
         for night, pairnums in pairnums_by_night.items():
-            fiber_fit_dict = OrderedDict()
-            if len(pairnums) == 1:
+            mean_timestamps = np.array(mean_timestamps_by_night[night])
+            srtd_timestamp_inds = np.argsort(mean_timestamps)
+            srtd_timestamps = mean_timestamps[srtd_timestamp_inds]
+            srtd_pairnums = np.array(pairnums)[srtd_timestamp_inds]
+            fiber_fit_dict,fiber_dat_dict = OrderedDict(),OrderedDict()
+            if len(srtd_pairnums) == 1:
                 ## no interpolation
                 def fit_model(xs, a):
                     return a
+            elif len(srtd_pairnums) == 2:
+                ## linear interp
+                def fit_model(xs, a, b):
+                    return a + b*xs
             else:
-                if len(pairnums) == 2:
-                    ## linear interp
-                    p0 = [0, 0]
-                    def fit_model(xs, a, b):
-                        return a + b * xs
-                else:
+                if doquadratic:
                     ## quadratic
                     p0 = [0, 0, 0]
                     def fit_model(xs, a, b, c):
                         return a + b * xs + c * xs * xs
+                else:
+                    # linear interp
+                    p0 = [0, 0]
+                    def fit_model(xs, a, b):
+                        return a + b * xs
 
-            for fib in self.fine_calibration_coefs[pairnums[0]].colnames:
+            if len(srtd_pairnums) == 3 and doquadratic:
+                def getc(xlist,ylist):
+                    x1, x2, x3 = xlist[:3]
+                    y1, y2, y3 = ylist[:3]
+                    return (1 / (x1 - x2)) * (((y1 - y3) / (x1 - x3)) - ((y2 - y3) / (x2 - x3)))
+
+                def getb(xlist,ylist):
+                    x1, x2, x3 = xlist[:3]
+                    y1, y2, y3 = ylist[:3]
+                    first = ((y2 - y3) / (x2 - x3))
+                    second = (((x2 + x3) / (x1 - x2)) * (((y1 - y3) / (x1 - x3)) - ((y2 - y3) / (x2 - x3))))
+                    return first - second
+
+                def geta(x3, y3, b, c):
+                    return y3 - b * x3 - c * x3 * x3
+
+            for fib in self.fine_calibration_coefs[srtd_pairnums[0]].colnames:
                 coef_arrs,coef_fits = OrderedDict(), OrderedDict()
 
                 for coef in coef_names:
                     coef_arrs[coef] = []
-                for pairnum in pairnums:
+                for pairnum in srtd_pairnums:
                     for ii, coef in enumerate(coef_arrs.keys()):
                         coef_arrs[coef].append(self.fine_calibration_coefs[pairnum][fib][ii])
-                    if len(pairnums) == 1:
-                        for coef, coef_arr in coef_arrs.items():
-                            coef_fits[coef] = coef_arr
-                    else:
-                        for coef,coef_arr in coef_arrs.items():
-                            p0[0] = coef_arr[0]
-                            params,cov = curve_fit(fit_model,mean_timestamp_by_night[night],coef_arr,p0=p0)
-                            coef_fits[coef] = params
+                if len(srtd_pairnums) == 1:
+                    for coef, coef_arr in coef_arrs.items():
+                        coef_fits[coef] = coef_arr
+                elif len(srtd_pairnums) == 2:
+                    for coef, coef_arr in coef_arrs.items():
+                        b = (coef_arr[1]-coef_arr[0])/(srtd_timestamps[1]-srtd_timestamps[0])
+                        a = coef_arr[0] - b*srtd_timestamps[0]
+                        coef_fits[coef] = [a,b]
+                elif len(srtd_pairnums) == 3 and doquadratic:
+                    for coef, coef_arr in coef_arrs.items():
+                        c = getc(srtd_timestamps, coef_arr)
+                        b = getb(srtd_timestamps, coef_arr)
+                        a = geta(srtd_timestamps[0], coef_arr[0], b, c)
+                        coef_fits[coef] = [a,b,c]
+                else:
+                    for coef,coef_arr in coef_arrs.items():
+                        p0[0] = coef_arr[0]
+                        params,cov = curve_fit(fit_model,srtd_timestamps,coef_arr,p0=p0)
+                        coef_fits[coef] = params
                 fiber_fit_dict[fib] = coef_fits
+                fiber_dat_dict[fib] = coef_arrs
             self.interpolated_coef_fits[night] = (fiber_fit_dict, fit_model)
 
+            plt.subplots(3, 2)
+            if self.save_plots or self.show_plots:
+                means = []
+                minmeans = srtd_timestamps - srtd_timestamps[0]
+                interpd_minmeans = np.arange(minmeans[-1])
+                for fib in fiber_fit_dict.keys():
+                    means.extend(list(minmeans))
+                for ii,name in enumerate(coef_names):
+                    plt.subplot(3,2,int(1+ii))
+                    dats = []
+                    for fib,coef_fits in fiber_fit_dict.items():
+                        dat = np.array(fiber_dat_dict[fib][name])
+                        fitd = fit_model(interpd_minmeans+srtd_timestamps[0], *coef_fits[name])
+                        plt.plot(interpd_minmeans, fitd, alpha=0.1)
+                        dats.extend(list(dat))
+
+                    plt.plot([], [], '-', alpha=0.3, label='Fits')
+                    plt.plot(means, dats, '.',alpha=0.3, label='Data')
+
+                    if ii in [1,3,5]:
+                        plt.ylabel('Value')
+                    if ii in [5,6]:
+                        plt.xlabel(r'$\Delta$Time [s]')
+                    plt.title("{}".format(name))
+                    if ii == 0:
+                        plt.legend()
+                plt.suptitle("{} Calibration Evolution".format(night))
+                plt.tight_layout()
+
+            if self.save_plots:
+                plt.savefig(self.filemanager.get_saveplot_template(cam='', ap='all', imtype='science', step='calib',
+                                                                   comment='_coefficients_interpolation'), dpi=600)
+            if self.show_plots:
+                plt.show()
+            plt.close()
+
+            plt.subplots(3, 2)
+            if self.save_plots or self.show_plots:
+                for ii,name in enumerate(coef_names):
+                    plt.subplot(3,2,int(1+ii))
+                    dats = []
+                    for fib,coef_fits in fiber_fit_dict.items():
+                        dat = np.array(fiber_dat_dict[fib][name])
+                        fitd = fit_model(interpd_minmeans+srtd_timestamps[0], *coef_fits[name])-dat[0]
+                        plt.plot(interpd_minmeans, fitd, alpha=0.1)
+                        dats.extend(list(dat-dat[0]))
+
+                    plt.plot([], [], '-', alpha=0.3, label='Fits-Data[0]')
+                    plt.plot(means, dats, '.',alpha=0.3, label='Data-Data[0]')
+                    if ii+1 in [1,3,5]:
+                        plt.ylabel(r'$\Delta$Value')
+                    if ii+1 in [5,6]:
+                        plt.xlabel(r'$\Delta$Time [s]')
+                    plt.title("{}".format(name))
+                    if ii+1 == 1:
+                        plt.legend()
+                plt.suptitle("{} Calibration Evolution".format(night))
+                plt.tight_layout()
+
+            if self.save_plots:
+                plt.savefig(self.filemanager.get_saveplot_template(cam='', ap='all', imtype='science', step='calib',
+                                                                   comment='_deviation_in_coefficients_interpolation'), dpi=600)
+            if self.show_plots:
+                plt.show()
+            plt.close()
 
 
     def run_initial_calibrations(self,skip_coarse=False,use_history_calibs=False,only_use_peaks = True):
@@ -295,10 +420,7 @@ class Calibrations:
                                               save_template=template, \
                                               save_plots=self.save_plots, show_plots=self.show_plots)
                 tabs = {}
-                # if type(tabs0) is not Table:
-                #     tabs0 = Table(tabs0)
-                # if type(tabs1) is not Table:
-                #     tabs1 = Table(tabs1)
+
                 for tabname in tabs0.keys():
                     tabs0[tabname].remove_column(overlaps[1])
                     tabs1[tabname].remove_column(overlaps[0])
@@ -383,7 +505,6 @@ class Calibrations:
             ## END HACK!
             filenum = filnums[self.filenum_ind]
             data = Table(self.fine_calibrations[filenum].data)
-            self.fine_calibration_date_info[pairnum] = get_meantime_and_date(self.fine_calibrations[filenum].header)
 
             linelist = self.selected_lines
 

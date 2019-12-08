@@ -1,9 +1,8 @@
-from scipy.interpolate import CubicSpline
-import numpy as np
-from astropy.table import Table, Column
-from astropy.io import fits
 import matplotlib.pyplot as plt
-from scipy.signal import medfilt
+import numpy as np
+from astropy.io import fits
+from astropy.table import Table, Column
+from scipy.interpolate import CubicSpline
 from scipy.optimize import curve_fit
 
 
@@ -16,7 +15,6 @@ def poly11(x, a, b, c, d, e, f, g, h, i, j, k, l):
 
 def flatten_data(fiber_fluxes,waves):
     from scipy.ndimage import median_filter
-    from scipy.signal.windows import gaussian
     interp_scale = 371
     nloops=1
     waves_arr = []

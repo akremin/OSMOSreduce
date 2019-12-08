@@ -1,15 +1,15 @@
-from astropy.io import fits
-import numpy as np
+from collections import OrderedDict
+
+import matplotlib.pyplot as plt
 import numpy as np
 from astropy.io import fits
 from astropy.table import Table
 from scipy.interpolate import CubicSpline
-from scipy.signal import medfilt, find_peaks
-from collections import OrderedDict
+
 from calibrations import Calibrations
 from observations import Observations
 from sky_subtraction import subtract_sky, replace_nans
-import matplotlib.pyplot as plt
+
 
 class FieldData:
     def __init__(self, filenumbers, filemanager, instrument,
@@ -58,7 +58,7 @@ class FieldData:
         ## Value is the hdu for that tuple of information
         ## an aastropy.fits hdu with a header and data attribute
         self.step = None
-        self.observations = Observations(self.filenumbers,self.obs_pairing_strategy)
+        self.observations = Observations(self.filenumbers.copy(),self.obs_pairing_strategy)
         self.observations.set_astronomical_object(obj_info)
         self.comparcs = {}
         self.fit_data = {}
@@ -66,8 +66,8 @@ class FieldData:
         self.update_step(startstep)
         self.all_hdus = {}
         self.read_all_filedata()
-        self.final_calibrated_hdulists = {}
-        self.final_calibration_coefs = {}
+        # self.final_calibrated_hdulists = {}
+        # self.final_calibration_coefs = {}
         if self.reduction_order[startstep]>self.reduction_order['wavecalib']:
             self.get_final_wavelength_coefs()
         self.mtl = self.filemanager.get_matched_target_list()
@@ -311,7 +311,7 @@ class FieldData:
                 self.write_all_filedata()
             import PyCosmic
             if self.show_plots or self.save_plots:
-                from quickreduce_funcs import format_plot
+                pass
             for (camera, filenum, imtype, opamp) in self.all_hdus.keys():
                 readfile = self.filemanager.get_read_filename(camera=camera, imtype=imtype,\
                                                         filenum=filenum, amp=opamp)
@@ -353,7 +353,7 @@ class FieldData:
             self.all_hdus = outhdus
         elif self.step == 'wavecalib':
             if len(self.comparcs.keys()) == 0:
-                self.populate_calibrations()
+                self.populate_calibrations(try_loading_finals=False)
 
             for camera in self.instrument.cameras:
                self.comparcs[camera].run_initial_calibrations(skip_coarse = self.skip_coarse_calib, \
@@ -393,52 +393,31 @@ class FieldData:
             self.current_data_from_disk = False
 
 
-    def populate_calibrations(self):
+    def populate_calibrations(self,try_loading_finals=False):
         comparc_pairs = self.observations.return_comparc_pairs()
         self.comparcs = {}
         for camera in self.instrument.cameras:
-            comparc_cs = {filnum:self.all_hdus[(camera,filnum,'coarse_comp',None)] for filnum in self.observations.comparc_cs}
-            if self.observations.two_step_comparc:
-                comparc_fs = {filnum: self.all_hdus[(camera, filnum, 'fine_comp', None)] for filnum in self.observations.comparc_fs}
+            if try_loading_finals:
+                comparc_cs = {}
+                comparc_fs = {}
             else:
-                comparc_fs = None
+                comparc_cs = {filnum:self.all_hdus[(camera,filnum,'coarse_comp',None)] for filnum in self.observations.comparc_cs}
+                if self.observations.two_step_comparc:
+                    comparc_fs = {filnum: self.all_hdus[(camera, filnum, 'fine_comp', None)] for filnum in self.observations.comparc_fs}
+                else:
+                    comparc_fs = None
             comparc = Calibrations(camera, self.instrument, comparc_cs, self.filemanager, fine_calibrations=comparc_fs,\
                                  pairings=comparc_pairs, load_history=True, trust_after_first=False,\
                                  single_core=self.single_core,show_plots=self.show_plots,\
-                                 save_plots=self.save_plots,use_selected_calib_lines=self.use_selected_calib_lines)
+                                 save_plots=self.save_plots,use_selected_calib_lines=self.use_selected_calib_lines,
+                                try_load_finals=try_loading_finals)
 
             self.comparcs[camera] = comparc
 
-    def load_final_calib_hdus(self,camera):
-        couldntfind = False
-        if self.twostep_wavecomparc:
-            filnum_ind = 1
-        else:
-            filnum_ind = 0
-        if type(self.comparc_lampsf) in [list,np.ndarray]:
-            name = 'full-' + '-'.join(self.comparc_lampsf)
-        else:
-            name = 'full-' + self.comparc_lampsf
-        for pairnum, filnums in self.observations.comparc_pairs.items():
-            filnum = filnums[filnum_ind]
-            calib,thetype = self.filemanager.locate_calib_dict(name, camera, self.instrument.configuration,filnum,locate_type='full')
-            if calib is None:
-                couldntfind = True
-                break
-            elif thetype != 'full':
-                print("Something went wrong when loading calibrations")
-                print("Specified 'full' but got back {}".format(thetype))
-                couldntfind = True
-                break
-            else:
-                self.final_calibrated_hdulists[(camera,filnum)] = calib
-                self.final_calibration_coefs[(camera,filnum)] = Table(calib['calib coefs'].data)
-        if couldntfind:
-            raise(IOError,"Couldn't find matching calibrations. Please make sure the step has been run fully")
+
 
     def get_final_wavelength_coefs(self):
-        for camera in self.instrument.cameras:
-            self.load_final_calib_hdus(camera)
+        self.populate_calibrations(try_loading_finals=True)
 
     def combine_fibermaps(self,camera,return_table=False):
         filnums = self.filenumbers['fibermap']
@@ -479,10 +458,12 @@ class FieldData:
     def flatten_sciences(self,cam):
         from flatten import flatten_data
         fiber_fluxes = self.combine_flats(camera = cam, return_table=True)
-        if len(self.final_calibration_coefs.keys()) == 0:
-            self.get_final_wavelength_coefs()
+        if len(self.comparcs) == 0:
+            self.populate_calibrations(try_loading_finals=True)
         filnum = self.observations.comparc_fs[0]
-        comparc_table = self.final_calibration_coefs[(cam,filnum)]
+        comparc_table = self.comparcs[cam].generate_time_interpolated_calibration(self.all_hdus[(cam,'master','twiflat',None)])
+        return
+        # comparc_table = self.final_calibration_coefs[(cam,filnum)]
         #self.filemanager.load_calib_dict('default', cam, self.instrument.configuration)
 
         final_table, final_flux_array = flatten_data(fiber_fluxes=fiber_fluxes,waves=comparc_table)
@@ -591,8 +572,8 @@ class FieldData:
         wave_grid_step = 0.25
         wave_unit = 'A'
         wave_type = 'linear'
-        if len(self.final_calibration_coefs.keys()) == 0:
-            self.get_final_wavelength_coefs()
+        if len(self.comparcs) == 0:
+            self.populate_calibrations(try_loading_finals=True)
         if cam not in self.targeting_sky_pairs.keys():
             self.match_skies(cam)
 
@@ -612,11 +593,12 @@ class FieldData:
         for obs in observation_keys:
             sci_filnum, ccalib, fcalib, comparc_ind = self.observations.observations[obs]
             sci_hdu = self.all_hdus.pop((cam, sci_filnum, 'science', None))
-            if self.twostep_wavecomparc:
-                calib_filnum = fcalib
-            else:
-                calib_filnum = ccalib
-            comparc_data = self.final_calibration_coefs[(cam, calib_filnum)]
+            # if self.twostep_wavecomparc:
+            #     calib_filnum = fcalib
+            # else:
+            #     calib_filnum = ccalib
+            # comparc_data = self.final_calibration_coefs[(cam, calib_filnum)]
+            comparc_data = self.comparcs[cam].generate_time_interpolated_calibration(sci_hdu)
 
             sci_data = Table(sci_hdu.data)
             out_sci_data = Table()
@@ -709,6 +691,7 @@ class FieldData:
                 del median_arrays1,median_arrays2
 
             for galfib, skyfib in target_sky_pair.items():
+                print(galfib)
                 a, b, c, d, e, f = comparc_data[galfib]
                 gallams = a + b * pixels + c * pix2 + d * pix3 + e * pix4 + f * pix5
                 galflux = np.asarray(sci_data[galfib])
@@ -729,29 +712,41 @@ class FieldData:
                 # elif self.skysub_strategy == 'median':
                 #     skyflux = master_sky
 
-                outgal,remaining_sky,gcont,masked = subtract_sky(galflux=interpd_galflux,skyflux=skyflux,gallams=wave_grid,galmask=galmask)
+                outgal,remaining_sky,gcont,scont,masked = subtract_sky(galflux=interpd_galflux,skyflux=skyflux,gallams=wave_grid,galmask=galmask)
 
-                good_vals = np.bitwise_not(masked)
-                plt.subplots(1, 2)
+                good_vals = np.bitwise_not(masked|np.isnan(outgal))
+                plt.subplots(2, 2)
                 if self.save_plots or self.show_plots:
-                    plt.subplot(121)
-                    plt.plot(wave_grid[good_vals], outgal[good_vals], label='output', alpha=0.4)
-                    plt.plot(wave_grid[good_vals], remaining_sky[good_vals], label='remaining_sky', alpha=0.4)
-                    plt.plot(wave_grid[good_vals], gcont[good_vals], label='gcont', alpha=0.4)
-                    plt.legend(loc='best')
-                    plt.title("Unmasked Components".format(cam,sci_filnum))
-                    ymin, ymax = plt.ylim()
-                    plt.subplot(122)
-                    #plt.plot(wave_grid[np.bitwise_not(galmask)], interpd_galflux[np.bitwise_not(galmask)] - skyflux[np.bitwise_not(galmask)], label='basic', alpha=0.4)
-                    plt.plot(wave_grid[np.bitwise_not(galmask)], interpd_galflux[np.bitwise_not(galmask)], label='Orig Gal', alpha=0.2)
-                    plt.plot(wave_grid[np.bitwise_not(galmask)], skyflux[np.bitwise_not(galmask)], label='Sky', alpha=0.2)
-                    plt.plot(wave_grid[good_vals], outgal[good_vals], label='Out Gal', alpha=0.4)
-                    window_max = 5*np.median(interpd_galflux[np.bitwise_not(galmask)])
-                    # plt.plot(gallams, gal_contsub, label='gal_contsub',alpha=0.4)
-                    plt.legend(loc='best')
-                    plt.title("Masked vs Naive cam:{} file:{}".format(cam, sci_filnum))
-                    plt.ylim(np.nanmin(outgal[good_vals])-20,window_max)
-                    # plt.ylim(ymin,ymax)
+                    plt.subplot(221)
+                    plt.plot(wave_grid[good_vals], interpd_galflux[good_vals], alpha=0.3, label='Science')
+                    plt.plot(wave_grid[good_vals], skyflux[good_vals], alpha=0.3, label='Sky')
+                    plt.ylabel('Counts [Arbitrary]')
+                    plt.xlabel("Wavelength [Angstroms]")
+                    plt.title("Raw Flux")
+                    plt.legend()
+                    plt.subplot(222)
+                    plt.plot(wave_grid[good_vals], gcont[good_vals], alpha=0.3, label='Science')
+                    plt.plot(wave_grid[good_vals], scont[good_vals], alpha=0.3, label='Sky')
+                    plt.ylabel('Counts [Arbitrary]')
+                    plt.xlabel("Wavelength [Angstroms]")
+                    plt.title("Continuum Fits")
+                    plt.legend()
+                    plt.subplot(223)
+                    plt.plot(wave_grid[good_vals], interpd_galflux[good_vals]-gcont[good_vals], alpha=0.3, label='Science')
+                    plt.plot(wave_grid[good_vals], skyflux[good_vals]-scont[good_vals], alpha=0.3, label='Sky')
+                    plt.ylabel('Counts [Arbitrary]')
+                    plt.xlabel("Wavelength [Angstroms]")
+                    plt.title("Continuum Subtracted")
+                    plt.legend()
+                    plt.subplot(224)
+                    plt.plot(wave_grid[good_vals], outgal[good_vals], alpha=0.4, label='Science')
+                    plt.plot(wave_grid[good_vals], skyflux[good_vals], alpha=0.2, label='Orig. Sky')
+                    plt.ylabel('Counts [Arbitrary]')
+                    plt.xlabel("Wavelength [Angstroms]")
+                    plt.title("Final Masked Output")
+                    plt.legend()
+                    plt.tight_layout()
+
                 if self.save_plots:
                     plt.savefig(self.filemanager.get_saveplot_template(cam='',ap=galfib,imtype='science',step='skysub',comment='_result_'+str(sci_filnum)),dpi=600)
                 if self.show_plots:
@@ -794,7 +789,6 @@ class FieldData:
 
     ## TODO: Check if the same wavecal is used. If so, add before interpolation
     def combine_science_observations(self, cam):
-        from scipy.ndimage import median_filter
         observation_keys = list(self.observations.observations.keys())
         nobs = len(observation_keys)
 
@@ -865,27 +859,29 @@ class FieldData:
             masked_arr = np.array(all_masks[col]).astype(bool)
             flux_arr[masked_arr] = np.nan
             ngood_obs_perpix = float(nobs)-np.sum(masked_arr,axis=0)
-            masked = ((ngood_obs_perpix < (nobs // 2)))
+            masked = ((ngood_obs_perpix < int(np.ceil(float(nobs) / 2.))))
+            from collections import Counter
+            # print(col,len(masked),np.sum(masked),np.sum(np.bitwise_not(masked)),len(observation_keys),Counter(ngood_obs_perpix))
             ngood_obs_perpix[ngood_obs_perpix==0] = np.nan
             nanmean_fluxes = np.nanmean(flux_arr,axis=0)
-            nansumd_fluxes = nanmean_fluxes*len(all_fluxs[col])
-            nansumd_unc_multiplier = np.sqrt(float(len(all_fluxs[col]))/ngood_obs_perpix)
+            nansumd_fluxes = nanmean_fluxes*len(observation_keys)
+            nansumd_unc_multiplier = np.sqrt(float(len(observation_keys))/ngood_obs_perpix)
 
             alleged_nans = nanmean_fluxes[masked]
             if np.sum(np.bitwise_not(np.isnan(alleged_nans)))!=0:
                 print("Mask assignment didn't match nanmean in combining fluxes!")
                 print(np.sum(masked),np.sum(np.bitwise_not(np.isnan(alleged_nans))))
                 print(alleged_nans[np.bitwise_not(np.isnan(alleged_nans))])
-            out_data_table.add_column(Table.Column(name=col, data=nansumd_fluxes))
-            out_mask_table.add_column(Table.Column(name=col, data=masked))
-            out_uncmult_table.add_column(Table.Column(name=col, data=nansumd_unc_multiplier))
+            out_data_table.add_column(Table.Column(name=col, data=nansumd_fluxes.copy()))
+            out_mask_table.add_column(Table.Column(name=col, data=masked.copy()))
+            out_uncmult_table.add_column(Table.Column(name=col, data=nansumd_unc_multiplier.copy()))
 
         # plt.subplots(2,1)
         plt.figure()
         if self.save_plots or self.show_plots:
             for col in out_data_table.colnames:
                 flux = out_data_table[col]
-                unmasked = np.bitwise_not(out_mask_table[col])
+                unmasked = np.bitwise_not(out_mask_table[col].data)
                 stds = out_uncmult_table[col]
                 # plt.subplot(211)
                 # plt.plot(ref_wavearrays[col][np.bitwise_not(out_mask_table[col])],out_data_table[col][np.bitwise_not(out_mask_table[col])],alpha=0.4,lw=1)
@@ -895,13 +891,33 @@ class FieldData:
                     print("Empty flux!")
                 plt.plot(master_wave_grid[unmasked],flux[unmasked],alpha=0.1)
                 #plt.fill_between(master_wave_grid[unmasked],flux[unmasked]-stds[unmasked],flux[unmasked]+stds[unmasked],alpha=0.2)
-                plt.title("Unmasked cam: {}".format(cam))
+                plt.title("Bad Data Masked, cam: {}".format(cam))
         if self.save_plots:
-            plt.savefig(self.filemanager.get_saveplot_template(cam=cam,ap='',imtype='science',step='combine',comment='_all_1d'),dpi=600)
+            plt.savefig(self.filemanager.get_saveplot_template(cam=cam,ap='',imtype='science',step='combine',comment='_all_1d_unmasked'),dpi=600)
         if self.show_plots:
             plt.show()
         plt.close()
 
+        plt.figure()
+        if self.save_plots or self.show_plots:
+            for col in out_data_table.colnames:
+                flux = out_data_table[col]
+                # plt.subplot(211)
+                # plt.plot(ref_wavearrays[col][np.bitwise_not(out_mask_table[col])],out_data_table[col][np.bitwise_not(out_mask_table[col])],alpha=0.4,lw=1)
+                # plt.title("Masked cam: {}".format(cam))
+                # plt.subplot(212)
+                if len(flux) == 0 or np.nansum(flux) == 0:
+                    print("Empty flux!")
+                plt.plot(master_wave_grid,flux,alpha=0.1)
+                #plt.fill_between(master_wave_grid[unmasked],flux[unmasked]-stds[unmasked],flux[unmasked]+stds[unmasked],alpha=0.2)
+                plt.title("All Data cam: {}".format(cam))
+        if self.save_plots:
+            plt.savefig(self.filemanager.get_saveplot_template(cam=cam,ap='',imtype='science',step='combine',comment='_all_1d_masked'),dpi=600)
+        if self.show_plots:
+            plt.show()
+        plt.close()
+
+        sci_header['wavemin'],sci_header['wavemax'],sci_header['wavestep'] = wavemin,wavemax,wavestep
         self.all_hdus[(cam,'combined','science',None)] = fits.BinTableHDU(data=out_data_table,header=sci_header,name='FLUX')
         self.all_hdus[(cam, 'combined', 'masks', None)] = fits.BinTableHDU(data=out_mask_table,header=mask_hdu.header, name='MASK')
 
@@ -994,6 +1010,8 @@ class FieldData:
 
 
     def fit_redshfits(self,cam):
+        from scipy.ndimage import gaussian_filter
+
         from fit_redshifts import fit_redshifts_wrapper
         fluxes = Table(self.all_hdus[(cam, 'combined', 'science', None)].data)
         masks = Table(self.all_hdus[(cam, 'combined', 'masks', None)].data)
@@ -1007,7 +1025,9 @@ class FieldData:
         if self.single_core:
             sci_data = OrderedDict()
             for fib in fluxes.colnames:
-                sci_data[fib] = (wave_grid, fluxes[fib], masks[fib])
+                flux = gaussian_filter(fluxes[fib], sigma=0.66, order=0)
+                mask = np.bitwise_or(masks[fib][1::2], masks[fib][::2][:len(masks[fib][1::2])])
+                sci_data[fib] = (wave_grid[::2], flux[::2], mask)
             obs1 = {
                 'sky_subd_sciences':sci_data, 'mask_name': self.filemanager.maskname, 'savetemplate_func': self.filemanager.get_saveplot_template, 'run_auto': True
             }
@@ -1018,12 +1038,17 @@ class FieldData:
 
             for fib in fib1s:
                 if fib in fluxes.colnames:
-                    sci_data1[fib] = (wave_grid, fluxes[fib], masks[fib])
+                    flux = gaussian_filter(fluxes[fib], sigma=0.66, order=0)
+                    mask = np.bitwise_or(masks[fib][1::2], masks[fib][::2][:len(masks[fib][1::2])])
+                    sci_data1[fib] = (wave_grid[::2], flux[::2], mask)
 
             sci_data2 = OrderedDict()
             fib2s = self.instrument.upper_half_fibs[cam]
             for fib in fib2s:
                 if fib in fluxes.colnames:
+                    flux = gaussian_filter(fluxes[fib], sigma=0.66, order=0)
+                    mask = np.bitwise_or(masks[fib][1::2], masks[fib][::2][:len(masks[fib][1::2])])
+                    sci_data2[fib] = (wave_grid[::2], flux[::2], mask)
                     sci_data2[fib] = (wave_grid, fluxes[fib], masks[fib])
 
             obs1 = {

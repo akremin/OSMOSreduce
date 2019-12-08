@@ -1,9 +1,10 @@
-import os
 import numpy as np
-from astropy.io import fits
 import matplotlib.pyplot as plt
-from scipy.signal import medfilt,find_peaks
+import numpy as np
 from astropy.table import Table
+from scipy.signal import medfilt, find_peaks
+
+
 # Non-standard dependencies
 # import PyCosmic
 
@@ -67,7 +68,6 @@ def plot_cr_images(pycosmask,outdat,maskfile,filename):
 
 
 def plot_calibd(calib_coefs,dict_of_hdus):
-    import seaborn
     def fifthorder(xs ,a ,b ,c ,d ,e ,f):
         return a+ b * xs + c * xs * xs + d * xs ** 3 + e * xs ** 4 + f * xs ** 5
 

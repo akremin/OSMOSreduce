@@ -1,7 +1,7 @@
 
-import numpy as np
 from collections import OrderedDict
 
+import numpy as np
 
 
 #TODO Use all initial comps (Average) if more than one is paired to a single final comp

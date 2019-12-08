@@ -1,13 +1,13 @@
 import os
-import numpy as np
 
+import numpy as np
 from astropy.table import Table
 
-#sky_subd_sciences[ap] = [waves,diff,bool_mask]
+# sky_subd_sciences[ap] = [waves,diff,bool_mask]
 from zestipy.data_structures import waveform
+from zestipy.plotting_tools import summary_plot
 from zestipy.sncalc import sncalc
 from zestipy.z_est import z_est
-from zestipy.plotting_tools import summary_plot
 
 
 def fit_redshifts_wrapper(input_dict):
@@ -16,12 +16,15 @@ def fit_redshifts_wrapper(input_dict):
 
 def fit_redshifts(sky_subd_sciences,mask_name,run_auto=True,prior = None,savetemplate_func=None):
     # 3.0e-5
-    R = z_est(lower_w=4200.0, upper_w=6400.0, lower_z=0.10, upper_z=0.6, \
+    first_ap = list(sky_subd_sciences.keys())[0]
+    first_waves, flux, boolmask = sky_subd_sciences[first_ap]
+
+    R = z_est(lower_w=first_waves.min(), upper_w=first_waves.max(), lower_z=0.10, upper_z=0.7, \
               z_res=1.0e-5, prior_width=0.02, use_zprior=False, \
               skip_initial_priors=True, \
               auto_pilot=True)
-
-    template_names = ['spDR2-023.fit']#, 'spDR2-024.fit', 'spDR2-028.fit']
+    del first_waves, flux, boolmask
+    template_names = ['spDR2-023.fit', 'spDR2-024.fit']#, 'spDR2-028.fit']
                         # ['spDR2-0'+str(x)+'.fit' for x in np.arange(23,31)]
     template_dir = 'sdss_templates'  # hack
 

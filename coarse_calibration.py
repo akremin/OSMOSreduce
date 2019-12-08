@@ -1,28 +1,25 @@
-
-
-import pickle as pkl
-import gc
 from collections import OrderedDict
-from multiprocessing import Pool
-import datetime as dt
-import matplotlib.pyplot as plt
 import numpy as np
-from astropy.io import fits
-from astropy.table import Table, hstack
+from astropy.table import Table
 
-from scipy.signal import medfilt
 from scipy.signal import find_peaks
 from scipy.optimize import curve_fit
 from scipy.ndimage import gaussian_filter
 
 from calibration_helper_funcs import get_psf, \
-    get_highestflux_waves, update_default_dict, create_simple_line_spectra,\
-    top_peak_wavelengths, pix_to_wave,\
-    ensure_match, find_devs, coarse_calib_configure_tables,\
-    get_fiber_number, pix_to_wave_explicit_coefs2, get_meantime_and_date,\
-    update_coeficients_deviations
+    create_simple_line_spectra, \
+    pix_to_wave_explicit_coefs2
+from collections import OrderedDict
 
+import numpy as np
+from astropy.table import Table
+from scipy.ndimage import gaussian_filter
+from scipy.optimize import curve_fit
+from scipy.signal import find_peaks
 
+from calibration_helper_funcs import get_psf, \
+    create_simple_line_spectra, \
+    pix_to_wave_explicit_coefs2
 
 
 def run_automated_calibration_wrapper(input_dict):
