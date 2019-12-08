@@ -182,7 +182,10 @@ class Calibrations:
         for fib, coefs in night_interpolator.items():
             fitted_coefs = []
             for coef_name, coefvals in coefs.items():
-                fitted_coef = fit_model(mean_timestamp,*coefvals)
+                if fit_model is None:
+                    fitted_coef = coefvals(mean_timestamp)
+                else:
+                    fitted_coef = fit_model(mean_timestamp,*coefvals)
                 fitted_coefs.append(fitted_coef)
             out_cols.append(Table.Column(name=fib,data=fitted_coefs))
         out_table = Table(out_cols)
@@ -190,6 +193,8 @@ class Calibrations:
 
 
     def interpolate_final_calibrations(self):
+        from scipy.interpolate import UnivariateSpline
+        dointerp = True
         doquadratic = False
         if len(self.fine_calibration_coefs) == 0:
             print("Can't interpolate data until the fine calibrations are performed and properly loaded. Exiting")
@@ -226,6 +231,8 @@ class Calibrations:
                     p0 = [0, 0, 0]
                     def fit_model(xs, a, b, c):
                         return a + b * xs + c * xs * xs
+                elif dointerp:
+                    fit_model = None
                 else:
                     # linear interp
                     p0 = [0, 0]
@@ -270,6 +277,9 @@ class Calibrations:
                         b = getb(srtd_timestamps, coef_arr)
                         a = geta(srtd_timestamps[0], coef_arr[0], b, c)
                         coef_fits[coef] = [a,b,c]
+                elif len(srtd_pairnums) == 3 and dointerp:
+                    for coef,coef_arr in coef_arrs.items():
+                        coef_fits[coef] = UnivariateSpline(srtd_timestamps,coef_arr,k=1,s=0)
                 else:
                     for coef,coef_arr in coef_arrs.items():
                         p0[0] = coef_arr[0]
@@ -291,7 +301,10 @@ class Calibrations:
                     dats = []
                     for fib,coef_fits in fiber_fit_dict.items():
                         dat = np.array(fiber_dat_dict[fib][name])
-                        fitd = fit_model(interpd_minmeans+srtd_timestamps[0], *coef_fits[name])
+                        if dointerp:
+                            fitd = coef_fits[name](interpd_minmeans+srtd_timestamps[0])
+                        else:
+                            fitd = fit_model(interpd_minmeans+srtd_timestamps[0], *coef_fits[name])
                         plt.plot(interpd_minmeans, fitd, alpha=0.1)
                         dats.extend(list(dat))
 
@@ -322,7 +335,10 @@ class Calibrations:
                     dats = []
                     for fib,coef_fits in fiber_fit_dict.items():
                         dat = np.array(fiber_dat_dict[fib][name])
-                        fitd = fit_model(interpd_minmeans+srtd_timestamps[0], *coef_fits[name])-dat[0]
+                        if dointerp:
+                            fitd = coef_fits[name](interpd_minmeans + srtd_timestamps[0])-dat[0]
+                        else:
+                            fitd = fit_model(interpd_minmeans+srtd_timestamps[0], *coef_fits[name])-dat[0]
                         plt.plot(interpd_minmeans, fitd, alpha=0.1)
                         dats.extend(list(dat-dat[0]))
 

@@ -787,8 +787,8 @@ class FieldData:
             outwaves = np.arange(wavemin,wavemax+wavestep,wavestep)
         return outwaves
 
-    ## TODO: Check if the same wavecal is used. If so, add before interpolation
     def combine_science_observations(self, cam):
+        from scipy.ndimage import gaussian_filter
         observation_keys = list(self.observations.observations.keys())
         nobs = len(observation_keys)
 
@@ -872,9 +872,22 @@ class FieldData:
                 print("Mask assignment didn't match nanmean in combining fluxes!")
                 print(np.sum(masked),np.sum(np.bitwise_not(np.isnan(alleged_nans))))
                 print(alleged_nans[np.bitwise_not(np.isnan(alleged_nans))])
-            out_data_table.add_column(Table.Column(name=col, data=nansumd_fluxes.copy()))
-            out_mask_table.add_column(Table.Column(name=col, data=masked.copy()))
-            out_uncmult_table.add_column(Table.Column(name=col, data=nansumd_unc_multiplier.copy()))
+
+            cutnansumd_flux = gaussian_filter(nansumd_fluxes, sigma=0.66, order=0)
+            masked = masked.astype(bool)
+            cutmask = np.bitwise_or(masked[2:],masked[1:-1], masked[:-2])
+            cutmask = np.append(np.append([False],cutmask),[False])
+            unc = nansumd_unc_multiplier
+            ## below is an approximation, it would be rigourously true for sigma = 0.5
+            unc = np.sqrt( (unc[2:]*unc[2:]/(0.16*0.16)) + \
+                                              (unc[1:-1]*unc[1:-1]/(0.68*0.68)) + \
+                                              (unc[:-2]*unc[:-2]/(0.16*0.16)) )
+            unc = unc / ((2/(0.16*0.16))+(1/(0.68*0.68)))
+            cut_nansumd_unc_multiplier = np.append(np.append(unc[0],unc),unc[-1])
+
+            out_data_table.add_column(Table.Column(name=col, data=cutnansumd_flux[::2]))
+            out_mask_table.add_column(Table.Column(name=col, data=cutmask[::2]))
+            out_uncmult_table.add_column(Table.Column(name=col, data=cut_nansumd_unc_multiplier[::2]))
 
         # plt.subplots(2,1)
         plt.figure()
@@ -917,9 +930,11 @@ class FieldData:
             plt.show()
         plt.close()
 
-        sci_header['wavemin'],sci_header['wavemax'],sci_header['wavestep'] = wavemin,wavemax,wavestep
+        wavemax_new = master_wave_grid[::2][-1]
+        sci_header['wavemin'],sci_header['wavemax'],sci_header['wavestep'] = wavemin,wavemax_new,(wavestep/2.)
         self.all_hdus[(cam,'combined','science',None)] = fits.BinTableHDU(data=out_data_table,header=sci_header,name='FLUX')
         self.all_hdus[(cam, 'combined', 'masks', None)] = fits.BinTableHDU(data=out_mask_table,header=mask_hdu.header, name='MASK')
+
 
     def match_skies(self ,cam):
         from astropy.coordinates import SkyCoord
@@ -1025,9 +1040,7 @@ class FieldData:
         if self.single_core:
             sci_data = OrderedDict()
             for fib in fluxes.colnames:
-                flux = gaussian_filter(fluxes[fib], sigma=0.66, order=0)
-                mask = np.bitwise_or(masks[fib][1::2], masks[fib][::2][:len(masks[fib][1::2])])
-                sci_data[fib] = (wave_grid[::2], flux[::2], mask)
+                sci_data[fib] = (wave_grid, fluxes[fib], masks[fib])
             obs1 = {
                 'sky_subd_sciences':sci_data, 'mask_name': self.filemanager.maskname, 'savetemplate_func': self.filemanager.get_saveplot_template, 'run_auto': True
             }
@@ -1038,17 +1051,12 @@ class FieldData:
 
             for fib in fib1s:
                 if fib in fluxes.colnames:
-                    flux = gaussian_filter(fluxes[fib], sigma=0.66, order=0)
-                    mask = np.bitwise_or(masks[fib][1::2], masks[fib][::2][:len(masks[fib][1::2])])
-                    sci_data1[fib] = (wave_grid[::2], flux[::2], mask)
+                    sci_data1[fib] = (wave_grid, fluxes[fib], masks[fib])
 
             sci_data2 = OrderedDict()
             fib2s = self.instrument.upper_half_fibs[cam]
             for fib in fib2s:
                 if fib in fluxes.colnames:
-                    flux = gaussian_filter(fluxes[fib], sigma=0.66, order=0)
-                    mask = np.bitwise_or(masks[fib][1::2], masks[fib][::2][:len(masks[fib][1::2])])
-                    sci_data2[fib] = (wave_grid[::2], flux[::2], mask)
                     sci_data2[fib] = (wave_grid, fluxes[fib], masks[fib])
 
             obs1 = {

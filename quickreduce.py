@@ -243,8 +243,8 @@ def parse_command_line(argv):
 
 
 if __name__ == '__main__':
-    print(sys.argv)
     if len(sys.argv)>1:
+        print("Detected input parameters: ",sys.argv[1:])
         input_variables = parse_command_line(sys.argv)
         nonvals = []
         for key,val in input_variables.items():
@@ -252,8 +252,7 @@ if __name__ == '__main__':
                 nonvals.append(key)
         for key in nonvals:
             input_variables.pop(key)
+        print("Received input variables: ", input_variables)
     else:
         input_variables = {}
-    print(input_variables)
-    print(parse_command_line(['quickreduce.py',"-m", "A04"]),parse_command_line(['quickreduce.py','-m','"A04"']))
     pipeline(**input_variables)
