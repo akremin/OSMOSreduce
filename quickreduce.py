@@ -255,5 +255,5 @@ if __name__ == '__main__':
     else:
         input_variables = {}
     print(input_variables)
-    print(parse_command_line("-m A04"),parse_command_line('-m "A04"'))
+    print(parse_command_line(['quickreduce.py',"-m", "A04"]),parse_command_line(['quickreduce.py','-m','"A04"']))
     pipeline(**input_variables)
