@@ -60,7 +60,9 @@ def pipeline(maskname=None,obs_config_name=None,io_config_name=None, pipe_config
     pipe_config = configparser.ConfigParser(interpolation=configparser.ExtendedInterpolation())
     pipe_config.read(pipe_config_name)
 
-    if maskname is None:
+    if maskname is not None:
+        pipe_config['GENERAL']['mask_name'] = maskname
+    else:
         try:
             maskname = pipe_config['GENERAL']['mask_name']
         except:
@@ -202,7 +204,7 @@ def read_io_config(io_config_name, pipe_dict, maskname):
     if os.path.exists(io_config_name):
         io_config = configparser.ConfigParser(interpolation=configparser.ExtendedInterpolation())
         io_config.add_section('GENERAL')
-        io_config['GENERAL']['mask_name'] = pipe_dict['GENERAL']['mask_name']
+        io_config['GENERAL']['mask_name'] = maskname
         if 'path_to_masks' in pipe_dict['GENERAL'].keys() and str(
                 pipe_dict['GENERAL']['path_to_masks']).lower() != 'none':
             io_config.add_section('PATHS')
@@ -241,6 +243,7 @@ def parse_command_line(argv):
 
 
 if __name__ == '__main__':
+    print(sys.argv)
     if len(sys.argv)>1:
         input_variables = parse_command_line(sys.argv)
         nonvals = []
@@ -251,4 +254,6 @@ if __name__ == '__main__':
             input_variables.pop(key)
     else:
         input_variables = {}
+    print(input_variables)
+    print(parse_command_line("-m A04"),parse_command_line('-m "A04"'))
     pipeline(**input_variables)
