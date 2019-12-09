@@ -301,7 +301,7 @@ class Calibrations:
                     dats = []
                     for fib,coef_fits in fiber_fit_dict.items():
                         dat = np.array(fiber_dat_dict[fib][name])
-                        if dointerp:
+                        if fit_model is None:
                             fitd = coef_fits[name](interpd_minmeans+srtd_timestamps[0])
                         else:
                             fitd = fit_model(interpd_minmeans+srtd_timestamps[0], *coef_fits[name])
@@ -335,7 +335,7 @@ class Calibrations:
                     dats = []
                     for fib,coef_fits in fiber_fit_dict.items():
                         dat = np.array(fiber_dat_dict[fib][name])
-                        if dointerp:
+                        if fit_model is None:
                             fitd = coef_fits[name](interpd_minmeans + srtd_timestamps[0])-dat[0]
                         else:
                             fitd = fit_model(interpd_minmeans+srtd_timestamps[0], *coef_fits[name])-dat[0]
