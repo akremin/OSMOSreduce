@@ -277,7 +277,7 @@ class Calibrations:
                         b = getb(srtd_timestamps, coef_arr)
                         a = geta(srtd_timestamps[0], coef_arr[0], b, c)
                         coef_fits[coef] = [a,b,c]
-                elif len(srtd_pairnums) == 3 and dointerp:
+                elif dointerp:
                     for coef,coef_arr in coef_arrs.items():
                         coef_fits[coef] = UnivariateSpline(srtd_timestamps,coef_arr,k=1,s=0)
                 else:

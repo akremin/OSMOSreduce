@@ -945,7 +945,7 @@ class FieldData:
                 # plt.subplot(212)
                 if len(flux) == 0 or np.nansum(flux) == 0 or np.any(np.isnan(stds[unmasked])) or np.any(np.isnan(flux[unmasked])):
                     print("Empty flux!")
-                plt.plot(master_wave_grid[unmasked],flux[unmasked],alpha=0.1)
+                plt.plot(master_wave_grid[::2][unmasked],flux[unmasked],alpha=0.1)
                 #plt.fill_between(master_wave_grid[unmasked],flux[unmasked]-stds[unmasked],flux[unmasked]+stds[unmasked],alpha=0.2)
                 plt.title("Bad Data Masked, cam: {}".format(cam))
         if self.save_plots:
@@ -964,7 +964,7 @@ class FieldData:
                 # plt.subplot(212)
                 if len(flux) == 0 or np.nansum(flux) == 0:
                     print("Empty flux!")
-                plt.plot(master_wave_grid,flux,alpha=0.1)
+                plt.plot(master_wave_grid[::2],flux,alpha=0.1)
                 #plt.fill_between(master_wave_grid[unmasked],flux[unmasked]-stds[unmasked],flux[unmasked]+stds[unmasked],alpha=0.2)
                 plt.title("All Data cam: {}".format(cam))
         if self.save_plots:
