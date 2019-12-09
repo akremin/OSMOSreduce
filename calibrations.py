@@ -313,8 +313,7 @@ class Calibrations:
                             fitd = coef_fits[name](interpd_minmeans+srtd_timestamps[0])
                         else:
                             fitd = fit_model(interpd_minmeans+srtd_timestamps[0], *coef_fits[name])
-                        if len(interpd_minmeans) == len(fitd) and len(interpd_minmeans)>0:
-                            plt.plot(interpd_minmeans, fitd, alpha=0.1)
+                        plt.plot(interpd_minmeans, fitd, alpha=0.1)
                         dats.extend(list(dat))
 
                     plt.plot([], [], '-', alpha=0.3, label='Fits')
@@ -348,8 +347,7 @@ class Calibrations:
                             fitd = coef_fits[name](interpd_minmeans + srtd_timestamps[0])-dat[0]
                         else:
                             fitd = fit_model(interpd_minmeans+srtd_timestamps[0], *coef_fits[name])-dat[0]
-                        if len(interpd_minmeans) == len(fitd) and len(interpd_minmeans) > 0:
-                            plt.plot(interpd_minmeans, fitd, alpha=0.1)
+                        plt.plot(interpd_minmeans, fitd, alpha=0.1)
                         dats.extend(list(dat-dat[0]))
 
                     plt.plot([], [], '-', alpha=0.3, label='Fits-Data[0]')
