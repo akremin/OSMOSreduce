@@ -1,5 +1,5 @@
 from collections import OrderedDict
-
+from multiprocessing import Pool
 import matplotlib.pyplot as plt
 import numpy as np
 from astropy.io import fits
@@ -8,7 +8,7 @@ from scipy.interpolate import CubicSpline
 
 from calibrations import Calibrations
 from observations import Observations
-from sky_subtraction import subtract_sky, replace_nans
+from sky_subtraction import subtract_sky_loop_wrapper, replace_nans
 
 
 class FieldData:
@@ -690,8 +690,8 @@ class FieldData:
 
                 del median_arrays1,median_arrays2
 
+            interpd_galfluxes, skyfluxes, galmasks = OrderedDict(),OrderedDict(),OrderedDict()
             for galfib, skyfib in target_sky_pair.items():
-                print(galfib)
                 a, b, c, d, e, f = comparc_data[galfib]
                 gallams = a + b * pixels + c * pix2 + d * pix3 + e * pix4 + f * pix5
                 galflux = np.asarray(sci_data[galfib])
@@ -712,8 +712,51 @@ class FieldData:
                 # elif self.skysub_strategy == 'median':
                 #     skyflux = master_sky
 
-                outgal,remaining_sky,gcont,scont,masked = subtract_sky(galflux=interpd_galflux,skyflux=skyflux,gallams=wave_grid,galmask=galmask)
+                interpd_galfluxes[galfib], skyfluxes[galfib], galmasks[galfib] =  interpd_galflux, skyflux, galmask
 
+            spectypes = ['gal','sky','gcont','scont','mask']
+            if self.single_core:
+                sky_inputs = { 'galfluxes':interpd_galfluxes, 'skyfluxes':skyfluxes, \
+                         'wave_grid':wave_grid, 'galmasks':galmasks }
+                outdict = subtract_sky_loop_wrapper(sky_inputs)
+            else:
+                sky_inputs1 = { 'galfluxes':OrderedDict(), 'skyfluxes':OrderedDict(), \
+                         'wave_grid':wave_grid.copy(), 'galmasks':OrderedDict() }
+                sky_inputs2 = { 'galfluxes':OrderedDict(), 'skyfluxes':OrderedDict(), \
+                         'wave_grid':wave_grid.copy(), 'galmasks':OrderedDict() }
+
+                for fib in self.instrument.lower_half_fibs[cam]:
+                    if fib in target_sky_pair.keys():
+                        sky_inputs1['galfluxes'][fib] = interpd_galfluxes[fib]
+                        sky_inputs1['skyfluxes'][fib] = skyfluxes[fib]
+                        sky_inputs1['galmasks'][fib] = galmasks[fib]
+                for fib in self.instrument.upper_half_fibs[cam]:
+                    if fib in target_sky_pair.keys():
+                        sky_inputs2['galfluxes'][fib] = interpd_galfluxes[fib]
+                        sky_inputs2['skyfluxes'][fib] = skyfluxes[fib]
+                        sky_inputs2['galmasks'][fib] = galmasks[fib]
+
+                all_sky_inputs = [sky_inputs1, sky_inputs2]
+                NPROC = np.clip(len(all_sky_inputs),1,2)
+
+                with Pool(NPROC) as pool:
+                    outs = pool.map(subtract_sky_loop_wrapper, all_sky_inputs)
+                outdict,outdict2 = outs
+
+                for fib in self.instrument.upper_half_fibs[cam]:
+                    if fib in target_sky_pair.keys():
+                        for spectype in spectypes:
+                            outdict[spectype][fib] = outdict2[spectype][fib]
+            # galfluxes, skyfluxes, wave_grid, galmask
+            # outdict = {'gal': outgals, 'sky': remaining_skies, 'gcont': gconts, 'scont': sconts, 'mask': maskeds}
+
+            outgals, remaining_skies = outdict['gal'], outdict['sky']
+            gconts, sconts = outdict['gcont'], outdict['scont']
+            maskeds =  outdict['mask']
+            for galfib in target_sky_pair.keys():
+                outgal, remaining_sky = outgals[galfib],remaining_skies[galfib]
+                gcont, scont = gconts[galfib], sconts[galfib]
+                masked = maskeds[galfib]
                 good_vals = np.bitwise_not(masked|np.isnan(outgal))
                 plt.subplots(2, 2)
                 if self.save_plots or self.show_plots:

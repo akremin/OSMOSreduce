@@ -6,7 +6,7 @@ from scipy.ndimage import median_filter
 from scipy.signal import find_peaks
 from scipy.signal.windows import gaussian as gaussian_kernel
 from scipy.ndimage import gaussian_filter
-
+from collections import OrderedDict
 def gauss(lams, offset, mean, sig, amp):
     return offset + (amp * np.exp(-(lams - mean) * (lams - mean) / (2 * sig * sig))) / np.sqrt(
         2 * np.pi * sig * sig)
@@ -62,6 +62,25 @@ def buffered_smooth(arr,bufsize,smoothsize,smoothtype):
     else:
         cont = median_filter(zeropadded, size=smoothsize, mode='nearest')[bufsize:-bufsize]
     return cont
+def subtract_sky_loop_wrapper(input_dict):
+    return subtract_sky_loop(**input_dict)
+
+def subtract_sky_loop(galfluxes,skyfluxes,wave_grid,galmasks):
+    outgals, remaining_skies = OrderedDict(), OrderedDict()
+    gconts, sconts = OrderedDict(), OrderedDict()
+    maskeds = OrderedDict()
+    for galfib in galfluxes.keys():
+        print("\n\n",galfib)
+        galflux = galfluxes[galfib]
+        skyflux = skyfluxes[galfib]
+        galmask = galmasks[galfib]
+        outgal,remaining_sky,gcont,scont,masked = subtract_sky(galflux=galflux,skyflux=skyflux,gallams=wave_grid,galmask=galmask)
+        outgals[galfib],remaining_skies[galfib] = outgal,remaining_sky
+        gconts[galfib], sconts[galfib] = gcont,scont
+        maskeds[galfib] = masked
+
+    outdict = {'gal':outgals,'sky':remaining_skies,'gcont':gconts,'scont':sconts,'mask':maskeds}
+    return outdict
 
 def subtract_sky(galflux,skyflux,gallams,galmask):
     pix_per_wave = int(np.ceil(1/np.nanmedian(gallams[1:]-gallams[:-1])))
@@ -132,9 +151,6 @@ def subtract_sky(galflux,skyflux,gallams,galmask):
         # print(np.median(peak_ratios),peak_ratios)
         if np.median(peak_ratios) < 0.001:
             break
-        # normd_diffs = differences/s_peak_fluxes
-        # median_normd_diff = np.median(normd_diffs)
-        # peak_ratios = g_peak_fluxes / s_peak_fluxes
         median_ratio = 1.0+np.median(peak_ratios)
 
         skyflux *= median_ratio
@@ -146,18 +162,6 @@ def subtract_sky(galflux,skyflux,gallams,galmask):
     flux_too_large = np.where(skyflux[not_masked][50:-50] > galflux[not_masked][50:-50])[0]
     if len(sky_too_large) > 0.4*len(gal_contsub[not_masked][50:-50]) and skyflux.max() > 2000. and \
         len(flux_too_large) > 0.2*len(gal_contsub[not_masked][50:-50]):
-        # plt.subplots(2,1,sharex=True)
-        # plt.subplot(211)
-        # plt.plot(gallams, skyflux,alpha=0.2,label='scaled orig sky')
-        # plt.plot(gallams, galflux, alpha=0.2, label='orig gal')
-        # plt.plot(gallams, scont, alpha=0.2, label='scaled cont sky')
-        # plt.plot(gallams, gcont, alpha=0.2, label='cont gal')
-        # plt.legend()
-        # plt.subplot(212)
-        # plt.plot(gallams, sky_contsub, alpha=0.2, label='scaled contsub sky')
-        # plt.plot(gallams, gal_contsub, alpha=0.2, label='cont sub gal')
-        # plt.legend()
-        # plt.show()
 
         adjusted_skyflux_ratio = np.median(gcont[not_masked][50:-50][sky_too_large]/scont[not_masked][50:-50][sky_too_large])
         skyflux *= adjusted_skyflux_ratio
@@ -206,18 +210,7 @@ def subtract_sky(galflux,skyflux,gallams,galmask):
     gal_smthd_contsub = gaussian_filter(gal_contsub, sigma=0.5 * pix_per_wave, order=0)
     sky_smthd_contsub = sky_smthd_contsub * sky_contsub.sum() / sky_smthd_contsub.sum()
     gal_smthd_contsub = gal_smthd_contsub * gal_contsub.sum() / gal_smthd_contsub.sum()
-    # plt.subplots(2,1,sharex=True)
-    # plt.subplot(211)
-    # plt.plot(gallams, skyflux,alpha=0.2,label='scaled orig sky')
-    # plt.plot(gallams, galflux, alpha=0.2, label='orig gal')
-    # plt.plot(gallams, scont, alpha=0.2, label='scaled cont sky')
-    # plt.plot(gallams, gcont, alpha=0.2, label='cont gal')
-    # plt.legend()
-    # plt.subplot(212)
-    # plt.plot(gallams, sky_contsub, alpha=0.2, label='scaled contsub sky')
-    # plt.plot(gallams, gal_contsub, alpha=0.2, label='cont sub gal')
-    # plt.legend()
-    # plt.show()
+
 
     print("Identified {} lines to subtract".format(len(line_pairs)))
     seen_before = np.zeros(len(outgal)).astype(bool)
@@ -281,14 +274,14 @@ def subtract_sky(galflux,skyflux,gallams,galmask):
         supper_wave_ind = int(itterright) + 1
 
         if np.any(seen_before[slower_wave_ind:supper_wave_ind]):
-            print("some of these have already been seen")
+            # print("some of these have already been seen")
             if np.sum(seen_before[slower_wave_ind:supper_wave_ind])>(supper_wave_ind-slower_wave_ind-2):
                 continue
             locs = np.where(np.bitwise_not(seen_before[slower_wave_ind:supper_wave_ind]))[0]
-            print("was: ",slower_wave_ind,supper_wave_ind)
+            # print("was: ",slower_wave_ind,supper_wave_ind)
             supper_wave_ind = slower_wave_ind + locs[-1] + 1
             slower_wave_ind += locs[0]
-            print('now: ',slower_wave_ind,supper_wave_ind)
+            # print('now: ',slower_wave_ind,supper_wave_ind)
         if slower_wave_ind == supper_wave_ind:
             print("Lower and upper inds somehow were the same. Skipping this peak")
             print("was: ",slower_wave_ind,supper_wave_ind)
@@ -315,16 +308,6 @@ def subtract_sky(galflux,skyflux,gallams,galmask):
             min_s_distrib = 0.
         s_distrib = s_distrib - min_s_distrib
         integral_s = np.sum(s_distrib)#/pix_per_wave
-
-        # local_vals = gal_contsub[slower_wave_ind-10*:supper_wave_ind]
-        # dint = g_distrib*(1 - (integral_s / integral_g))
-        ## Distrib is cont subtracted, so this requires masking if the original peak
-        ## is at least twice as tall as the continuum
-        # if np.nanmax(s_distrib) > median_sky_continuum_height:
-        #     need_to_mask = True
-        ## Only if it's twice the GALAXY continuum
-        # if np.nanmax(s_distrib) > np.nanmedian(gcont[slower_wave_ind:supper_wave_ind]):
-        #     need_to_mask = True
 
         mean_s_ppix = np.mean(s_distrib)
         mean_g_ppix = np.mean(g_distrib)
@@ -369,25 +352,6 @@ def subtract_sky(galflux,skyflux,gallams,galmask):
         else:
             removedlineflux = subd#gal_contsub[slower_wave_ind:supper_wave_ind].copy() - sky_g_distrib
 
-        # if need_to_mask:
-        #     plt.figure()
-        #     plt.plot(gallams[slower_wave_ind:supper_wave_ind],gal_contsub[slower_wave_ind:supper_wave_ind],alpha=0.2,label='gal')
-        #     if np.abs(np.sum(gal_contsub[slower_wave_ind:supper_wave_ind]-outgal[slower_wave_ind:supper_wave_ind])) < 0.1:
-        #         plt.plot(gallams[slower_wave_ind:supper_wave_ind], outgal[slower_wave_ind:supper_wave_ind],alpha=0.2, label='out gal')
-        #
-        #     if min_g_distrib < 0.:
-        #         plt.plot(gallams[slower_wave_ind:supper_wave_ind], g_distrib, alpha=0.2,label='gal adj')
-        #     plt.plot(gallams[slower_wave_ind:supper_wave_ind],sky_contsub[slower_wave_ind:supper_wave_ind],alpha=0.2,label='sky')
-        #     if min_s_distrib < 0.:
-        #         plt.plot(gallams[slower_wave_ind:supper_wave_ind], s_distrib, alpha=0.2,label='sky adj')
-        #     plt.plot(gallams[slower_wave_ind:supper_wave_ind], sky_g_distrib, alpha=0.2,label='sky nrmd')
-        #     plt.plot(gallams[slower_wave_ind:supper_wave_ind], subd, alpha=0.2, label='subd')
-        #     plt.plot(gallams[slower_wave_ind:supper_wave_ind], removedlineflux, alpha=0.2, label='smthd subd')
-        #     plt.plot(gallams[slower_wave_ind:supper_wave_ind], gal_contsub[slower_wave_ind:supper_wave_ind]-sky_contsub[slower_wave_ind:supper_wave_ind], alpha=0.2, label='naive')
-        #     plt.legend()
-        #     plt.show()
-
-
         # 1/np.sqrt(2*np.pi*sig*sig)
         # print(*gfit_coefs,*sfit_coefs)
         outgal[slower_wave_ind:supper_wave_ind] = removedlineflux
@@ -408,18 +372,7 @@ def subtract_sky(galflux,skyflux,gallams,galmask):
         for maskiter in np.arange(int(np.floor(-angstrom_buffer*pix_per_wave)),int(np.ceil(angstrom_buffer*pix_per_wave))+1):
             it_locs = np.clip(locs+int(maskiter),0,len(masked)-1)
             masked[it_locs] = True
-        #
-        # plt.figure()
-        # plt.plot(gallams,remaining_sky,alpha=0.2,label='sky')
-        # plt.plot(gallams[locs], remaining_sky[locs], '.', alpha=0.2, label='sky flagged')
-        # plt.plot(gallams,outgal + gcont,alpha=0.2,label='gal')
-        # plt.legend()
-        # plt.figure()
-        # plt.plot(gallams,remaining_sky_devs,alpha=0.2,label='sky')
-        # plt.plot(gallams[locs], remaining_sky_devs[locs], '.', alpha=0.2, label='sky flagged')
-        # plt.plot(gallams,outgal,alpha=0.2,label='gal')
-        # plt.legend()
-        # plt.show()
+
 
     outgal = outgal + gcont - remaining_sky
 

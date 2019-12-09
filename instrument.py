@@ -1,5 +1,5 @@
 import numpy as np
-
+from collections import OrderedDict
 
 class InstrumentState:
     def __init__(self, obs_config=None):
@@ -36,7 +36,7 @@ class InstrumentState:
             if self.filter.lower() == 'none':
                 self.filter = None
 
-        self.lower_half_fibs,self.upper_half_fibs = {},{}
+        self.lower_half_fibs,self.upper_half_fibs = OrderedDict(),OrderedDict()
         self.full_fibs,self.overlapping_fibs = {},{}
 
         for camera in self.cameras:
