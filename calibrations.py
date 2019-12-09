@@ -177,7 +177,12 @@ class Calibrations:
             self.interpolate_final_calibrations()
         mean_timestamp, mean_datetime, night = get_meantime_and_date(science_hdu.header)
 
-        night_interpolator,fit_model = self.interpolated_coef_fits[night]
+        if night in self.interpolated_coef_fits.keys():
+            night_interpolator,fit_model = self.interpolated_coef_fits[night]
+        else:
+            print("Requested {}, but that isn't a known night. Possible options were: ".format(night),self.interpolated_coef_fits.keys())
+            night_interpolator, fit_model = self.interpolated_coef_fits[night]
+
         out_cols = []
         for fib, coefs in night_interpolator.items():
             fitted_coefs = []
@@ -293,7 +298,10 @@ class Calibrations:
             if self.save_plots or self.show_plots:
                 means = []
                 minmeans = srtd_timestamps - srtd_timestamps[0]
-                interpd_minmeans = np.arange(minmeans[-1])
+                if len(minmeans)> 1:
+                    interpd_minmeans = np.arange(minmeans[-1])
+                else:
+                    interpd_minmeans = minmeans
                 for fib in fiber_fit_dict.keys():
                     means.extend(list(minmeans))
                 for ii,name in enumerate(coef_names):
@@ -305,7 +313,8 @@ class Calibrations:
                             fitd = coef_fits[name](interpd_minmeans+srtd_timestamps[0])
                         else:
                             fitd = fit_model(interpd_minmeans+srtd_timestamps[0], *coef_fits[name])
-                        plt.plot(interpd_minmeans, fitd, alpha=0.1)
+                        if len(interpd_minmeans) == len(fitd) and len(interpd_minmeans)>0:
+                            plt.plot(interpd_minmeans, fitd, alpha=0.1)
                         dats.extend(list(dat))
 
                     plt.plot([], [], '-', alpha=0.3, label='Fits')
@@ -339,7 +348,8 @@ class Calibrations:
                             fitd = coef_fits[name](interpd_minmeans + srtd_timestamps[0])-dat[0]
                         else:
                             fitd = fit_model(interpd_minmeans+srtd_timestamps[0], *coef_fits[name])-dat[0]
-                        plt.plot(interpd_minmeans, fitd, alpha=0.1)
+                        if len(interpd_minmeans) == len(fitd) and len(interpd_minmeans) > 0:
+                            plt.plot(interpd_minmeans, fitd, alpha=0.1)
                         dats.extend(list(dat-dat[0]))
 
                     plt.plot([], [], '-', alpha=0.3, label='Fits-Data[0]')
