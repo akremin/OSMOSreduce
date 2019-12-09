@@ -21,6 +21,8 @@
 
 import matplotlib
 matplotlib.use('Qt5Agg')
+import warnings
+warnings.filterwarnings("ignore", module="matplotlib")
 
 import os
 import sys
