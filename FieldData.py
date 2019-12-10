@@ -593,6 +593,13 @@ class FieldData:
         for obs in observation_keys:
             sci_filnum, ccalib, fcalib, comparc_ind = self.observations.observations[obs]
             sci_hdu = self.all_hdus.pop((cam, sci_filnum, 'science', None))
+            nsecs_limit = 60*5.1
+            if float(sci_hdu.header['EXPTIME']) < nsecs_limit:
+                dosimple_subtraction = True
+                print("A short exposure of less than {} detected.".format(nsecs_limit))
+                print("Attempting to adjusting skyflux to match fiber throughput, but then performing direct subtraction.")
+            else:
+                dosimple_subtraction = False
             # if self.twostep_wavecomparc:
             #     calib_filnum = fcalib
             # else:
@@ -715,9 +722,9 @@ class FieldData:
                 interpd_galfluxes[galfib], skyfluxes[galfib], galmasks[galfib] =  interpd_galflux, skyflux, galmask
 
             spectypes = ['gal','sky','gcont','scont','mask']
-            if self.single_core:
+            if self.single_core or dosimple_subtraction:
                 sky_inputs = { 'galfluxes':interpd_galfluxes, 'skyfluxes':skyfluxes, \
-                         'wave_grid':wave_grid, 'galmasks':galmasks }
+                         'wave_grid':wave_grid, 'galmasks':galmasks, 'quickreturn':dosimple_subtraction}
                 outdict = subtract_sky_loop_wrapper(sky_inputs)
             else:
                 sky_inputs1 = { 'galfluxes':OrderedDict(), 'skyfluxes':OrderedDict(), \
@@ -757,6 +764,8 @@ class FieldData:
                 outgal, remaining_sky = outgals[galfib],remaining_skies[galfib]
                 gcont, scont = gconts[galfib], sconts[galfib]
                 masked = maskeds[galfib]
+                interpd_galflux = interpd_galfluxes[galfib]
+                skyflux = skyfluxes[galfib]
                 good_vals = np.bitwise_not(masked|np.isnan(outgal))
                 plt.subplots(2, 2)
                 if self.save_plots or self.show_plots:

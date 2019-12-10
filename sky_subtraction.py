@@ -65,7 +65,7 @@ def buffered_smooth(arr,bufsize,smoothsize,smoothtype):
 def subtract_sky_loop_wrapper(input_dict):
     return subtract_sky_loop(**input_dict)
 
-def subtract_sky_loop(galfluxes,skyfluxes,wave_grid,galmasks):
+def subtract_sky_loop(galfluxes,skyfluxes,wave_grid,galmasks,quickreturn=False):
     outgals, remaining_skies = OrderedDict(), OrderedDict()
     gconts, sconts = OrderedDict(), OrderedDict()
     maskeds = OrderedDict()
@@ -74,7 +74,8 @@ def subtract_sky_loop(galfluxes,skyfluxes,wave_grid,galmasks):
         galflux = galfluxes[galfib]
         skyflux = skyfluxes[galfib]
         galmask = galmasks[galfib]
-        outgal,remaining_sky,gcont,scont,masked = subtract_sky(galflux=galflux,skyflux=skyflux,gallams=wave_grid,galmask=galmask)
+        outgal,remaining_sky,gcont,scont,masked = subtract_sky(galflux=galflux,skyflux=skyflux,gallams=wave_grid,\
+                                                               galmask=galmask,quickreturn=quickreturn)
         outgals[galfib],remaining_skies[galfib] = outgal,remaining_sky
         gconts[galfib], sconts[galfib] = gcont,scont
         maskeds[galfib] = masked
@@ -82,7 +83,7 @@ def subtract_sky_loop(galfluxes,skyfluxes,wave_grid,galmasks):
     outdict = {'gal':outgals,'sky':remaining_skies,'gcont':gconts,'scont':sconts,'mask':maskeds}
     return outdict
 
-def subtract_sky(galflux,skyflux,gallams,galmask):
+def subtract_sky(galflux,skyflux,gallams,galmask,quickreturn=False):
     pix_per_wave = int(np.ceil(1/np.nanmedian(gallams[1:]-gallams[:-1])))
     continuum_median_kernalsize = 280#371
 
@@ -119,16 +120,21 @@ def subtract_sky(galflux,skyflux,gallams,galmask):
                                            threshold=(None, None),
                                            prominence=(gal_contsub.max() / 8, None), wlen=int(24 * pix_per_wave))
 
-
     if len(g_peak_inds) == 0:
         g_peak_inds, g_peak_props = find_peaks(gal_contsub, height=(gal_contsub.max() / 20, None),
                                                width=(0.5 * pix_per_wave, 8 * pix_per_wave), \
                                                threshold=(None, None),
                                                prominence=(gal_contsub.max() / 20, None), wlen=int(24 * pix_per_wave))
-        if len(g_peak_inds) == 0:
-            print("Couldn't identify any peaks, returning scaled sky for direct subtraction")
-            return (gal_contsub + gcont), skyflux * (np.median(gcont / scont)), gcont, np.zeros(len(galflux)).astype(
-                bool)
+
+    ## if it still can't identify peaks OR the counts are low so we just want a quick removal, return at this point
+    ## by using just a straight subtraction
+    if len(g_peak_inds) == 0:
+        print("Couldn't identify any peaks, returning scaled sky for direct subtraction")
+    if (len(g_peak_inds) == 0) or quickreturn:
+        modsky = skyflux * (np.median(gcont / scont))
+        outgal = gal_contsub + gcont - modsky
+        return outgal, modsky, gcont, scont, masked
+
 
     for runnum in range(10):
         s_peak_inds, s_peak_props = find_peaks(sky_contsub, height=(sky_contsub.max() / 8, None), width=(0.5*pix_per_wave, 8*pix_per_wave), \
@@ -179,9 +185,17 @@ def subtract_sky(galflux,skyflux,gallams,galmask):
                                            threshold=(None, None),
                                            prominence=(gprom, None), wlen=24*pix_per_wave)
 
+
+    # sky_smthd_contsub = np.convolve(sky_contsub, [1 / 15., 3 / 15., 7 / 15., 3 / 15., 1 / 15.], 'same')
+    # gal_smthd_contsub = np.convolve(gal_contsub, [1 / 15., 3 / 15., 7 / 15., 3 / 15., 1 / 15.], 'same')
+    sky_smthd_contsub = gaussian_filter(sky_contsub, sigma=0.25 * pix_per_wave, order=0)
+    gal_smthd_contsub = gaussian_filter(gal_contsub, sigma=0.5 * pix_per_wave, order=0)
+    sky_smthd_contsub = sky_smthd_contsub * sky_contsub.sum() / sky_smthd_contsub.sum()
+    gal_smthd_contsub = gal_smthd_contsub * gal_contsub.sum() / gal_smthd_contsub.sum()
+
+
     outgal = gal_contsub.copy()
     line_pairs = []
-
     for ii in range(len(s_peak_inds)):
         pair = {}
 
@@ -203,14 +217,6 @@ def subtract_sky(galflux,skyflux,gallams,galmask):
         }
 
         line_pairs.append(pair)
-
-    # sky_smthd_contsub = np.convolve(sky_contsub, [1 / 15., 3 / 15., 7 / 15., 3 / 15., 1 / 15.], 'same')
-    # gal_smthd_contsub = np.convolve(gal_contsub, [1 / 15., 3 / 15., 7 / 15., 3 / 15., 1 / 15.], 'same')
-    sky_smthd_contsub = gaussian_filter(sky_contsub, sigma=0.25 * pix_per_wave, order=0)
-    gal_smthd_contsub = gaussian_filter(gal_contsub, sigma=0.5 * pix_per_wave, order=0)
-    sky_smthd_contsub = sky_smthd_contsub * sky_contsub.sum() / sky_smthd_contsub.sum()
-    gal_smthd_contsub = gal_smthd_contsub * gal_contsub.sum() / gal_smthd_contsub.sum()
-
 
     print("Identified {} lines to subtract".format(len(line_pairs)))
     seen_before = np.zeros(len(outgal)).astype(bool)
