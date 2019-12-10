@@ -289,7 +289,7 @@ def get_peak_array(inds,nrows,pixels,row_lens,ncols,binwidth):
         print("Looking to see if there is an additional fiber")
         nrows=nrows+1
         for ii in range(len(pixels)):
-            if (row_lens[ii] == (nrows+1)) and np.all(np.diff(inds[ii]) > 4.):
+            if (row_lens[ii] == nrows) and np.all(np.diff(inds[ii]) > 4.):
                 # valid_locations.append(ii)
                 first_good_ind = ii
                 break
