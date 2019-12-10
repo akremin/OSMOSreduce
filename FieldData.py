@@ -907,19 +907,28 @@ class FieldData:
             # print(col,len(masked),np.sum(masked),np.sum(np.bitwise_not(masked)),len(observation_keys),Counter(ngood_obs_perpix))
             ngood_obs_perpix[ngood_obs_perpix==0] = np.nan
             nanmean_fluxes = np.nanmean(flux_arr,axis=0)
+            nanmean_fluxes[masked] = np.nan
+            masked = np.isnan(nanmean_fluxes)
             nansumd_fluxes = nanmean_fluxes*len(observation_keys)
             nansumd_unc_multiplier = np.sqrt(float(len(observation_keys))/ngood_obs_perpix)
 
-            alleged_nans = nanmean_fluxes[masked]
-            if np.sum(np.bitwise_not(np.isnan(alleged_nans)))!=0:
-                print("Mask assignment didn't match nanmean in combining fluxes!")
-                print(np.sum(masked),np.sum(np.bitwise_not(np.isnan(alleged_nans))))
-                print(alleged_nans[np.bitwise_not(np.isnan(alleged_nans))])
+            # ## All masked values should be nan, get all masked values
+            # alleged_nans = nanmean_fluxes[masked]
+            # ## if they are all nans, then 'not' that will be all False. The sum of which should be 0
+            # if np.sum(np.bitwise_not(np.isnan(alleged_nans)))!=np.sum(np.isnan(ngood_obs_perpix)):
+            #     print("Mask assignment didn't match nanmean in combining fluxes!")
+            #     print("Nmasked: {}, n_notenoughobs: {}, n_nanpix_tomask: {}".format(np.sum(masked),np.sum(np.bitwise_not(np.isnan(alleged_nans))),np.sum(np.isnan(ngood_obs_perpix))))
+            if np.sum(masked) == len(masked):
+                print("All values are masked in {}!".format(col))
+                print(np.sum(masked),np.sum(np.isnan(ngood_obs_perpix)),np.sum(np.bitwise_not(np.isnan(alleged_nans))))
 
+            from scipy.interpolate import CubicSpline
+            fitd_spectrum_func = CubicSpline(master_wave_grid[np.bitwise_not(masked)],nansumd_fluxes[np.bitwise_not(masked)],extrapolate=False)
+            nansumd_fluxes[masked] = fitd_spectrum_func(master_wave_grid[masked])
             cutnansumd_flux = gaussian_filter(nansumd_fluxes, sigma=0.66, order=0)
             masked = masked.astype(bool)
-            cutmask = np.bitwise_or(masked[2:],masked[1:-1], masked[:-2])
-            cutmask = np.append(np.append([False],cutmask),[False])
+            cutmask = (masked[2:] | masked[1:-1] | masked[:-2] | np.isnan(cutnansumd_flux[1:-1]))
+            cutmask = np.append(np.append([True],cutmask),[True])
             unc = nansumd_unc_multiplier
             ## below is an approximation, it would be rigourously true for sigma = 0.5
             unc = np.sqrt( (unc[2:]*unc[2:]/(0.16*0.16)) + \
@@ -943,8 +952,12 @@ class FieldData:
                 # plt.plot(ref_wavearrays[col][np.bitwise_not(out_mask_table[col])],out_data_table[col][np.bitwise_not(out_mask_table[col])],alpha=0.4,lw=1)
                 # plt.title("Masked cam: {}".format(cam))
                 # plt.subplot(212)
-                if len(flux) == 0 or np.nansum(flux) == 0 or np.any(np.isnan(stds[unmasked])) or np.any(np.isnan(flux[unmasked])):
-                    print("Empty flux!")
+                if len(flux) == 0 or np.nansum(flux) == 0:
+                    print("Empty flux in {}!".format(col))
+                if np.any(np.isnan(stds[unmasked])):
+                    print("There were nans that were unmasked in std in {}!".format(col))
+                if np.any(np.isnan(flux[unmasked])):
+                    print("There were nans that were unmasked in flux in {}!".format(col))
                 plt.plot(master_wave_grid[::2][unmasked],flux[unmasked],alpha=0.1)
                 #plt.fill_between(master_wave_grid[unmasked],flux[unmasked]-stds[unmasked],flux[unmasked]+stds[unmasked],alpha=0.2)
                 plt.title("Bad Data Masked, cam: {}".format(cam))
@@ -958,12 +971,7 @@ class FieldData:
         if self.save_plots or self.show_plots:
             for col in out_data_table.colnames:
                 flux = out_data_table[col]
-                # plt.subplot(211)
-                # plt.plot(ref_wavearrays[col][np.bitwise_not(out_mask_table[col])],out_data_table[col][np.bitwise_not(out_mask_table[col])],alpha=0.4,lw=1)
-                # plt.title("Masked cam: {}".format(cam))
-                # plt.subplot(212)
-                if len(flux) == 0 or np.nansum(flux) == 0:
-                    print("Empty flux!")
+
                 plt.plot(master_wave_grid[::2],flux,alpha=0.1)
                 #plt.fill_between(master_wave_grid[unmasked],flux[unmasked]-stds[unmasked],flux[unmasked]+stds[unmasked],alpha=0.2)
                 plt.title("All Data cam: {}".format(cam))
@@ -974,9 +982,11 @@ class FieldData:
         plt.close()
 
         wavemax_new = master_wave_grid[::2][-1]
-        sci_header['wavemin'],sci_header['wavemax'],sci_header['wavestep'] = wavemin,wavemax_new,(wavestep/2.)
+        sci_header['wavemin'],sci_header['wavemax'],sci_header['wavestep'] = wavemin,wavemax_new,(2.*wavestep)
+        mask_header = mask_hdu.header
+        mask_header['wavemin'], mask_header['wavemax'], mask_header['wavestep'] = wavemin, wavemax_new, (2.*wavestep)
         self.all_hdus[(cam,'combined','science',None)] = fits.BinTableHDU(data=out_data_table,header=sci_header,name='FLUX')
-        self.all_hdus[(cam, 'combined', 'masks', None)] = fits.BinTableHDU(data=out_mask_table,header=mask_hdu.header, name='MASK')
+        self.all_hdus[(cam, 'combined', 'masks', None)] = fits.BinTableHDU(data=out_mask_table,header=mask_header, name='MASK')
 
 
     def match_skies(self ,cam):

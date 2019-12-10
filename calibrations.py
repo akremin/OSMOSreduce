@@ -3,6 +3,8 @@ from collections import OrderedDict
 from multiprocessing import Pool
 
 import matplotlib.pyplot as plt
+import warnings
+warnings.filterwarnings("ignore", module="matplotlib")
 import numpy as np
 from astropy.io import fits
 from astropy.table import Table, hstack
