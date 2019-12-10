@@ -373,7 +373,6 @@ class FileManager:
     def load_synth_calibration_spec(self,cal_lamp, wavemincut=3000., wavemaxcut=8000.):
         """Assumes the format of the nist linelist csvs privuded with this package"""
         from calibration_helper_funcs import air_to_vacuum
-        print(('Using calibration lamps: ', cal_lamp))
         possibilities = ['Xe', 'Ar', 'Hg', 'Ne', 'ThAr', 'He']
         all_wms,all_fms = [],[]
         for lamp in possibilities:
@@ -426,7 +425,6 @@ class FileManager:
         all_wms = []
         for lamp in cal_lamp:
             if lamp in possibilities:
-                print(lamp)
                 filname = self.lampline_template.format(mod='',lamp=lamp)
                 sel_filname = self.lampline_template.format(mod='selected_',lamp=lamp)
                 pathname = os.path.join(self.directory.lampline_dir,filname)
