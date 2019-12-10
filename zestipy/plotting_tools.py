@@ -85,7 +85,7 @@ def summary_plot(waves, flux, templ_waves, template,zest,z_test,corrs,plt_name,f
     plt.subplots_adjust(right=0.8)
     #pdb.set_trace()
     alp = 0.5
-    ax2.plot(waves,cont_subd_flux,label='Target {}}'.format(frame_name))
+    ax2.plot(waves,cont_subd_flux,label='Target {}'.format(frame_name))
     ax2.plot(temp_shifted_waves,(cont_subd_temp_flux),alpha=alp,label='SDSS Template')
     ax2.set_xlim(waves[0],waves[-1])
     last_ind = np.max(np.where(temp_shifted_waves<waves[-1]))
