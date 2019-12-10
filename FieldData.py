@@ -722,15 +722,15 @@ class FieldData:
                 interpd_galfluxes[galfib], skyfluxes[galfib], galmasks[galfib] =  interpd_galflux, skyflux, galmask
 
             spectypes = ['gal','sky','gcont','scont','mask']
-            if self.single_core or dosimple_subtraction:
+            if self.single_core:
                 sky_inputs = { 'galfluxes':interpd_galfluxes, 'skyfluxes':skyfluxes, \
                          'wave_grid':wave_grid, 'galmasks':galmasks, 'quickreturn':dosimple_subtraction}
                 outdict = subtract_sky_loop_wrapper(sky_inputs)
             else:
                 sky_inputs1 = { 'galfluxes':OrderedDict(), 'skyfluxes':OrderedDict(), \
-                         'wave_grid':wave_grid.copy(), 'galmasks':OrderedDict() }
+                         'wave_grid':wave_grid.copy(), 'galmasks':OrderedDict(), 'quickreturn':dosimple_subtraction }
                 sky_inputs2 = { 'galfluxes':OrderedDict(), 'skyfluxes':OrderedDict(), \
-                         'wave_grid':wave_grid.copy(), 'galmasks':OrderedDict() }
+                         'wave_grid':wave_grid.copy(), 'galmasks':OrderedDict(), 'quickreturn':dosimple_subtraction }
 
                 for fib in self.instrument.lower_half_fibs[cam]:
                     if fib in target_sky_pair.keys():
