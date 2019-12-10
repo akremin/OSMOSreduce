@@ -19,7 +19,7 @@ def fit_redshifts(sky_subd_sciences,mask_name,run_auto=True,prior = None,savetem
     first_ap = list(sky_subd_sciences.keys())[0]
     first_waves, flux, boolmask = sky_subd_sciences[first_ap]
 
-    R = z_est(lower_w=first_waves.min()/(1+0.7), upper_w=first_waves.max()/(1+0.1), lower_z=0.10, upper_z=0.7, \
+    R = z_est(lower_w=first_waves.min()/(1+0.52), upper_w=first_waves.max()/(1+0.1), lower_z=0.10, upper_z=0.5, \
               z_res=1.0e-5, prior_width=0.02, use_zprior=False, \
               skip_initial_priors=True, \
               auto_pilot=True)
@@ -44,7 +44,7 @@ def fit_redshifts(sky_subd_sciences,mask_name,run_auto=True,prior = None,savetem
         quality_val = {}
     for ap in sky_subd_sciences.keys():
         waves, flux, boolmask = sky_subd_sciences[ap]
-        nmaskbins = 45 ## must be odd
+        nmaskbins = 5 ## must be odd
         start = (nmaskbins - 1)
         half = start // 2
         mask = boolmask[start:].copy()
