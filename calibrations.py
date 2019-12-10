@@ -183,7 +183,6 @@ class Calibrations:
             night_interpolator,fit_model = self.interpolated_coef_fits[night]
         else:
             print("WARNING: Requested {}, but that isn't a known night. Possible options were: ".format(night),self.interpolated_coef_fits.keys())
-            night_interpolator, fit_model = self.interpolated_coef_fits[night]
             timestamps,nights = [],[]
             for (mean_timestamp, mean_datetime, night) in self.fine_calibration_date_info.values():
                 timestamps.append(mean_timestamp)
