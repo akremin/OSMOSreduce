@@ -98,10 +98,14 @@ def create_m2fs_fiber_info_table(datapath,dataname,cams=['r','b']):
                 od['m2fs_fiberID'].append(fid.split('=')[1])
                 od['m2fs_fab'].append(fab.split('=')[1])
                 od['m2fs_CH'].append(ch.split('=')[1])
+            else:
+                od['m2fs_fiberID'].append('N/A')
+                od['m2fs_fab'].append('N/A')
+                od['m2fs_CH'].append('N/A')
             od['ID'].append(id)
             od['FIBNAME'].append(fib.replace('FIBER',cam))
 
-    if len(od['m2fs_fiberID']) == 0:
+    if np.all(np.array(od['m2fs_fiberID']) == 'N/A'):
         od.pop('m2fs_fiberID')
         od.pop('m2fs_fab')
         od.pop('m2fs_CH')
