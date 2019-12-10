@@ -182,8 +182,18 @@ class Calibrations:
         if night in self.interpolated_coef_fits.keys():
             night_interpolator,fit_model = self.interpolated_coef_fits[night]
         else:
-            print("Requested {}, but that isn't a known night. Possible options were: ".format(night),self.interpolated_coef_fits.keys())
+            print("WARNING: Requested {}, but that isn't a known night. Possible options were: ".format(night),self.interpolated_coef_fits.keys())
             night_interpolator, fit_model = self.interpolated_coef_fits[night]
+            timestamps,nights = [],[]
+            for (mean_timestamp, mean_datetime, night) in self.fine_calibration_date_info.values():
+                timestamps.append(mean_timestamp)
+                nights.append(night)
+            time_devs = np.array(timestamps)-mean_timestamp
+            closest_night_loc = np.argmin(time_devs)
+            closest_night = nights[closest_night_loc]
+            print("Using night: {} instead, as it's nearest at {}m away".format(closest_night,time_devs[closest_night_loc]/60.))
+            night_interpolator, fit_model = self.interpolated_coef_fits[closest_night]
+
 
         out_cols = []
         for fib, coefs in night_interpolator.items():

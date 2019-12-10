@@ -597,7 +597,7 @@ class FieldData:
             if float(sci_hdu.header['EXPTIME']) < nsecs_limit:
                 dosimple_subtraction = True
                 print("A short exposure of less than {} detected.".format(nsecs_limit))
-                print("Attempting to adjusting skyflux to match fiber throughput, but then performing direct subtraction.")
+                print("Attempting to adjust the skyflux to match fiber throughputs, but then performing direct subtractions.")
             else:
                 dosimple_subtraction = False
             # if self.twostep_wavecomparc:
