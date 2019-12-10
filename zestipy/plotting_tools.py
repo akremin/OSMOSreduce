@@ -74,13 +74,13 @@ def summary_plot(waves, flux, templ_waves, template,zest,z_test,corrs,plt_name,f
 
     plot_skylines(ax,zest)
 
-    ax.set_xlabel('Wavelength (A)')
-    ax.set_ylabel('Flux [Arbitrary]')
+    ax.set_xlabel('Wavelength (A)',fontsize=12)
+    ax.set_ylabel('Flux [Arbitrary]',fontsize=12)
     ax.legend(loc='best')
     title = 'Target {}'.format(frame_name)
     if mock_photoz:
         title += " photoz=%0.3f" % mock_photoz
-    ax.set_title(title)
+    ax.set_title(title,fontsize=16)
 
     ax2 = plt.subplot(gs[1])
     plt.subplots_adjust(bottom=0.1)
@@ -99,8 +99,8 @@ def summary_plot(waves, flux, templ_waves, template,zest,z_test,corrs,plt_name,f
 
     plot_skylines(ax2,zest)
 
-    ax2.set_xlabel('Wavelength (A)')
-    ax2.set_ylabel('Continuum Sub. Flux/std(Flux)')
+    ax2.set_xlabel('Wavelength (A)',fontsize=12)
+    ax2.set_ylabel('Cont. Subd. Flux/std(Flux)',fontsize=12)
     # ax2.legend(loc='best')
     # title = 'Frame %s' % frame_name
     if mock_photoz:
@@ -112,7 +112,7 @@ def summary_plot(waves, flux, templ_waves, template,zest,z_test,corrs,plt_name,f
     ax3.plot(z_test,corrs,'b')
     ax3.axvline(zest,color='k',ls='--',label='z_est = {:0.5f}'.format(zest))
     ax3.legend(loc='best')
-    ax3.set_xlabel('Redshift')
-    ax3.set_ylabel('Correlation')
+    ax3.set_xlabel('Redshift',fontsize=12)
+    ax3.set_ylabel('Correlation',fontsize=12)
     plt.savefig(plt_name,dpi=600,overwrite=True)
     plt.close()
