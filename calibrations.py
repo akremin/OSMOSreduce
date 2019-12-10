@@ -190,7 +190,7 @@ class Calibrations:
             time_devs = np.array(timestamps)-mean_timestamp
             closest_night_loc = np.argmin(time_devs)
             closest_night = nights[closest_night_loc]
-            print("Using night: {} instead, as it's nearest at {}m away".format(closest_night,time_devs[closest_night_loc]/60.))
+            print("Using night: {} instead, as it's nearest at {:0.01f}m away".format(closest_night,time_devs[closest_night_loc]/60.))
             night_interpolator, fit_model = self.interpolated_coef_fits[closest_night]
 
 
