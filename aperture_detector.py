@@ -157,13 +157,21 @@ def find_apperatures(image,badfibs,cam='r',height=0.2,prominence=0.1,\
         #     for bad_num in bad_nums:
         #         fiber_nums.pop(bad_num - 1)
 
+        # if recvd_nrows == 16 and nfibs < 16:
+        #     indexs = np.arange(16).astype(int)
+        #     for bad_num in bad_nums:
+        #         fiber_nums.pop(bad_num - 1)
+        #         indexs.pop(bad_num - 1)
+        #
+        # else:
         for bad_num in bad_nums:
             fiber_nums.pop(bad_num - 1)
+        indexs = np.arange(len(fiber_nums)).astype(int)
 
         peaks,devs,bots,tops = {},{},{},{}
         if nfibs>peak_array.shape[0]:
             print("There were fewer identified peaks than expected for: cam={} tet={}  start={}, end={}".format(cam,tet,start,end))
-        for index,fibnum in enumerate(fiber_nums):
+        for index,fibnum in zip(indexs,fiber_nums):
             fibername = '{}{}{:02d}'.format(cam,tet,fibnum)
             peaks[fibername] = peak_array[index, :]
             devs[fibername] = deviations[index]
