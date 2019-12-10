@@ -48,7 +48,6 @@ def plot_skylines(axi,red_est):
     
 def summary_plot(waves, flux, templ_waves, template,zest,z_test,corrs,plt_name,frame_name,mock_photoz=None):
     '''Display the spectrum and reference lines for the best fitting redshift.'''
-    print(corrs)
     cont_subd_flux = flux - signal.medfilt(flux,171)
     cont_subd_temp_flux = template - signal.medfilt(template,171)
     cont_subd_flux = cont_subd_flux/np.std(cont_subd_flux)

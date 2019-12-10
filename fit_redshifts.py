@@ -19,7 +19,7 @@ def fit_redshifts(sky_subd_sciences,mask_name,run_auto=True,prior = None,savetem
     first_ap = list(sky_subd_sciences.keys())[0]
     first_waves, flux, boolmask = sky_subd_sciences[first_ap]
 
-    R = z_est(lower_w=first_waves.min(), upper_w=first_waves.max(), lower_z=0.10, upper_z=0.7, \
+    R = z_est(lower_w=first_waves.min()/(1+0.7), upper_w=first_waves.max()/(1+0.1), lower_z=0.10, upper_z=0.7, \
               z_res=1.0e-5, prior_width=0.02, use_zprior=False, \
               skip_initial_priors=True, \
               auto_pilot=True)
@@ -44,10 +44,10 @@ def fit_redshifts(sky_subd_sciences,mask_name,run_auto=True,prior = None,savetem
         quality_val = {}
     for ap in sky_subd_sciences.keys():
         waves, flux, boolmask = sky_subd_sciences[ap]
-        nmaskbins = 5 ## must be odd
+        nmaskbins = 45 ## must be odd
         start = (nmaskbins - 1)
         half = start // 2
-        mask = boolmask[start:]
+        mask = boolmask[start:].copy()
         for ii in range(1, start + 1):
             mask = (mask | boolmask[(start - ii):-ii])
         mask = np.append(np.append([True] * half, mask), [True] * half)
@@ -84,7 +84,6 @@ def fit_redshifts(sky_subd_sciences,mask_name,run_auto=True,prior = None,savetem
         # Create a summary plot of the best z-fit
         comment = 'redEst_{}_Tmplt{}'.format(test_waveform.name, redshift_outputs.template.name)
         plt_name = savetemplate_func(cam='',ap=ap,imtype='science',step='zfit',comment=comment)
-        print(redshift_outputs.corr_vals)
         summary_plot(test_waveform.masked_wave, test_waveform.masked_flux, redshift_outputs.template.wave, \
                      redshift_outputs.template.flux, redshift_outputs.best_zest, redshift_outputs.ztest_vals, \
                  redshift_outputs.corr_vals, plt_name, test_waveform.name, None)
