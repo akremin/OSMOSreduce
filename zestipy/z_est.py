@@ -272,10 +272,9 @@ class z_est:
             #calculate the pearson r correlation value between the observed and template flux
             corr_val_i[i] = pearsonr(et_flux_range,test_flux_vals)[0]
 
-
         #normalize the correlation values as a function of redshift
         where_finite = np.isfinite(corr_val_i)
-        corr_val = (corr_val_i[where_finite]+1)/np.trapz((corr_val_i[where_finite]+1),ztest[where_finite])
+        corr_val = corr_val_i[where_finite]#+1)/np.trapz((corr_val_i[where_finite]+1),ztest[where_finite])
         finite_ztest = ztest[where_finite]
         #multiply in prior to likelihood if specified
         if z_est:
@@ -293,7 +292,7 @@ class z_est:
             unc = coeff
             zrange_mask = np.where((finite_ztest>self.lower_z)&(finite_ztest<self.upper_z))[0]
         #pdb.set_trace()
-        max_correlation_index = np.argmax(corr_val[zrange_mask])
+        max_correlation_index = np.nanargmax(corr_val[zrange_mask])
         redshift_est = (finite_ztest[zrange_mask])[max_correlation_index] # NOTE: returns only first index even if multiple indices are equally to max value
         
         #save correlation value at maximum redshift likelihood

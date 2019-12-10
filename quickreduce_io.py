@@ -377,7 +377,6 @@ class FileManager:
         all_wms,all_fms = [],[]
         for lamp in possibilities:
             if lamp in cal_lamp:
-                print(lamp)
                 filname = self.lampline_template.format(mod='', lamp=lamp)
                 full_filname = filname.replace('_cleaned_','_fullres_')
                 pathname = os.path.join(self.directory.lampline_dir, filname)
@@ -473,7 +472,6 @@ class FileManager:
         all_wms = []
         for lamp in possibilities:
             if lamp in cal_lamp:
-                print(lamp)
                 filname = self.lampline_template.format(mod='',lamp=lamp)
                 sel_filname = self.lampline_template.format(mod='selected_',lamp=lamp)
                 pathname = os.path.join(self.directory.lampline_dir,filname)
