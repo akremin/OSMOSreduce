@@ -76,7 +76,7 @@ def summary_plot(waves, flux, templ_waves, template,zest,z_test,corrs,plt_name,f
     ax.set_xlabel('Wavelength (A)')
     ax.set_ylabel('Flux [Arbitrary]')
     ax.legend(loc='best')
-    title = 'Target {}}'.format(frame_name)
+    title = 'Target {}'.format(frame_name)
     if mock_photoz:
         title += " photoz=%0.3f" % mock_photoz
     ax.set_title(title)
