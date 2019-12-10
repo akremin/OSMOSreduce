@@ -130,7 +130,6 @@ def subtract_sky(galflux,skyflux,gallams,galmask,quickreturn=False):
     ## by using just a straight subtraction
     if len(g_peak_inds) == 0:
         print("Couldn't identify any peaks, returning scaled sky for direct subtraction")
-    if (len(g_peak_inds) == 0) or quickreturn:
         modsky = skyflux * (np.median(gcont / scont))
         outgal = gal_contsub + gcont - modsky
         return outgal, modsky, gcont, scont, masked
@@ -184,6 +183,10 @@ def subtract_sky(galflux,skyflux,gallams,galmask,quickreturn=False):
     g_peak_inds, g_peak_props = find_peaks(gal_contsub, height=(None, None), width=(0.1*pix_per_wave, 10*pix_per_wave), \
                                            threshold=(None, None),
                                            prominence=(gprom, None), wlen=24*pix_per_wave)
+
+    if quickreturn:
+        outgal = gal_contsub + gcont - skyflux
+        return outgal, skyflux, gcont, scont, masked
 
 
     # sky_smthd_contsub = np.convolve(sky_contsub, [1 / 15., 3 / 15., 7 / 15., 3 / 15., 1 / 15.], 'same')
@@ -364,7 +367,7 @@ def subtract_sky(galflux,skyflux,gallams,galmask,quickreturn=False):
 
         ## remove the subtracted sky from that remaining in the skyflux
         remaining_sky[slower_wave_ind:supper_wave_ind] = scont[slower_wave_ind:supper_wave_ind]
-        maskbuffer = 0
+        maskbuffer = 1
         if need_to_mask:
             masked[(slower_wave_ind-maskbuffer):(supper_wave_ind+maskbuffer)] = True
 

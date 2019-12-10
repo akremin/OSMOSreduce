@@ -262,7 +262,13 @@ def create_mtl(io_config,science_filenum,vizier_catalogs,overwrite_field,overwri
         print("Stop here")
         observed_field_table = fiber_table
     else:
-        observed_field_table = table.join(fiber_table, field_table, keys='ID', join_type='left')
+        try:
+            observed_field_table = table.join(fiber_table, field_table, keys='ID', join_type='left')
+        except:
+            print("Something went wrong.")
+            print(fiber_table.colnames)
+            print(field_table.colnames)
+            raise()
 
     ## If there is targeting information, merge that in as well
     if targeting_name is not None:
@@ -417,7 +423,7 @@ def make_mtlz(mtl_table, hdus, find_more_redshifts=False,outfile='mtlz.csv',\
     full_table.add_column(Table.Column(data=full_table['redshift_est'] / (1 + dzh), name='z_est_helio'))
     full_table.add_column(Table.Column(data=np.ones(len(full_table))*z_clust,name='z_clust_lit'))
 
-    if ':' in full_table['RA'][1]:
+    if type(full_table['RA'][1].data) is str and ':' in full_table['RA'][1]:
         all_coords = SkyCoord(ra=full_table['RA'], dec=full_table['DEC'], unit=(u.hour, u.deg))
         newras = Table.Column(data=all_coords.icrs.ra.deg,name='RA')
         newdecs = Table.Column(data=all_coords.icrs.dec.deg,name='DEC')
