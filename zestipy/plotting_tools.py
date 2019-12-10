@@ -55,19 +55,20 @@ def summary_plot(waves, flux, templ_waves, template,zest,z_test,corrs,plt_name,f
     temp_shifted_waves = templ_waves*(1+zest)
     plt.figure(figsize=(10, 10))
     gs = gridspec.GridSpec(3, 1, height_ratios=[2, 1, 1])
-
+    plt.tight_layout()
     ax = plt.subplot(gs[0])
     plt.subplots_adjust(bottom=0.1)
     #pdb.set_trace()
     alp = 0.5
     ax.plot(waves,flux,label='Target {}'.format(frame_name))
-    ax.plot(temp_shifted_waves,template,alpha=alp,label='SDSS Template')
+    modtemplate = np.nanmedian(flux)*template/np.nanmedian(template)
+    ax.plot(temp_shifted_waves,modtemplate,alpha=alp,label='SDSS Template')
     ax.set_xlim(waves[0],waves[-1])
     last_ind = np.max(np.where(temp_shifted_waves<waves[-1]))
     shortnd_temp_flux = cont_subd_temp_flux[:last_ind]
     if len(shortnd_temp_flux)>0:
-        ax.set_ylim(np.min([np.nanmin(flux),np.nanmin(template)]),\
-                 np.max([np.nanmax(flux),np.nanmax(template)]))
+        ax.set_ylim(np.min([np.nanmin(flux),np.nanmin(modtemplate)]),\
+                 np.max([np.nanmax(flux),np.nanmax(modtemplate)]))
     else:
        ax.set_ylim(np.nanmin(flux),np.nanmax(flux))
 
