@@ -124,36 +124,41 @@ def find_apperatures(image,badfibs,cam='r',height=0.2,prominence=0.1,\
         cut_image = image[start:end,:]
         peak_array, left_array, right_array, deviations,recvd_nrows = find_peak_inds(cut_image, height, prominence,nfibs)
 
-        if nfibs != recvd_nrows:
-            print("Trying to identify the problematic fiber(s)")
-            devs = []
-            for column in range(peak_array.shape[1]):
-                devs.append(peak_array[1:,column]-peak_array[:-1,column])
-            devs = np.median(devs,axis=0)
-            nbads = 16 - recvd_nrows - 1
-            if nfibs < recvd_nrows:
-                print("It appears that you claimed a dead fiber that was alive, trying to identify")
-                print("Warning, this is untested. It's best that you identify and correctly label the dead fibers and rerun")
-                for bad_num in bad_nums:
-                    if devs[bad_num - 1 - nbads] > 1.6 * np.median(devs):
-                        fiber_nums.pop(bad_num - 1)
-                    else:
-                        print("It appears that {} is actually an okay fiber".format(fiber_nums[bad_num - 1]))
-            else:
-                print("It appears that there were more dead fibers, trying to identify")
-                print("Warning, this is untested. It's best that you identify and correctly label the dead fibers and rerun")
-                ## this bit here is untested
-                bad_locs = np.where(np.array(devs) > 1.6 * np.median(devs))[0]
-                if len(bad_locs) == nbads + 1:
-                    alt_bad_nums = bad_locs.astype(int) + 1 + nbads
-                    alt_bad_nums = np.sort(alt_bad_nums)[::-1]
-                    print("Fibers {} were identified. Removing".format(fiber_nums[alt_bad_nums]))
-                    for bad_num in alt_bad_nums:
-                        fiber_nums.pop(bad_num - 1)
+        # if nfibs != recvd_nrows:
+        #     print("Trying to identify the problematic fiber(s)")
+        #     devs = []
+        #     for column in range(peak_array.shape[1]):
+        #         devs.append(peak_array[1:, column] - peak_array[:-1, column])
+        #     devs = np.median(devs, axis=0)
+        #     nbads = 16 - recvd_nrows - 1
+        #     if nfibs < recvd_nrows:
+        #         print("It appears that you claimed a dead fiber that was alive, trying to identify")
+        #         print(
+        #             "Warning, this is untested. It's best that you identify and correctly label the dead fibers and rerun")
+        #         for bad_num in bad_nums:
+        #             if devs[bad_num - 1 - nbads] > 1.6 * np.median(devs):
+        #                 fiber_nums.pop(bad_num - 1)
+        #             else:
+        #                 print("It appears that {} is actually an okay fiber".format(fiber_nums[bad_num - 1]))
+        #     else:
+        #         print("It appears that there were more dead fibers, trying to identify")
+        #         print(
+        #             "Warning, this is untested. It's best that you identify and correctly label the dead fibers and rerun")
+        #         ## this bit here is untested
+        #         bad_locs = np.where(np.array(devs) > 1.6 * np.median(devs))[0]
+        #         if len(bad_locs) == nbads + 1:
+        #             alt_bad_nums = bad_locs.astype(int) + 1 + nbads
+        #             alt_bad_nums = np.sort(alt_bad_nums)[::-1]
+        #             print("Fibers {} were identified. Removing".format(fiber_nums[alt_bad_nums]))
+        #             for bad_num in alt_bad_nums:
+        #                 fiber_nums.pop(bad_num - 1)
+        #
+        # else:
+        #     for bad_num in bad_nums:
+        #         fiber_nums.pop(bad_num - 1)
 
-        else:
-            for bad_num in bad_nums:
-                fiber_nums.pop(bad_num - 1)
+        for bad_num in bad_nums:
+            fiber_nums.pop(bad_num - 1)
 
         peaks,devs,bots,tops = {},{},{},{}
         if nfibs>peak_array.shape[0]:
@@ -286,27 +291,28 @@ def get_peak_array(inds,nrows,pixels,row_lens,ncols,binwidth):
     if first_good_ind is None:
         print("There were no columns detected with length={}. Maxlen={}, Minlen={}, typical length={}.".format(nrows,np.max(row_lens),np.min(row_lens),np.median(row_lens)),
               "Please check to see if deadfibers need to be added or removed")
-        print("Looking to see if there is an additional fiber")
-        nrows=nrows+1
-        for ii in range(len(pixels)):
-            if (row_lens[ii] == nrows) and np.all(np.diff(inds[ii]) > 4.):
-                # valid_locations.append(ii)
-                first_good_ind = ii
-                break
-        if first_good_ind is None:
-            print("Trying {} fibers didn't work either. Trying one less than original".format(nrows))
-            nrows = nrows - 2
-            for ii in range(len(pixels)):
-                if (row_lens[ii] == nrows) and np.all(np.diff(inds[ii]) > 4.):
-                    # valid_locations.append(ii)
-                    first_good_ind = ii
-                    break
-            if first_good_ind is None:
-                print("Trying {} fibers didn't work either. An error is likely to occur".format(nrows))
-            else:
-                print("Success using {} fibers!".format(nrows))
-        else:
-            print("Success using {} fibers!".format(nrows))
+        print("Process will likely fail")
+        # print("Looking to see if there is an additional fiber")
+        # nrows=nrows+1
+        # for ii in range(len(pixels)):
+        #     if (row_lens[ii] == (nrows+1)) and np.all(np.diff(inds[ii]) > 4.):
+        #         # valid_locations.append(ii)
+        #         first_good_ind = ii
+        #         break
+        # if first_good_ind is None:
+        #     print("Trying {} fibers didn't work either. Trying one less than original".format(nrows))
+        #     nrows = nrows - 2
+        #     for ii in range(len(pixels)):
+        #         if (row_lens[ii] == nrows) and np.all(np.diff(inds[ii]) > 4.):
+        #             # valid_locations.append(ii)
+        #             first_good_ind = ii
+        #             break
+        #     if first_good_ind is None:
+        #         print("Trying {} fibers didn't work either. An error is likely to occur".format(nrows))
+        #     else:
+        #         print("Success using {} fibers!".format(nrows))
+        # else:
+        #     print("Success using {} fibers!".format(nrows))
 
     #first_good_ind = int(np.min(valid_locations))
     for ii,(pixel, rowl) in enumerate(zip(pixels,row_lens)):
