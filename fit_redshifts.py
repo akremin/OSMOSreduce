@@ -44,7 +44,11 @@ def fit_redshifts(sky_subd_sciences,mask_name,run_auto=True,prior = None,savetem
         quality_val = {}
     for ap in sky_subd_sciences.keys():
         waves, flux, boolmask = sky_subd_sciences[ap]
-        test_waveform = waveform(waves, flux, ap, boolmask)
+        mask = (boolmask[2:] | boolmask[1:-1] | boolmask[:-2])
+        mask = np.append(np.append([True],mask),[True])
+        test_waveform = waveform(waves, flux, ap, mask)
+        # test_waveform = waveform(waves, flux, ap, boolmask)
+
 
         redshift_outputs = R.redshift_estimate(test_waveform)
         redshift_est = redshift_outputs.best_zest
@@ -75,6 +79,7 @@ def fit_redshifts(sky_subd_sciences,mask_name,run_auto=True,prior = None,savetem
         # Create a summary plot of the best z-fit
         comment = 'redEst_{}_Tmplt{}'.format(test_waveform.name, redshift_outputs.template.name)
         plt_name = savetemplate_func(cam='',ap=ap,imtype='science',step='zfit',comment=comment)
+        print(redshift_outputs.corr_vals)
         summary_plot(test_waveform.masked_wave, test_waveform.masked_flux, redshift_outputs.template.wave, \
                      redshift_outputs.template.flux, redshift_outputs.best_zest, redshift_outputs.ztest_vals, \
                  redshift_outputs.corr_vals, plt_name, test_waveform.name, None)
