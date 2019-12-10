@@ -940,7 +940,6 @@ class FieldData:
             for ii in range(1, start + 1):
                 cutmask = (cutmask | masked[(start - ii):-ii])
             cutmask = np.append(np.append([True] * half, cutmask), [True] * half)
-            cutmask = np.append(np.append([True],cutmask),[True])
             fitd_spectrum_func = CubicSpline(master_wave_grid[np.bitwise_not(cutmask)],nansumd_fluxes[np.bitwise_not(cutmask)],extrapolate=False)
             del cutmask
             ## Note we fit with a much larger mask, but we're only using that fit on the masked data
