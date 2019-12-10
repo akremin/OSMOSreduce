@@ -932,13 +932,24 @@ class FieldData:
                 print(np.sum(masked),np.sum(np.isnan(ngood_obs_perpix)),np.sum(np.bitwise_not(np.isnan(alleged_nans))))
 
             from scipy.interpolate import CubicSpline
-            fitd_spectrum_func = CubicSpline(master_wave_grid[np.bitwise_not(masked)],nansumd_fluxes[np.bitwise_not(masked)],extrapolate=False)
+            masked = masked.astype(bool)
+            nmaskbins = 55  ## must be odd
+            start = (nmaskbins - 1)
+            half = start // 2
+            cutmask = masked[start:].copy()
+            for ii in range(1, start + 1):
+                cutmask = (cutmask | masked[(start - ii):-ii])
+            cutmask = np.append(np.append([True] * half, cutmask), [True] * half)
+            cutmask = np.append(np.append([True],cutmask),[True])
+            fitd_spectrum_func = CubicSpline(master_wave_grid[np.bitwise_not(cutmask)],nansumd_fluxes[np.bitwise_not(cutmask)],extrapolate=False)
+            del cutmask
+            ## Note we fit with a much larger mask, but we're only using that fit on the masked data
             nansumd_fluxes[masked] = fitd_spectrum_func(master_wave_grid[masked])
             cutnansumd_flux = gaussian_filter(nansumd_fluxes, sigma=0.66, order=0)
-            masked = masked.astype(bool)
-            cutmask = (masked[2:] | masked[1:-1] | masked[:-2] | np.isnan(cutnansumd_flux[1:-1]))
-            cutmask = np.append(np.append([True],cutmask),[True])
+
             unc = nansumd_unc_multiplier
+            cutmask = (masked[4:] | masked[3:-1] | masked[2:-2] | masked[1:-3] | masked[:-4] | np.isnan(cutnansumd_flux[2:-2]))
+            cutmask = np.append(np.append([True]*2,cutmask),[True]*2)
             ## below is an approximation, it would be rigourously true for sigma = 0.5
             unc = np.sqrt( (unc[2:]*unc[2:]/(0.16*0.16)) + \
                                               (unc[1:-1]*unc[1:-1]/(0.68*0.68)) + \
