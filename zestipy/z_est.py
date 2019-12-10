@@ -185,7 +185,7 @@ class z_est:
             #redshift_est = self.spectra2.finalz
             cor = np.max(cor)
             if self.auto:
-                if (cor>=bestfit_info.max_cor):
+                if (cor>bestfit_info.max_cor):
                     bestfit_info.best_zest = redshift_est
                     bestfit_info.max_cor = cor
                     bestfit_info.ztest_vals = ztest
