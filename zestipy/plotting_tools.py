@@ -57,7 +57,7 @@ def summary_plot(waves, flux, templ_waves, template,zest,z_test,corrs,plt_name,f
     gs = gridspec.GridSpec(3, 1, height_ratios=[2, 1, 1])
 
     ax = plt.subplot(gs[0])
-    plt.subplots_adjust(right=0.8)
+    plt.subplots_adjust(bottom=0.1)
     #pdb.set_trace()
     alp = 0.5
     ax.plot(waves,flux,label='Target {}'.format(frame_name))
@@ -66,10 +66,10 @@ def summary_plot(waves, flux, templ_waves, template,zest,z_test,corrs,plt_name,f
     last_ind = np.max(np.where(temp_shifted_waves<waves[-1]))
     shortnd_temp_flux = cont_subd_temp_flux[:last_ind]
     if len(shortnd_temp_flux)>0:
-        ax.set_ylim(np.min([cont_subd_flux.min(),shortnd_temp_flux.min()]),\
-                 np.nanmax([np.nanmax(cont_subd_flux),np.nanmax(shortnd_temp_flux)]))
+        ax.set_ylim(np.min([np.nanmin(flux),np.nanmin(template)]),\
+                 np.max([np.nanmax(flux),np.nanmax(template)]))
     else:
-       ax.set_ylim(cont_subd_flux.min(),cont_subd_flux.max())
+       ax.set_ylim(np.nanmin(flux),np.nanmax(flux))
 
     plot_skylines(ax,zest)
 
@@ -82,7 +82,7 @@ def summary_plot(waves, flux, templ_waves, template,zest,z_test,corrs,plt_name,f
     ax.set_title(title)
 
     ax2 = plt.subplot(gs[1])
-    plt.subplots_adjust(right=0.8)
+    plt.subplots_adjust(bottom=0.1)
     #pdb.set_trace()
     alp = 0.5
     ax2.plot(waves,cont_subd_flux,label='Target {}'.format(frame_name))
@@ -104,9 +104,10 @@ def summary_plot(waves, flux, templ_waves, template,zest,z_test,corrs,plt_name,f
     # title = 'Frame %s' % frame_name
     if mock_photoz:
         title += " photoz=%0.3f" % mock_photoz
-    ax2.set_title(title)
+    # ax2.set_title(title)
     
     ax3 = plt.subplot(gs[2])
+    plt.subplots_adjust(bottom=0.1)
     ax3.plot(z_test,corrs,'b')
     ax3.axvline(zest,color='k',ls='--',label='z_est = {:0.5f}'.format(zest))
     ax3.legend(loc='best')
