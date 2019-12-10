@@ -133,6 +133,7 @@ def find_apperatures(image,badfibs,cam='r',height=0.2,prominence=0.1,\
             nbads = 16 - recvd_nrows - 1
             if nfibs < recvd_nrows:
                 print("It appears that you claimed a dead fiber that was alive, trying to identify")
+                print("Warning, this is untested. It's best that you identify and correctly label the dead fibers and rerun")
                 for bad_num in bad_nums:
                     if devs[bad_num - 1 - nbads] > 1.6 * np.median(devs):
                         fiber_nums.pop(bad_num - 1)
