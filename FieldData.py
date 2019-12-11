@@ -957,7 +957,7 @@ class FieldData:
             cutnansumd_flux = gaussian_filter(nansumd_fluxes, sigma=0.66, order=0)
 
             unc = unc_values
-            cutmask = ( masked[2:] | masked[1:-1] | masked[:-2] | np.isnan(cutnansumd_flux[2:-2]))
+            cutmask = ( masked[2:] | masked[1:-1] | masked[:-2] | np.isnan(cutnansumd_flux[1:-1]))
             cutmask = np.append(np.append([True],cutmask),[True])
             ## below is an approximation, it would be rigourously true for sigma = 0.5
             unc = np.sqrt( (unc[2:]*unc[2:]/(0.16*0.16)) + \
