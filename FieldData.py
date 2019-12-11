@@ -870,6 +870,8 @@ class FieldData:
         else:
             master_wave_grid = np.arange(wavemin,wavemax+wavestep,wavestep)
 
+        medians = { }
+        n_arbitrary_counts_per_exposure = 10000
         for obs in observation_keys:
             sci_filnum, ccalib, fcalib, comparc_ind = self.observations.observations[obs]
             sci_hdu = self.all_hdus.pop((cam, sci_filnum, 'science', None))
@@ -892,6 +894,7 @@ class FieldData:
             if obs == 0:
                 all_fluxs = {col:[] for col in sci_data.colnames}
                 all_masks = {col:[] for col in sci_data.colnames}
+                medians =   {col: [] for col in sci_data.colnames}
 
             oned_array = np.zeros(shape=(len(master_wave_grid),))
             for col in sci_data.colnames:
@@ -900,6 +903,8 @@ class FieldData:
                 outflux[matching_lams] = sci_data[col].copy()
                 outmask[matching_lams] = mask_data[col].copy()
                 outmask[np.bitwise_not(matching_lams)] = True
+                medians[col].append(np.median(outflux))
+                outflux = n_arbitrary_counts_per_exposure * outflux/np.median(outflux)
                 all_fluxs[col].append(outflux)
                 all_masks[col].append(outmask)
 
@@ -914,12 +919,17 @@ class FieldData:
             masked = ((ngood_obs_perpix < int(np.ceil(float(nobs) / 2.))))
             from collections import Counter
             # print(col,len(masked),np.sum(masked),np.sum(np.bitwise_not(masked)),len(observation_keys),Counter(ngood_obs_perpix))
+
+            ## Transform the array back to a realistic estimate of counts
+            flux_arr = flux_arr * (np.sum(medians[col])/n_arbitrary_counts_per_exposure)
             ngood_obs_perpix[ngood_obs_perpix==0] = np.nan
             nanmean_fluxes = np.nanmean(flux_arr,axis=0)
             nanmean_fluxes[masked] = np.nan
+            ## poisson statistics
+            unc_values = np.sqrt(np.nanmean(flux_arr*flux_arr,axis=0)/ngood_obs_perpix)
             masked = np.isnan(nanmean_fluxes)
-            nansumd_fluxes = nanmean_fluxes*len(observation_keys)
-            nansumd_unc_multiplier = np.sqrt(float(len(observation_keys))/ngood_obs_perpix)
+
+            nansumd_fluxes = nanmean_fluxes
 
             # ## All masked values should be nan, get all masked values
             # alleged_nans = nanmean_fluxes[masked]
@@ -946,19 +956,19 @@ class FieldData:
             nansumd_fluxes[masked] = fitd_spectrum_func(master_wave_grid[masked])
             cutnansumd_flux = gaussian_filter(nansumd_fluxes, sigma=0.66, order=0)
 
-            unc = nansumd_unc_multiplier
-            cutmask = (masked[4:] | masked[3:-1] | masked[2:-2] | masked[1:-3] | masked[:-4] | np.isnan(cutnansumd_flux[2:-2]))
-            cutmask = np.append(np.append([True]*2,cutmask),[True]*2)
+            unc = unc_values
+            cutmask = ( masked[2:] | masked[1:-1] | masked[:-2] | np.isnan(cutnansumd_flux[2:-2]))
+            cutmask = np.append(np.append([True],cutmask),[True])
             ## below is an approximation, it would be rigourously true for sigma = 0.5
             unc = np.sqrt( (unc[2:]*unc[2:]/(0.16*0.16)) + \
                                               (unc[1:-1]*unc[1:-1]/(0.68*0.68)) + \
                                               (unc[:-2]*unc[:-2]/(0.16*0.16)) )
             unc = unc / ((2/(0.16*0.16))+(1/(0.68*0.68)))
-            cut_nansumd_unc_multiplier = np.append(np.append(unc[0],unc),unc[-1])
+            cut_nansumd_unc = np.append(np.append(unc[0],unc),unc[-1])
 
             out_data_table.add_column(Table.Column(name=col, data=cutnansumd_flux[::2]))
             out_mask_table.add_column(Table.Column(name=col, data=cutmask[::2]))
-            out_uncmult_table.add_column(Table.Column(name=col, data=cut_nansumd_unc_multiplier[::2]))
+            out_uncmult_table.add_column(Table.Column(name=col, data=cut_nansumd_unc[::2]))
 
         # plt.subplots(2,1)
         plt.figure()
