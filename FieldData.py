@@ -924,10 +924,13 @@ class FieldData:
             flux_arr = flux_arr * (np.sum(medians[col])/n_arbitrary_counts_per_exposure)
             ngood_obs_perpix[ngood_obs_perpix==0] = np.nan
             nanmean_fluxes = np.nanmean(flux_arr,axis=0)
-            nanmean_fluxes[masked] = np.nan
             ## poisson statistics
             unc_values = np.sqrt(np.nanmean(flux_arr*flux_arr,axis=0)/ngood_obs_perpix)
-            masked = np.isnan(nanmean_fluxes)
+
+            masked = (masked | np.isnan(nanmean_fluxes) | np.isnan(unc_values))
+
+            unc_values[masked] = np.nan
+            nanmean_fluxes[masked] = np.nan
 
             nansumd_fluxes = nanmean_fluxes
 
@@ -939,7 +942,7 @@ class FieldData:
             #     print("Nmasked: {}, n_notenoughobs: {}, n_nanpix_tomask: {}".format(np.sum(masked),np.sum(np.bitwise_not(np.isnan(alleged_nans))),np.sum(np.isnan(ngood_obs_perpix))))
             if np.sum(masked) == len(masked):
                 print("All values are masked in {}!".format(col))
-                print(np.sum(masked),np.sum(np.isnan(ngood_obs_perpix)),np.sum(np.bitwise_not(np.isnan(alleged_nans))))
+                print(np.sum(masked),np.sum(np.isnan(ngood_obs_perpix)))
 
             from scipy.interpolate import CubicSpline
             masked = masked.astype(bool)
