@@ -60,7 +60,7 @@ def summary_plot(waves, flux, templ_waves, template,zest,z_test,corrs,plt_name,f
     plt.subplots_adjust(bottom=0.1)
     #pdb.set_trace()
     alp = 0.5
-    ax.plot(waves,flux,label='Target {}'.format(frame_name),alpha=alp)
+    ax.plot(waves,flux,label='Target {}'.format(frame_name),alpha=alp+0.1)
     tl,th = np.nanquantile(template,[0.2,0.8])
     fl,fh = np.nanquantile(flux,[0.2,0.8])
     modtemplate = 0.75*(fh-fl)*template/(th-tl)
@@ -90,7 +90,7 @@ def summary_plot(waves, flux, templ_waves, template,zest,z_test,corrs,plt_name,f
     plt.subplots_adjust(bottom=0.1)
     #pdb.set_trace()
     alp = 0.5
-    ax2.plot(waves,cont_subd_flux,label='Target {}'.format(frame_name))
+    ax2.plot(waves,cont_subd_flux,label='Target {}'.format(frame_name),alpha=alp+0.1)
     ax2.plot(temp_shifted_waves,(cont_subd_temp_flux),alpha=alp,label='SDSS Template')
     ax2.set_xlim(waves[0],waves[-1])
     last_ind = np.max(np.where(temp_shifted_waves<waves[-1]))
@@ -115,7 +115,7 @@ def summary_plot(waves, flux, templ_waves, template,zest,z_test,corrs,plt_name,f
     plt.subplots_adjust(bottom=0.1)
     ax3.plot(z_test,corrs,'b')
 
-    ax3.axvline(zest,color='k',ls='--',label=r'$z_{est}$'+'\t=\t{:0.5f}\n'.format(zest)+r'$r_{p,max}$'+'\t=\t{:0.3f}'.format(np.nanmax(corrs)))
+    ax3.axvline(zest,color='k',ls='--',label=r'$z_{est}  $'+' =\t{:0.5f}\n'.format(zest)+r'$r_{p,max}$'+' =\t{:0.3f}'.format(np.nanmax(corrs)))
     ax3.legend(loc='best')
     ax3.set_xlabel('Redshift',fontsize=12)
     ax3.set_ylabel('Correlation',fontsize=12)
