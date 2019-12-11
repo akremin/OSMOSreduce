@@ -903,8 +903,8 @@ class FieldData:
                 outflux[matching_lams] = sci_data[col].copy()
                 outmask[matching_lams] = mask_data[col].copy()
                 outmask[np.bitwise_not(matching_lams)] = True
-                medians[col].append(np.median(outflux))
-                outflux = n_arbitrary_counts_per_exposure * outflux/np.median(outflux)
+                medians[col].append(np.nanmedian(outflux))
+                outflux = outflux/np.nanmedian(outflux)
                 all_fluxs[col].append(outflux)
                 all_masks[col].append(outmask)
 
@@ -912,7 +912,7 @@ class FieldData:
         out_mask_table = Table()
         out_uncmult_table = Table()
         for col in sci_data.colnames:
-            flux_arr = np.array(all_fluxs[col])
+            flux_arr = np.array(all_fluxs[col])*np.sum(medians[col])
             masked_arr = np.array(all_masks[col]).astype(bool)
             flux_arr[masked_arr] = np.nan
             ngood_obs_perpix = float(nobs)-np.sum(masked_arr,axis=0)
@@ -921,11 +921,10 @@ class FieldData:
             # print(col,len(masked),np.sum(masked),np.sum(np.bitwise_not(masked)),len(observation_keys),Counter(ngood_obs_perpix))
 
             ## Transform the array back to a realistic estimate of counts
-            flux_arr = flux_arr * (np.sum(medians[col])/n_arbitrary_counts_per_exposure)
             ngood_obs_perpix[ngood_obs_perpix==0] = np.nan
             nanmean_fluxes = np.nanmean(flux_arr,axis=0)
             ## poisson statistics
-            unc_values = np.sqrt(np.nanmean(flux_arr*flux_arr,axis=0)/ngood_obs_perpix)
+            unc_values = np.nanstd(np.sqrt(flux_arr),axis=0)
 
             masked = (masked | np.isnan(nanmean_fluxes) | np.isnan(unc_values))
 
