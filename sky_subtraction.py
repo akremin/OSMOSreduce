@@ -367,7 +367,7 @@ def subtract_sky(galflux,skyflux,gallams,galmask,quickreturn=False):
 
         ## remove the subtracted sky from that remaining in the skyflux
         remaining_sky[slower_wave_ind:supper_wave_ind] = scont[slower_wave_ind:supper_wave_ind]
-        maskbuffer = 1
+        maskbuffer = 2
         if need_to_mask:
             masked[(slower_wave_ind-maskbuffer):(supper_wave_ind+maskbuffer)] = True
 

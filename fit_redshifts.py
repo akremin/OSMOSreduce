@@ -45,7 +45,7 @@ def fit_redshifts(sky_subd_sciences,mask_name,run_auto=True,prior = None,savetem
     for ap in sky_subd_sciences.keys():
         waves, flux, boolmask = sky_subd_sciences[ap]
         # mask = boolmask.copy()
-        nmaskbins = 3 ## must be odd
+        nmaskbins = 5 ## must be odd
         start = (nmaskbins - 1)
         half = start // 2
         mask = boolmask[start:].copy()

@@ -60,7 +60,7 @@ def summary_plot(waves, flux, templ_waves, template,zest,z_test,corrs,plt_name,f
     plt.subplots_adjust(bottom=0.1)
     #pdb.set_trace()
     alp = 0.5
-    ax.plot(waves,flux,label='Target {}'.format(frame_name))
+    ax.plot(waves,flux,label='Target {}'.format(frame_name),alpha=alp)
     tl,th = np.nanquantile(template,[0.2,0.8])
     fl,fh = np.nanquantile(flux,[0.2,0.8])
     modtemplate = 0.75*(fh-fl)*template/(th-tl)
