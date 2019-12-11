@@ -115,7 +115,7 @@ def summary_plot(waves, flux, templ_waves, template,zest,z_test,corrs,plt_name,f
     plt.subplots_adjust(bottom=0.1)
     ax3.plot(z_test,corrs,'b')
 
-    ax3.axvline(zest,color='k',ls='--',label=r'$z_{est}$'+' =\t{:0.5f}\n'.format(zest)+r'$r_{p,max}$'+' ={:0.3f}\t'.format(np.nanmax(corrs)))
+    ax3.axvline(zest,color='k',ls='--',label=r'$z_{est}$'+'\t=\t{:0.5f}\n'.format(zest)+r'$r_{p,max}$'+'\t=\t{:0.3f}'.format(np.nanmax(corrs)))
     ax3.legend(loc='best')
     ax3.set_xlabel('Redshift',fontsize=12)
     ax3.set_ylabel('Correlation',fontsize=12)
