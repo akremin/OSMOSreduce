@@ -63,7 +63,9 @@ def summary_plot(waves, flux, templ_waves, template,zest,z_test,corrs,plt_name,f
     ax.plot(waves,flux,label='Target {}'.format(frame_name))
     tl,th = np.nanquantile(template,[0.2,0.8])
     fl,fh = np.nanquantile(flux,[0.2,0.8])
-    modtemplate = (fh-fl)*template/(th-tl)
+    modtemplate = 0.75*(fh-fl)*template/(th-tl)
+    if np.nanmax(modtemplate)>np.nanmax(flux):
+        modtemplate = modtemplate*0.5
     ax.plot(temp_shifted_waves,modtemplate,alpha=alp,label='SDSS Template')
     ax.set_xlim(waves[0],waves[-1])
     last_ind = np.max(np.where(temp_shifted_waves<waves[-1]))
