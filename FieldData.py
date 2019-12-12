@@ -926,7 +926,7 @@ class FieldData:
             ## poisson statistics
             unc_values = np.nanstd(np.sqrt(flux_arr),axis=0)
 
-            masked = (masked | np.isnan(nanmean_fluxes) | np.isnan(unc_values))
+            masked = (masked | np.isnan(nanmean_fluxes) | np.isnan(unc_values) | np.isinf(unc_values) | np.isinf(nanmean_fluxes))
 
             unc_values[masked] = np.nan
             nanmean_fluxes[masked] = np.nan
