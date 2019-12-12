@@ -4,9 +4,13 @@ matplotlib.use('Qt5Agg')
 import os
 
 
+
+import sys
+sys.path.append("..")
+
 from collections import OrderedDict
-from ..quickreduce_funcs import digest_filenumbers
-from ..create_merged_target_list import make_mtl, make_mtlz
+from quickreduce_funcs import digest_filenumbers
+from create_merged_target_list import make_mtl, make_mtlz
 
 import configparser
 
