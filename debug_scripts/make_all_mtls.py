@@ -5,8 +5,8 @@ import os
 
 
 from collections import OrderedDict
-from quickreduce_funcs import digest_filenumbers
-from create_merged_target_list import make_mtl
+from ..quickreduce_funcs import digest_filenumbers
+from ..create_merged_target_list import make_mtl
 
 import configparser
 
