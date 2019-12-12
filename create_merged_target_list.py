@@ -192,7 +192,7 @@ def load_merged_target_list(field_prefix='M2FS16',field='A02',catalog_path=os.pa
         return None
 
 
-def create_mtl(io_config,science_filenum,vizier_catalogs,overwrite_field,overwrite_redshifts):
+def make_mtl(io_config,science_filenum,vizier_catalogs,overwrite_field,overwrite_redshifts):
     catalog_loc = os.path.abspath(io_config['PATHS']['catalog_loc'])
     data_path = os.path.abspath(os.path.join( io_config['PATHS']['data_product_loc'] , io_config['DIRS']['oneD']))
     dataname = io_config['FILETEMPLATES']['oneds'].format(cam='{cam}',filenum=science_filenum,imtype='science')

@@ -9,7 +9,7 @@ from scipy.interpolate import CubicSpline
 from calibrations import Calibrations
 from observations import Observations
 from sky_subtraction import subtract_sky_loop_wrapper, replace_nans
-
+from quickreduce_funcs import generate_wave_grid
 
 class FieldData:
     def __init__(self, filenumbers, filemanager, instrument,
@@ -821,23 +821,7 @@ class FieldData:
                                                                                  header=out_header,
                                                                                  name='MASK')
 
-    def generate_wave_grid(self,header):
-        wavemin,wavemax = header['wavemin'], header['wavemax']
-        wavetype = header['wavetype']
-        if wavetype == 'log':
-            if 'numwaves' in list(header.getHdrKeys()):
-                nwaves = header['numwaves']
-            else:
-                nwaves = header['NAXIS1']
-            if 'logbase' in list(header.getHdrKeys()):
-                logbase = header['logbase']
-            else:
-                logbase = 10
-            outwaves = np.logspace(wavemin,wavemax,num=nwaves,base=logbase)
-        else:
-            wavestep = header['wavestep']
-            outwaves = np.arange(wavemin,wavemax+wavestep,wavestep)
-        return outwaves
+
 
     def combine_science_observations(self, cam):
         from scipy.ndimage import gaussian_filter
@@ -877,7 +861,7 @@ class FieldData:
             sci_hdu = self.all_hdus.pop((cam, sci_filnum, 'science', None))
             sci_data = Table(sci_hdu.data)
 
-            wave_grid = self.generate_wave_grid(sci_hdu.header)
+            wave_grid = generate_wave_grid(sci_hdu.header)
 
             mask_hdu = self.all_hdus.pop((cam, sci_filnum, 'masks', None))
             mask_data = Table(mask_hdu.data)
@@ -1120,7 +1104,7 @@ class FieldData:
         #     mask = None
 
         header = self.all_hdus[(cam, 'combined', 'science', None)].header
-        wave_grid = self.generate_wave_grid(header)
+        wave_grid = generate_wave_grid(header)
         if self.single_core:
             sci_data = OrderedDict()
             for fib in fluxes.colnames:

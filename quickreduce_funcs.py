@@ -8,7 +8,23 @@ from scipy.signal import medfilt, find_peaks
 # Non-standard dependencies
 # import PyCosmic
 
-
+def generate_wave_grid(header):
+    wavemin, wavemax = header['wavemin'], header['wavemax']
+    wavetype = header['wavetype']
+    if wavetype == 'log':
+        if 'numwaves' in list(header.getHdrKeys()):
+            nwaves = header['numwaves']
+        else:
+            nwaves = header['NAXIS1']
+        if 'logbase' in list(header.getHdrKeys()):
+            logbase = header['logbase']
+        else:
+            logbase = 10
+        outwaves = np.logspace(wavemin, wavemax, num=nwaves, base=logbase)
+    else:
+        wavestep = header['wavestep']
+        outwaves = np.arange(wavemin, wavemax + wavestep, wavestep)
+    return outwaves
 
 
 def format_plot(ax, title=None, xlabel=None, ylabel=None, labelsize=16, titlesize=None, ticksize=None, legendsize=None,

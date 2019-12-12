@@ -94,8 +94,8 @@ def pipeline(maskname=None,obs_config_name=None,io_config_name=None, pipe_config
 
     if boolify(pipe_options['make_mtl']) and \
             io_config['SPECIALFILES']['mtl'].lower() != 'none':
-        from create_merged_target_list import create_mtl
-        create_mtl(io_config,filenumbers['science'][0],vizier_catalogs=['sdss12'], \
+        from create_merged_target_list import make_mtl
+        make_mtl(io_config,filenumbers['science'][0],vizier_catalogs=['sdss12'], \
                    overwrite_field=False, overwrite_redshifts = False)
 
     ## Load the data and instantiate the pipeline functions within the data class
