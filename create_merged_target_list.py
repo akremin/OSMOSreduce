@@ -423,7 +423,8 @@ def make_mtlz(mtl_table,hdus, find_more_redshifts = False, outfile = 'mtlz.csv',
     else:
         combined_table = table1
 
-    full_table = join(combined_table, mtl, 'FIBNAME', join_type='inner')
+    print(len(combined_table),len(mtl))
+    full_table = join(combined_table, mtl, 'FIBNAME', join_type='left')
 
     ## Add additional information
     if int(header1['UT-DATE'][:4]) > 2014:
