@@ -42,8 +42,8 @@ def main(maskname=None):
         make_mtl(io_config,filenumbers['science'][0],vizier_catalogs=['sdss12'], \
                    overwrite_field=False, overwrite_redshifts = False)
 
-    data_path = os.path.abspath(os.path.join(io_config['PATHS']['data_product_loc'], io_config['DIRS']['oneD']))
-    dataname = io_config['FILETEMPLATES']['oneds'].format(cam='{cam}', filenum=filenumbers['science'][0], imtype='science')
+    data_path = os.path.abspath(os.path.join(io_config['PATHS']['data_product_loc'], io_config['DIRS']['zfit']))
+    dataname = io_config['FILETEMPLATES']['combined'].format(cam='{cam}', imtype = 'zfits')
     dataname = os.path.join(data_path,dataname + io_config['FILETAGS']['skysubd'] + '.fits')
 
     mtl_table_name = os.path.join(mtl_path,mtl_name)
