@@ -42,7 +42,7 @@ def main(maskname=None):
                    overwrite_field=False, overwrite_redshifts = False)
 
 
-    make_mtlz(mtl_table, hdus, find_more_redshifts = False, outfile = 'mtlz.csv', \
+    make_mtlz(io_config,filenumbers['science'][0], mtl_name, find_more_redshifts = False, outfile = 'mtlz.csv', \
                                                             vizier_catalogs = ['sdss12'])
 
 if __name__ == '__main__':

@@ -16,6 +16,14 @@ import re
 from astroquery.vizier import Vizier
 import time
 from astropy.io import fits
+from astropy import units as u
+from astropy.time import Time
+from astropy.coordinates import EarthLocation, SkyCoord
+import astropy.constants as consts
+from astropy.cosmology import Planck13
+from astroquery.vizier import Vizier
+from astropy.table import Table, vstack, join
+
 
 ## User defined variables
 
@@ -338,17 +346,32 @@ def make_mtl(io_config,science_filenum,vizier_catalogs,overwrite_field,overwrite
     fulltable.write(outname + '_full.csv', format='ascii.csv', overwrite=True)
 
 
-def make_mtlz(mtl_table, hdus, find_more_redshifts=False,outfile='mtlz.csv',\
-              vizier_catalogs = ['sdss12']):
-    from astropy import units as u
-    from astropy.time import Time
-    from astropy.coordinates import EarthLocation, SkyCoord
-    import astropy.constants as consts
-    from astropy.cosmology import Planck13
-    from astroquery.vizier import Vizier
-    from astropy.table import Table, vstack, join
+def make_mtlz(io_config,science_filenum, mtl_name, find_more_redshifts = False, outfile = 'mtlz.csv', \
+                                                            vizier_catalogs = ['sdss12']):
 
-    hdu1, hdu2 = hdus
+    data_path = os.path.abspath(os.path.join(io_config['PATHS']['data_product_loc'], io_config['DIRS']['oneD']))
+    dataname = io_config['FILETEMPLATES']['oneds'].format(cam='{cam}', filenum=science_filenum, imtype='science')
+    dataname = os.path.join(data_path,dataname + io_config['FILETAGS']['skysubd'] + '.fits')
+
+    catalog_loc = os.path.abspath(io_config['PATHS']['catalog_loc'])
+    mtl_table_name = os.path.join(catalog_loc,io_config['DIRS']['mtl'],io_config['SPECIALFILES']['mtl']+ '_full.csv')
+
+    if os.path.exists(mtl_table_name):
+        mtl_table = table.Table.read(mtl_table_name,format='ascii.csv')
+
+    hdus = []
+    for cam in ['r','b']:
+        if os.path.exists(dataname.format(cam=cam)):
+            hdus.append(fits.open(dataname.format(cam=cam)))
+
+    if len(hdus)==2:
+        hdu1, hdu2 = hdus
+    elif len(hdus)==1:
+        hdu1 = hdus[0]
+        hdu2 = None
+    else:
+        print("No data found!")
+        raise(IOError)
 
     # apperature, redshift_est, cor, template
     # ID,FIBNAME,sdss_SDSS12,RA,DEC,sdss_zsp,sdss_zph,sdss_rmag,MAG
