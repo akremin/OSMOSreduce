@@ -46,8 +46,9 @@ def main(maskname=None):
     dataname = io_config['FILETEMPLATES']['oneds'].format(cam='{cam}', filenum=filenumbers['science'][0], imtype='science')
     dataname = os.path.join(data_path,dataname + io_config['FILETAGS']['skysubd'] + '.fits')
 
-    if os.path.exists(mtl_name):
-        mtl_table = Table.read(mtl_name,format='ascii.csv')
+    mtl_table_name = os.path.join(mtl_path,mtl_name)
+    if os.path.exists(mtl_table_name):
+        mtl_table = Table.read(mtl_table_name,format='ascii.csv')
     else:
         print("There was no mtl!")
 
