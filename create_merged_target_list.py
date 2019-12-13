@@ -424,6 +424,8 @@ def make_mtlz(mtl_table,hdus, find_more_redshifts = False, outfile = 'mtlz.csv',
         combined_table = table1
 
     print(len(combined_table),len(mtl))
+    print(combined_table.colnames)
+    print(mtl.colnames)
     full_table = join(combined_table, mtl, 'FIBNAME', join_type='left')
 
     ## Add additional information
