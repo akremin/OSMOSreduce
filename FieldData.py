@@ -1032,60 +1032,65 @@ class FieldData:
         for key,val in extra_skies.items():
             all_skies[key] = val
 
-        if self.mtl is None:
-            skynums ,skynames = [] ,[]
-            for fibname in all_skies.keys():
-                skynames.append(fibname)
-                number_str = fibname.lstrip('rb')
-                if cam == 'r':
-                    numeric = 16* int(number_str[0]) + int(number_str[1:])
-                else:
-                    numeric = 16 * (9- int(number_str[0])) + int(number_str[1:])
-                skynums.append(numeric)
-            skynums = np.array(skynums)
-            target_sky_pair = {}
-            for fibname, objname in scis.items():
-                number_str = fibname.lstrip('rb')
-                if cam == 'r':
-                    galnum = 16* int(number_str[0]) + int(number_str[1:])
-                else:
-                    galnum = 16 * (9- int(number_str[0])) + int(number_str[1:])
-                minsepind = np.argmin(np.abs(skynums - galnum))
-                target_sky_pair[fibname] = skynames[minsepind]
-        else:
-            skyloc_array = []
-            skynames = []
-            for fibname, objname in skies.items():
-                fibrow = np.where(self.mtl['FIBNAME'] == fibname)[0][0]
-                objrow = np.where(self.mtl['ID'] == objname)[0][0]
-                if fibrow != objrow:
-                    print("Fiber and object matched to different rows!")
-                    print(fibname, objname, fibrow, objrow)
-                    raise ()
-                if 'RA_targeted' in self.mtl.colnames and (('RA' not in self.mtl.colnames) or (type(self.mtl['RA']) is Table.MaskedColumn and self.mtl['RA'].mask[fibrow])):
-                    ra, dec = self.mtl['RA_targeted'][fibrow], self.mtl['DEC_targeted'][fibrow]
-                else:
-                    ra, dec = self.mtl['RA'][fibrow], self.mtl['DEC'][fibrow]
-                skyloc_array.append([ra, dec])
-                skynames.append(fibname)
-            sky_coords = SkyCoord(skyloc_array, unit=u.deg)
+        if self.skysub_strategy == 'nearest':
+            if self.mtl is None:
+                skynums ,skynames = [] ,[]
+                for fibname in all_skies.keys():
+                    skynames.append(fibname)
+                    number_str = fibname.lstrip('rb')
+                    if cam == 'r':
+                        numeric = 16* int(number_str[0]) + int(number_str[1:])
+                    else:
+                        numeric = 16 * (9- int(number_str[0])) + int(number_str[1:])
+                    skynums.append(numeric)
+                skynums = np.array(skynums)
+                target_sky_pair = {}
+                for fibname, objname in scis.items():
+                    number_str = fibname.lstrip('rb')
+                    if cam == 'r':
+                        galnum = 16* int(number_str[0]) + int(number_str[1:])
+                    else:
+                        galnum = 16 * (9- int(number_str[0])) + int(number_str[1:])
+                    minsepind = np.argmin(np.abs(skynums - galnum))
+                    target_sky_pair[fibname] = skynames[minsepind]
+            else:
+                skyloc_array = []
+                skynames = []
+                for fibname, objname in skies.items():
+                    fibrow = np.where(self.mtl['FIBNAME'] == fibname)[0][0]
+                    objrow = np.where(self.mtl['ID'] == objname)[0][0]
+                    if fibrow != objrow:
+                        print("Fiber and object matched to different rows!")
+                        print(fibname, objname, fibrow, objrow)
+                        raise ()
+                    if 'RA_targeted' in self.mtl.colnames and (('RA' not in self.mtl.colnames) or (type(self.mtl['RA']) is Table.MaskedColumn and self.mtl['RA'].mask[fibrow])):
+                        ra, dec = self.mtl['RA_targeted'][fibrow], self.mtl['DEC_targeted'][fibrow]
+                    else:
+                        ra, dec = self.mtl['RA'][fibrow], self.mtl['DEC'][fibrow]
+                    skyloc_array.append([ra, dec])
+                    skynames.append(fibname)
+                sky_coords = SkyCoord(skyloc_array, unit=u.deg)
 
+                target_sky_pair = {}
+                for fibname, objname in scis.items():
+                    fibrow = np.where(self.mtl['FIBNAME'] == fibname)[0][0]
+                    objrow = np.where(self.mtl['ID'] == objname)[0][0]
+                    if fibrow != objrow:
+                        print("Fiber and object matched to different rows!")
+                        print(fibname, objname, fibrow, objrow)
+                        raise ()
+                    if 'RA_targeted' in self.mtl.colnames and (('RA' not in self.mtl.colnames) or (type(self.mtl['RA']) is Table.MaskedColumn and self.mtl['RA'].mask[fibrow])):
+                        ra, dec = self.mtl['RA_targeted'][fibrow], self.mtl['DEC_targeted'][fibrow]
+                    else:
+                        ra, dec = self.mtl['RA'][fibrow], self.mtl['DEC'][fibrow]
+                    coord = SkyCoord(ra, dec, unit=u.deg)
+                    seps = coord.separation(sky_coords)
+                    minsepind = np.argmin(seps)
+                    target_sky_pair[fibname] = skynames[minsepind]
+        else:
             target_sky_pair = {}
             for fibname, objname in scis.items():
-                fibrow = np.where(self.mtl['FIBNAME'] == fibname)[0][0]
-                objrow = np.where(self.mtl['ID'] == objname)[0][0]
-                if fibrow != objrow:
-                    print("Fiber and object matched to different rows!")
-                    print(fibname, objname, fibrow, objrow)
-                    raise ()
-                if 'RA_targeted' in self.mtl.colnames and (('RA' not in self.mtl.colnames) or (type(self.mtl['RA']) is Table.MaskedColumn and self.mtl['RA'].mask[fibrow])):
-                    ra, dec = self.mtl['RA_targeted'][fibrow], self.mtl['DEC_targeted'][fibrow]
-                else:
-                    ra, dec = self.mtl['RA'][fibrow], self.mtl['DEC'][fibrow]
-                coord = SkyCoord(ra, dec, unit=u.deg)
-                seps = coord.separation(sky_coords)
-                minsepind = np.argmin(seps)
-                target_sky_pair[fibname] = skynames[minsepind]
+                target_sky_pair[fibname] = None
 
         self.targeting_sky_pairs[cam] = target_sky_pair
         self.all_skies[cam] = all_skies
