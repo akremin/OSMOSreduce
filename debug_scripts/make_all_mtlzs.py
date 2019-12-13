@@ -11,7 +11,8 @@ sys.path.append("..")
 from collections import OrderedDict
 from quickreduce_funcs import digest_filenumbers
 from create_merged_target_list import make_mtl, make_mtlz
-
+from astropy.table import Table
+from astropy.io import fits
 import configparser
 
 def main(maskname=None):
@@ -30,19 +31,32 @@ def main(maskname=None):
     io_config = configparser.ConfigParser(interpolation=configparser.ExtendedInterpolation())
     io_config.read(io_config_name)
 
+    ## Interpret the filenumbers specified in the configuration files
+    str_filenumbers = OrderedDict(obs_config['FILENUMBERS'])
+    filenumbers = digest_filenumbers(str_filenumbers)
+
     mtl_path = os.path.join(io_config['PATHS']['catalog_loc'],io_config['DIRS']['mtl'])
     mtl_name = io_config['SPECIALFILES']['mtlz']+"_full.csv"
 
     if not os.path.exists(os.path.join(mtl_path,mtl_name)):
-        ## Interpret the filenumbers specified in the configuration files
-        str_filenumbers = OrderedDict(obs_config['FILENUMBERS'])
-        filenumbers = digest_filenumbers(str_filenumbers)
-
         make_mtl(io_config,filenumbers['science'][0],vizier_catalogs=['sdss12'], \
                    overwrite_field=False, overwrite_redshifts = False)
 
+    data_path = os.path.abspath(os.path.join(io_config['PATHS']['data_product_loc'], io_config['DIRS']['oneD']))
+    dataname = io_config['FILETEMPLATES']['oneds'].format(cam='{cam}', filenum=filenumbers['science'][0], imtype='science')
+    dataname = os.path.join(data_path,dataname + io_config['FILETAGS']['skysubd'] + '.fits')
 
-    make_mtlz(io_config,filenumbers['science'][0], mtl_name, find_more_redshifts = False, outfile = 'mtlz.csv', \
+    if os.path.exists(mtl_name):
+        mtl_table = Table.read(mtl_name,format='ascii.csv')
+    else:
+        print("There was no mtl!")
+
+    hdus = []
+    for cam in ['r','b']:
+        if os.path.exists(dataname.format(cam=cam)):
+            hdus.append(fits.open(dataname.format(cam=cam)))
+
+    make_mtlz(mtl_table, hdus, find_more_redshifts = False, outfile = 'mtlz.csv', \
                                                             vizier_catalogs = ['sdss12'])
 
 if __name__ == '__main__':
