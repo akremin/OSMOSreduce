@@ -75,7 +75,8 @@ def main(mtlz_path,mtlz_name,correlation_cut=0.2,summary_column_subset = True):
     return tab.filled()
 
 if __name__ == '__main__':
-    catalog_loc = "/Users/kremin/M2FSdata/catalogs/merged_target_lists"
+    #catalog_loc = "/Users/kremin/M2FSdata/catalogs/merged_target_lists"
+    catalog_loc = "/home/kremin/value_storage/M2FS_analysis/data/catalogs/merged_target_lists"
     # catalog_loc = '../data/catalogs/merged_target_lists/'
     first = True
     do_subset = False
