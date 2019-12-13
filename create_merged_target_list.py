@@ -255,12 +255,12 @@ def make_mtl(io_config,science_filenum,vizier_catalogs,overwrite_field,overwrite
             field_table.rename_column('RA_targeted','RA')
             field_table.rename_column('DEC_targeted','DEC')
     else:
-        field_table = []
+        field_table = None
 
     ## Merge fiber and drill info
     if len(fiber_table)==0:
         print("Stop here")
-        observed_field_table = fiber_table
+        observed_field_table = field_table
     else:
         try:
             observed_field_table = table.join(fiber_table, field_table, keys='ID', join_type='left')
