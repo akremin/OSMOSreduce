@@ -36,7 +36,7 @@ def main(maskname=None):
     filenumbers = digest_filenumbers(str_filenumbers)
 
     mtl_path = os.path.join(io_config['PATHS']['catalog_loc'],io_config['DIRS']['mtl'])
-    mtl_name = io_config['SPECIALFILES']['mtlz']+"_full.csv"
+    mtl_name = io_config['SPECIALFILES']['mtl']+"_full.csv"
 
     if not os.path.exists(os.path.join(mtl_path,mtl_name)):
         make_mtl(io_config,filenumbers['science'][0],vizier_catalogs=['sdss12'], \
