@@ -55,7 +55,7 @@ def main(maskname=None):
     hdus = []
     for cam in ['r','b']:
         if os.path.exists(dataname.format(cam=cam)):
-            hdus.append(fits.open(dataname.format(cam=cam)))
+            hdus.append(fits.open(dataname.format(cam=cam))['ZFITS'])
 
     make_mtlz(mtl_table, hdus, find_more_redshifts = False, outfile = 'mtlz.csv', \
                                                             vizier_catalogs = ['sdss12'])
