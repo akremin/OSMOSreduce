@@ -266,8 +266,10 @@ def make_mtl(io_config,science_filenum,vizier_catalogs,overwrite_field,overwrite
             observed_field_table = table.join(fiber_table, field_table, keys='ID', join_type='left')
         except:
             print("Something went wrong.")
-            print(fiber_table.colnames)
-            print(field_table.colnames)
+            if type(fiber_table) is Table:
+                print(fiber_table.colnames)
+            if field_table is not None:
+                print(field_table.colnames)
             raise()
 
     ## If there is targeting information, merge that in as well
