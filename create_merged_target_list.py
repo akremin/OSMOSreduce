@@ -200,17 +200,21 @@ def make_mtl(io_config,science_filenum,vizier_catalogs,overwrite_field,overwrite
 
     plate_path = os.path.join(catalog_loc,io_config['DIRS']['plate'])
     plate_name = io_config['SPECIALFILES']['plate']
+    print("In mask: {}".format(io_config['GENERAL']['mask_name']))
     if plate_name == 'None':
+        print("No platename given")
         plate_name = None
 
     field_path = os.path.join(catalog_loc,io_config['DIRS']['field'])
     field_name = io_config['SPECIALFILES']['field']
     if field_name == 'None':
+        print("No fieldname given")
         field_name = None
 
     redshifts_path = os.path.join(catalog_loc,io_config['DIRS']['redshifts'])
     redshifts_name = io_config['SPECIALFILES']['redshifts']
     if redshifts_name == 'None':
+        print("No redshift filename given")
         redshifts_name == None
 
     targeting_path, targeting_name = None, None
@@ -225,11 +229,14 @@ def make_mtl(io_config,science_filenum,vizier_catalogs,overwrite_field,overwrite
     for path, filename in zip(paths, names):
         if filename is not None:
             if not os.path.exists(path):
+                print("Creating {}".format(path))
                 os.makedirs(path)
     del paths, names
 
     ## Get fiber info
     fiber_table = create_m2fs_fiber_info_table(data_path, dataname, cams=['r', 'b'])
+    if fiber_table is None or len(fiber_table)== 0:
+        print("No fiber table created!")
 
     ## Mine plate file for drilling info
     field_pathname = os.path.join(field_path, field_name)
@@ -259,17 +266,18 @@ def make_mtl(io_config,science_filenum,vizier_catalogs,overwrite_field,overwrite
 
     ## Merge fiber and drill info
     if len(fiber_table)==0:
-        print("Stop here")
-        observed_field_table = field_table
+        print("No field file found and no plate file available for conversion.")
+        print("Continuing with just the fiber data")
+        observed_field_table = fiber_table
     else:
         try:
             observed_field_table = table.join(fiber_table, field_table, keys='ID', join_type='left')
         except:
-            print("Something went wrong.")
+            print("Something went wrong combining fiber table and field table.")
             if type(fiber_table) is table.Table:
-                print(fiber_table.colnames)
-            if field_table is not None:
-                print(field_table.colnames)
+                print("Fiber table: ",fiber_table.colnames,len(fiber_table))
+            if field_table is not None and type(field_table) is table.Table:
+                print("Field table: ",field_table.colnames,len(field_table))
             raise()
 
     ## If there is targeting information, merge that in as well
