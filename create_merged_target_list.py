@@ -260,7 +260,7 @@ def make_mtl(io_config,science_filenum,vizier_catalogs,overwrite_field,overwrite
             field_table = table.Table.read(field_pathname, format='ascii.basic')
         if len(field_table.colnames) == 1:
             field_table = table.Table.read(field_pathname, format='ascii.basic')
-            
+
         if 'RA_targeted' in field_table.colnames:
             field_table.rename_column('RA_targeted','RA')
             field_table.rename_column('DEC_targeted','DEC')
