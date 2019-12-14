@@ -359,6 +359,7 @@ def make_mtlz(mtl_table,hdus, find_more_redshifts = False, outfile = 'mtlz.csv',
         hdu2 = None
     else:
         print("No data found!")
+        print(hdus)
         raise(IOError)
 
     # apperature, redshift_est, cor, template
