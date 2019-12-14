@@ -696,7 +696,7 @@ class FieldData:
                 plt.close()
 
                 del median_arrays1,median_arrays2
-
+            master_skymask = np.isnan(master_sky)
             interpd_galfluxes, skyfluxes, galmasks = OrderedDict(),OrderedDict(),OrderedDict()
             for galfib, skyfib in target_sky_pair.items():
                 a, b, c, d, e, f = comparc_data[galfib]
@@ -712,10 +712,11 @@ class FieldData:
                 if self.skysub_strategy == 'nearest':
                     skyfit = skyfits[skyfib]
                     skyflux = skyfit(wave_grid)
-                    skymask = np.isnan(skyflux)
-                    galmask = (skymask | galmask)
                 else:
-                    skyflux = master_sky
+                    skyflux = master_sky.copy()
+
+                skymask = master_skymask.copy()
+                galmask = (skymask | galmask)
                 # elif self.skysub_strategy == 'median':
                 #     skyflux = master_sky
 
