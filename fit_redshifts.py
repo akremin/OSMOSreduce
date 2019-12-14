@@ -16,7 +16,19 @@ def fit_redshifts_wrapper(input_dict):
 
 def fit_redshifts(sky_subd_sciences,mask_name,run_auto=True,prior = None,savetemplate_func=None):
     # 3.0e-5
-    first_ap = list(sky_subd_sciences.keys())[0]
+    if run_auto:
+        outnames = ['apperature','redshift_est', 'cor', 'template', 'SNavg', 'SNHKmin', 'HSN', 'KSN', 'GSN']
+        types = ['S4',float,float,'S3',float,float,float,float,float]
+    else:
+        outnames = ['apperature','redshift_est', 'quality_val', 'cor', 'template', 'SNavg', 'SNHKmin', 'HSN', 'KSN', 'GSN']
+        types = ['S4',float,int,float,'S3',float,float,float,float,float]
+    outtable = Table(names=outnames,dtype=types)
+
+    science_fiber_names = list(sky_subd_sciences.keys())
+    if len(science_fiber_names)>0:
+        first_ap = science_fiber_names[0]
+    else:
+        return outtable
     first_waves, flux, boolmask = sky_subd_sciences[first_ap]
 
     R = z_est(lower_w=first_waves.min()/(1+0.52), upper_w=first_waves.max()/(1+0.1), lower_z=0.10, upper_z=0.5, \
@@ -32,13 +44,7 @@ def fit_redshifts(sky_subd_sciences,mask_name,run_auto=True,prior = None,savetem
     # Import template spectrum (SDSS early type) and continuum subtract the flux
     R.add_sdsstemplates_fromfile(path_to_temps, template_names)
 
-    if run_auto:
-        outnames = ['apperature','redshift_est', 'cor', 'template', 'SNavg', 'SNHKmin', 'HSN', 'KSN', 'GSN']
-        types = ['S4',float,float,'S3',float,float,float,float,float]
-    else:
-        outnames = ['apperature','redshift_est', 'quality_val', 'cor', 'template', 'SNavg', 'SNHKmin', 'HSN', 'KSN', 'GSN']
-        types = ['S4',float,int,float,'S3',float,float,float,float,float]
-    outtable = Table(names=outnames,dtype=types)
+
 
     if not run_auto:
         quality_val = {}
