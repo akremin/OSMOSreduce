@@ -8,10 +8,10 @@ from scipy.signal import find_peaks
 from scipy.signal import medfilt
 
 
-def cutout_all_apperatures(all_hdus,cameras,deadfibers=[],summation_preference='simple',\
+def cutout_all_apertures(all_hdus,cameras,deadfibers=[],summation_preference='simple',\
                             show_plots=True,save_plots=False,save_template='{}{}{}{}{}.png'):
     apcut_hdus = {}
-    cam_apperatures = {}
+    cam_apertures = {}
     for camera in cameras:
         bad_cam_fibers = []
         for fib in deadfibers:
@@ -25,20 +25,20 @@ def cutout_all_apperatures(all_hdus,cameras,deadfibers=[],summation_preference='
             defined_save_template = save_template(cam=camera,ap='',imtype='fibmap',step='apcut',comment='{comment}')
         else:
             defined_save_template = save_template
-        apperatures = find_apperatures(fiber_imag,bad_cam_fibers,cam=camera,\
+        apertures = find_apertures(fiber_imag,bad_cam_fibers,cam=camera,\
                                        show_plots=show_plots,save_plots=save_plots,\
                                        save_template=defined_save_template)
-        cam_apperatures[camera] = apperatures
+        cam_apertures[camera] = apertures
 
     for (camera, filenum, imtype, opamp),hdu in all_hdus.items():
 
-        oneds = cutout_oned_apperatures(hdu.data,cam_apperatures[camera],summation_preference)
+        oneds = cutout_oned_apertures(hdu.data,cam_apertures[camera],summation_preference)
         outhead = hdu.header.copy(strip=True)
-        outhead = update_header(outhead,cam_apperatures[camera])
+        outhead = update_header(outhead,cam_apertures[camera])
 
         outhdu = fits.BinTableHDU(data=Table(data=oneds) ,header=outhead, name='flux')
         apcut_hdus[(camera, filenum, imtype, opamp)] = outhdu
-        print("Completed Apperature Cutting of: cam={}, fil={}, type={}".format(camera,filenum,imtype))
+        print("Completed Apertures Cutting of: cam={}, fil={}, type={}".format(camera,filenum,imtype))
 
     return apcut_hdus
 
@@ -60,8 +60,8 @@ def update_header(header,cam_app):
 
 
 
-def cutout_oned_apperatures(image,apperatures,summation_preference):
-    twod_cutouts = cutout_twod_apperatures(image,apperatures)
+def cutout_oned_apertures(image,apertures,summation_preference):
+    twod_cutouts = cutout_twod_apertures(image,apertures)
     oned_cutouts = {}
     if summation_preference != 'simple':
         print("Only simply equal weight summation of 2d to 1d implemented.\n")
@@ -78,9 +78,9 @@ def cutout_oned_apperatures(image,apperatures,summation_preference):
     return oned_cutouts
 
 
-def cutout_twod_apperatures(image,apperatures):
+def cutout_twod_apertures(image,apertures):
     cutout_dict = {}
-    for tet,tet_dict in apperatures.items():
+    for tet,tet_dict in apertures.items():
         start,end = tet_dict['start'],tet_dict['end']
         bottoms = tet_dict['bottoms']
         tops = tet_dict['tops']
@@ -97,7 +97,7 @@ def cutout_twod_apperatures(image,apperatures):
     return cutout_dict
 
 
-def find_apperatures(image,badfibs,cam='r',height=0.2,prominence=0.1,\
+def find_apertures(image,badfibs,cam='r',height=0.2,prominence=0.1,\
                      show_plots=True,save_plots=False,\
                      save_template='outfile_{}.png'):
     tetris = np.arange(1,9)
@@ -107,10 +107,10 @@ def find_apperatures(image,badfibs,cam='r',height=0.2,prominence=0.1,\
     full_image_savename = save_template.format(comment="_tet_cuts")
     starts,ends = get_all_tetris_edges(image,show_plots, save_plots, full_image_savename)
 
-    apperatures = {}
+    apertures = {}
     for tet,start,end in zip(tetris,starts,ends):
         print("Detecting apertures for cam={}, tet={}, identified to start at pixel row {} and end at {}".format(cam,tet,start,end))
-        apperatures[tet] = {'start':start,'end':end}
+        apertures[tet] = {'start':start,'end':end}
 
         bad_nums = []
         for fib in badfibs:
@@ -179,7 +179,7 @@ def find_apperatures(image,badfibs,cam='r',height=0.2,prominence=0.1,\
             bots[fibername] =  peak_array[index, :] - deviations[index]
 
         if save_plots or show_plots:
-            plot_single_tet_apperatures(cut_image, peaks,bots,tops, tet)
+            plot_single_tet_apertures(cut_image, peaks,bots,tops, tet)
         if save_plots:
             plt.savefig(save_template.format(comment='_cutout_'+str(tet)),dpi=600)
         if show_plots:
@@ -187,11 +187,11 @@ def find_apperatures(image,badfibs,cam='r',height=0.2,prominence=0.1,\
             figManager.window.showMaximized()
             plt.show()
         plt.close()
-        apperatures[tet]['peaks'] = peaks
-        apperatures[tet]['bottoms'] = bots
-        apperatures[tet]['tops'] = tops
-        apperatures[tet]['deviations'] = devs
-    return apperatures
+        apertures[tet]['peaks'] = peaks
+        apertures[tet]['bottoms'] = bots
+        apertures[tet]['tops'] = tops
+        apertures[tet]['deviations'] = devs
+    return apertures
 
 
 def get_all_tetris_edges(image, show_plots, save_plots, save_template):
@@ -370,7 +370,7 @@ def get_peak_array(inds,nrows,pixels,row_lens,ncols,binwidth):
     return peak_array, nrows
 
 
-def plot_single_tet_apperatures(image,peaks,bots,tops,tet):
+def plot_single_tet_apertures(image,peaks,bots,tops,tet):
     plt.figure()
     pixels = np.arange(image.shape[1])
     plt.imshow(image, origin='lower-left',cmap='Greys',aspect='auto',interpolation ='nearest')
@@ -412,4 +412,4 @@ if __name__ == '__main__':
         # image = np.log(image-image.min()+1.1)
 
         mock_hdu_list[(camera, 'master', 'fibermap', None)] = image
-    cutout_all_apperatures(mock_hdu_list,cameras,deadfibers=bad_fibs,summation_preference='simple')
+    cutout_all_apertures(mock_hdu_list,cameras,deadfibers=bad_fibs,summation_preference='simple')

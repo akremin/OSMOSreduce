@@ -354,6 +354,15 @@ def make_mtlz(mtl_table,hdus, find_more_redshifts = False, outfile = 'mtlz.csv',
 
     if len(hdus)==2:
         hdu1, hdu2 = hdus
+        if len(Table(hdu1.data)) == 0 and len(Table(hdu2.data))==0:
+            print("No data found!")
+            print(hdus)
+            raise (IOError)
+        elif len(Table(hdu1.data)) == 0:
+            hdu1 = hdu2.copy()
+            hdu2 = None
+        elif len(Table(hdu2.data)) == 0:
+            hdu2 = None
     elif len(hdus)==1:
         hdu1 = hdus[0]
         hdu2 = None
@@ -362,24 +371,27 @@ def make_mtlz(mtl_table,hdus, find_more_redshifts = False, outfile = 'mtlz.csv',
         print(hdus)
         raise(IOError)
 
-    # apperature, redshift_est, cor, template
+    # apperature/FIBNUM, redshift_est, cor, template
     # ID,FIBNAME,sdss_SDSS12,RA,DEC,sdss_zsp,sdss_zph,sdss_rmag,MAG
 
     table1 = Table(hdu1.data)
     header1 = hdu1.header
 
     cam1 = str(header1['SHOE']).lower()
-    if str(table1['apperature'][0])[0].lower() != cam1:
-        print("I couldn't match the camera between the header and data table for hdu1!")
-    table1.rename_column('apperature', 'FIBNAME')
+    if 'apperature' in table1.colnames:
+        if len(table1) > 0 and str(table1['apperature'][0])[0].lower() != cam1:
+            print("I couldn't match the camera between the header and data table for hdu1!")
+        table1.rename_column('apperature', 'FIBNAME')
 
     if hdu2 is not None:
         table2 = Table(hdu2.data)
         header2 = hdu2.header
         cam2 = str(header2['SHOE']).lower()
-        if str(table2['apperature'][0])[0].lower() != cam2:
-            print("I couldn't match the camera between the header and data table for hdu2!")
-        table2.rename_column('apperature', 'FIBNAME')
+        if 'apperature' in table2.colnames:
+            if len(table2) > 0 and str(table2['apperature'][0])[0].lower() != cam2:
+                print("I couldn't match the camera between the header and data table for hdu2!")
+            table2.rename_column('apperature', 'FIBNAME')
+
 
     mtl = Table(mtl_table)
 

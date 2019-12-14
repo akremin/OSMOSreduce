@@ -17,10 +17,10 @@ def fit_redshifts_wrapper(input_dict):
 def fit_redshifts(sky_subd_sciences,mask_name,run_auto=True,prior = None,savetemplate_func=None):
     # 3.0e-5
     if run_auto:
-        outnames = ['apperature','redshift_est', 'cor', 'template', 'SNavg', 'SNHKmin', 'HSN', 'KSN', 'GSN']
+        outnames = ['FIBNAME','redshift_est', 'cor', 'template', 'SNavg', 'SNHKmin', 'HSN', 'KSN', 'GSN']
         types = ['S4',float,float,'S3',float,float,float,float,float]
     else:
-        outnames = ['apperature','redshift_est', 'quality_val', 'cor', 'template', 'SNavg', 'SNHKmin', 'HSN', 'KSN', 'GSN']
+        outnames = ['FIBNAME','redshift_est', 'quality_val', 'cor', 'template', 'SNavg', 'SNHKmin', 'HSN', 'KSN', 'GSN']
         types = ['S4',float,int,float,'S3',float,float,float,float,float]
     outtable = Table(names=outnames,dtype=types)
 

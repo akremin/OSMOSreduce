@@ -345,8 +345,8 @@ class FieldData:
         elif self.step == 'apcut':
             for camera in self.instrument.cameras:
                 self.combine_fibermaps(camera, return_table=False)
-            from aperture_detector import cutout_all_apperatures
-            outhdus = cutout_all_apperatures(self.all_hdus,self.instrument.cameras,\
+            from aperture_detector import cutout_all_apertures
+            outhdus = cutout_all_apertures(self.all_hdus,self.instrument.cameras,\
                                                    deadfibers=self.instrument.deadfibers,summation_preference=self.twod_to_oned,\
                                                    show_plots=self.show_plots,save_plots=self.save_plots,\
                                                    save_template=self.filemanager.get_saveplot_template)
