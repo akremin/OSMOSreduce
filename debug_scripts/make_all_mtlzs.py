@@ -65,6 +65,8 @@ def main(maskname=None,do_overwrite=False, pipe_config_name = '../configs/pipeli
     for cam in ['r','b']:
         if os.path.exists(dataname.format(cam=cam)):
             hdus.append(fits.open(dataname.format(cam=cam))['ZFITS'])
+        else:
+            print("Couldn't find {}".format(dataname))
 
     if not os.path.exists(os.path.join(mtlz_path,mtlz_name)) or do_overwrite:
         make_mtlz(mtl_table, hdus, find_more_redshifts = True, outfile = 'mtlz.csv', vizier_catalogs = ['sdss12'])
