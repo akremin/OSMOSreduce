@@ -251,7 +251,7 @@ def make_mtl(io_config,science_filenum,vizier_catalogs,overwrite_field,overwrite
     if plate_name is not None:
         if not os.path.exists(field_pathname) or overwrite_field:
             plate_pathname = os.path.join(plate_path, plate_name)
-            create_drilled_field_file(plate_pathname, drilled_field_name_template=field_name_template,
+            create_drilled_field_file(plate_pathname, drilled_field_name_template=field_name.replace(io_config['GENERAL']['mask_name'],'{}'),
                                       drilled_field_path=field_path, overwrite_file=overwrite_field)
 
         try:
