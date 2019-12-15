@@ -305,29 +305,31 @@ def make_mtl(io_config,science_filenum,vizier_catalogs,overwrite_field,overwrite
 
     ## If there is a separate redshifts file, merge that in
     ## Else query vizier (either sdss or panstarrs) to get redshifts and merge that in
-    # if redshifts_name is not None and os.path.exists(
-    #         os.path.join(redshifts_path, redshifts_name)) and not overwrite_redshifts:
-    #     full_pathname = os.path.join(redshifts_path, redshifts_name)
-    #     redshifts = table.Table.read(full_pathname, format='ascii.csv')
-    #     mtl = table.join(ml, redshifts, keys='ID', join_type='left')
-    # else:
-    #     if 'DEC' in ml.colnames:
-    #         dec_name = 'DEC'
-    #     else:
-    #         dec_name = 'DEC_targeted'
-    #     if len(vizier_catalogs) == 1 and vizier_catalogs[0] == 'sdss12' and ml[dec_name][0] < -20:
-    #         matches = None
-    #     else:
-    #         matches = get_vizier_matches(ml, vizier_catalogs)
-    #
-    #     # print(len(fiber_table),len(drilled_field_table),len(observed_field_table),len(joined_field_table),len(mtl),len(matches))
-    #     if matches is not None:
-    #         full_pathname = os.path.join(redshifts_path,redshifts_name.format(zsource=vizier_catalogs[0]))
-    #         matches.write(full_pathname, format='ascii.csv', overwrite='True')
-    #         mtl = table.join(ml, matches, keys='ID', join_type='left')
-    #     else:
-    #         mtl = ml
-    mtl = ml
+    if redshifts_name is not None and os.path.exists(
+            os.path.join(redshifts_path, redshifts_name)) and not overwrite_redshifts:
+        full_pathname = os.path.join(redshifts_path, redshifts_name)
+        redshifts = table.Table.read(full_pathname, format='ascii.csv')
+        mtl = table.join(ml, redshifts, keys='ID', join_type='left')
+    else:
+        if 'DEC' in ml.colnames:
+            dec_name = 'DEC'
+        else:
+            dec_name = 'DEC_targeted'
+        if len(vizier_catalogs) == 1 and vizier_catalogs[0] == 'sdss12' and ml[dec_name][0] < -20:
+            matches = None
+        else:
+            matches = get_vizier_matches(ml, vizier_catalogs)
+
+        # print(len(fiber_table),len(drilled_field_table),len(observed_field_table),len(joined_field_table),len(mtl),len(matches))
+        if matches is not None:
+            full_pathname = os.path.join(redshifts_path,redshifts_name.format(zsource=vizier_catalogs[0]))
+            matches.write(full_pathname, format='ascii.csv', overwrite='True')
+            mtl = table.join(ml, matches, keys='ID', join_type='left')
+        else:
+            mtl = ml
+
+    if 'sdss_SDSS12' not in mtl.colnames:
+        mtl.add_column(Table.Column(data=['']*len(mtl),name='sdss_SDSS12'))
     all_most_interesting = ['ID', 'TARGETNAME', 'FIBNAME', 'sdss_SDSS12', 'RA', 'DEC', 'sdss_zsp', 'sdss_zph',
                             'sdss_rmag', 'MAG']
     all_cols = mtl.colnames

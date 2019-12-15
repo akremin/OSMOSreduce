@@ -46,7 +46,7 @@ def main(maskname=None,do_overwrite=False, pipe_config_name = '../configs/pipeli
         filenumbers = digest_filenumbers(str_filenumbers)
 
         make_mtl(io_config,filenumbers['science'][0],vizier_catalogs=['sdss12'], \
-                   overwrite_field=False, overwrite_redshifts = False)
+                   overwrite_field=False, overwrite_redshifts = True)
 
 
 
