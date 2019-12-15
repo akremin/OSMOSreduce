@@ -478,7 +478,7 @@ def make_mtlz(mtl_table,hdus, find_more_redshifts = False, outfile = 'mtlz.csv',
         radius = 5 * u.Mpc / kpc_p_amin
         Vizier.ROW_LIMIT = -1
         result = Vizier.query_region(cluster, radius=radius, catalog=vizier_catalogs)
-        if type(result) is list and len(result)>0:
+        if len(result)>0 and type(result) is not table.Table:
             res_tab = result[0]
 
             if np.all(res_tab['zsp'].mask):
