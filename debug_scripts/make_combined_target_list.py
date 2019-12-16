@@ -57,7 +57,7 @@ def main(mtlz_path,mtlz_name,correlation_cut=0.2,summary_column_subset = True):
     else:
         tab.add_column(Table.MaskedColumn(data=np.zeros(len(tab)),name='SDSS_zsp'))#,mask=np.ones(len(tab)).astype(bool)))
     if 'z_est_bary' in tab.colnames:
-        tab.rename_column('z_est_bary','z')
+        tab.add_column(data=tab['z_est_bary'].copy(),name='z')
     if 'Proj_R_asec' in tab.colnames:
         tab.rename_column('Proj_R_asec','R [asec]')
     if 'velocity' in tab.colnames:
