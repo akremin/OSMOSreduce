@@ -38,7 +38,7 @@ def fit_redshifts(sky_subd_sciences,mask_name,run_auto=True,prior = None,savetem
     del first_waves, flux, boolmask
     template_names = ['spDR2-023.fit', 'spDR2-024.fit']#, 'spDR2-028.fit']
                         # ['spDR2-0'+str(x)+'.fit' for x in np.arange(23,31)]
-    template_dir = 'sdss_templates'  # hack
+    template_dir = '../sdss_templates'  # hack
 
     path_to_temps = os.path.abspath(os.path.join(os.curdir, template_dir))  # hack
     # Import template spectrum (SDSS early type) and continuum subtract the flux

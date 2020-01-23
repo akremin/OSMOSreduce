@@ -10,11 +10,11 @@ from astropy.io import fits
 from astropy.table import Table, hstack
 from scipy.optimize import curve_fit
 
-from calibration_helper_funcs import compare_outputs, create_simple_line_spectra, \
+from pyM2FS.calibration_helper_funcs import compare_outputs, create_simple_line_spectra, \
     ensure_match, find_devs, coarse_calib_configure_tables, \
     pix_to_wave_explicit_coefs2, get_meantime_and_date
-from coarse_calibration import run_automated_calibration_wrapper
-from fine_calibration import auto_wavelength_fitting_by_lines, auto_wavelength_fitting_by_lines_wrapper, \
+from pyM2FS.coarse_calibration import run_automated_calibration_wrapper
+from pyM2FS.fine_calibration import auto_wavelength_fitting_by_lines, auto_wavelength_fitting_by_lines_wrapper, \
     wavelength_fitting_by_line_selection
 
 

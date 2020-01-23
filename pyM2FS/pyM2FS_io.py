@@ -372,7 +372,7 @@ class FileManager:
 
     def load_synth_calibration_spec(self,cal_lamp, wavemincut=3000., wavemaxcut=8000.):
         """Assumes the format of the nist linelist csvs privuded with this package"""
-        from calibration_helper_funcs import air_to_vacuum
+        from pyM2FS.calibration_helper_funcs import air_to_vacuum
         possibilities = ['Xe', 'Ar', 'Hg', 'Ne', 'ThAr', 'He']
         all_wms,all_fms = [],[]
         for lamp in possibilities:
@@ -416,7 +416,7 @@ class FileManager:
 
     def load_nist_calibration_lines_dict(self, cal_lamp, wavemincut=4000, wavemaxcut=10000, use_selected=True):
         """Assumes the format of the nist linelist csvs privuded with this package"""
-        from calibration_helper_funcs import air_to_vacuum
+        from pyM2FS.calibration_helper_funcs import air_to_vacuum
         #linelistdict = {}
         selectedlinesdict = {}
         print(('Using calibration lamps: ', cal_lamp))
@@ -464,7 +464,7 @@ class FileManager:
 
     def load_salt_calibration_lines_dict(self,cal_lamp,wavemincut=4000,wavemaxcut=10000,use_selected=False):
         """Assumes the format of the salt linelist csvs privuded with this package"""
-        from calibration_helper_funcs import air_to_vacuum
+        from pyM2FS.calibration_helper_funcs import air_to_vacuum
         #linelistdict = {}
         selectedlinesdict = {}
         print(('Using calibration lamps: ', cal_lamp))

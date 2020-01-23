@@ -6,8 +6,8 @@ import sys
 sys.path.append("..")
 
 from collections import OrderedDict
-from quickreduce_funcs import digest_filenumbers
-from create_merged_target_list import make_mtl, make_mtlz
+from pyM2FS.pyM2FS_funcs import digest_filenumbers
+from pyM2FS.create_merged_target_list import make_mtl, make_mtlz
 from astropy.table import Table
 from astropy.io import fits
 import configparser

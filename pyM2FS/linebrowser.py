@@ -13,7 +13,7 @@ from scipy import signal
 
 
 import numpy as np
-from calibration_helper_funcs import get_psf
+from pyM2FS.calibration_helper_funcs import get_psf
 from scipy.ndimage import gaussian_filter
 
 def fifth_order_poly(p_x, zeroth, first, second, third, fourth, fifth):
@@ -320,7 +320,7 @@ class LineBrowser:
         if self.convd_mock_spec_f is None:
             self.make_mock_spec()
         coefs = np.asarray(coefs)
-        from quickreduce_funcs import format_plot
+        from pyM2FS.pyM2FS_funcs import format_plot
         waves = np.polyval(coefs[::-1],self.p_x)
         fitlines = np.asarray(self.line_matches['lines'])
         fitlineloc = np.asarray(self.wm)

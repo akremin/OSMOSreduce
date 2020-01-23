@@ -7,8 +7,8 @@ import sys
 sys.path.append("..")
 
 from collections import OrderedDict
-from quickreduce_funcs import digest_filenumbers
-from create_merged_target_list import make_mtl
+from pyM2FS.pyM2FS_funcs import digest_filenumbers
+from pyM2FS.create_merged_target_list import make_mtl
 
 import configparser
 from quickreduce import read_io_config, read_obs_config

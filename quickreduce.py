@@ -2,20 +2,25 @@
 # coding: utf-8
 
 # Basic Walkthrough:
-#      1) Define everything
-#      2) Create master bias file, Save master bias file  
-#      3) Open all other files, sub master bias, save  (*c?.b.fits)
-#      4) Remove cosmics from all file types except bias  (*c?.bc.fits)
-#      5) Open flats and create master skyflat file, save
-#      6) Open all remainging types and divide out master flat, then save  (*c?.bcf.fits)
-#      7) Open all remaining types and stitch together, save  (*full.bcf.fits)
-#      8) Use fibermap files to determine aperatures
-#      9) Use aperatures to cut out same regions in thar,comp,science
-#      10) Save all 256 to files with their header tagged name in filename, along with fiber num
-#      11) Assume no curvature within tiny aperature region; fit profile to 2d spec and sum to 1d
-#      12) Fit the lines in comp spectra, save file and fit solution
-#      13) Try to fit lines in thar spectra, save file and fit solution
-#      14) Apply to science spectra
+#     1) Define everything, load the bias files, generate any directories that don't exist.
+#     2) Create master bias file, Save master bias file
+#     3) Open all other files, subtract the master bias, save (*c?.b.fits)
+#     4) Stitch the four opamps together.
+#     5) Remove cosmics from all file types except bias (*c?.bc.fits)
+#     6) Use fibermaps or flats to identify apertures of each spectrum.
+#     7) Use fitted apertures to cut out 2-d spectra in thar,comp,science,twiflat
+#     8) Collapse the 2-d spectra to 1-d.
+#     9) Perform a rough calibration using low-res calibration lamps.
+#     10) Use the rough calibrations to identify lines in a higher density calibration lamp (e.g. ThAr).
+#     11) Fit a fifth order polynomial to every spectrum of each camera for each exposure.
+#     12) Save fits for use as initial guesses of future fits.
+#     13) Create master skyflat file, save.
+#     14) Open all remaining types and divide out master flat, then save (*c?.bcf.fits)
+#     15) Create master sky spectra by using a median fit of all sky fibers
+#     16) Remove continuums of the science and sky spectra and iteratively remove each sky line.
+#     17) Subtract the sky continuum from the science continuum and add back to the science.
+#     18) Combine the multiple sky subtracted, wavelength calibrated spectra from the multiple exposures.
+#     19) Fit the combined spectra to redshfit using cross-correlation with SDSS templates.
 
 # In[478]:
 
@@ -29,11 +34,12 @@ import sys
 import pickle as pkl
 
 from collections import OrderedDict
-from quickreduce_funcs import digest_filenumbers
+from pyM2FS.pyM2FS_funcs import digest_filenumbers,boolify,read_io_config,\
+    read_obs_config,get_steps,make_mtlz_wrapper
 
-from FieldData import FieldData
-from quickreduce_io import FileManager
-from instrument import InstrumentState
+from pyM2FS.FieldData import FieldData
+from pyM2FS.pyM2FS_io import FileManager
+from pyM2FS.instrument import InstrumentState
 
 import configparser
 
@@ -94,7 +100,7 @@ def pipeline(maskname=None,obs_config_name=None,io_config_name=None, pipe_config
 
     if boolify(pipe_options['make_mtl']) and \
             io_config['SPECIALFILES']['mtl'].lower() != 'none':
-        from create_merged_target_list import make_mtl
+        from pyM2FS.create_merged_target_list import make_mtl
         make_mtl(io_config,filenumbers['science'][0],vizier_catalogs=['sdss12'], \
                    overwrite_field=False, overwrite_redshifts = False)
 
@@ -104,7 +110,7 @@ def pipeline(maskname=None,obs_config_name=None,io_config_name=None, pipe_config
 
     ## For all steps marked true, run those steps on the data
     for step,do_this_step in steps.items():
-        do_step_bool = (do_this_step.lower() == 'true')
+        do_step_bool = boolify(do_this_step)
         if not do_step_bool:
             print("\nSkipping {}".format(step))
             continue
@@ -131,98 +137,14 @@ def pipeline(maskname=None,obs_config_name=None,io_config_name=None, pipe_config
                 with open(outfile,'wb') as crashsave:
                     pkl.dump(data.all_hdus,crashsave)
                 raise()
-    ##HACK!!
 
     if boolify(pipe_options['make_mtlz']) and ((io_config['SPECIALFILES']['mtlz'].lower()) != 'none'):
         cams = instrument.cameras
-        imtype = 'zfits'
-        if not do_step_bool:
-            step == 'zfit'
-            data.proceed_to(step)
-            write_dir = filemanager.directory.current_write_dir
-            write_template = filemanager.current_write_template
-
-            if os.path.exists(os.path.join(write_dir,write_template.format(imtype=imtype,cam=cams[0]))):
-                hdus = {}
-                from astropy.io import fits
-                hdus = [fits.open(os.path.join(write_dir,write_template.format(imtype=imtype,cam=cams[0])))['ZFITS']]
-                if len(cams)>1:
-                    hdus.append(fits.open(os.path.join(write_dir,write_template.format(imtype=imtype,cam=cams[1])))['ZFITS'])
-                else:
-                    hdus.append(None)
-            else:
-                return
-        else:
-            hdus = [data.all_hdus[(cams[0], None, imtype, None)]]
-            if len(cams) == 2:
-                hdus.append(data.all_hdus[(cams[1], None, imtype, None)])
-            else:
-                hdus.append(None)
-
-        find_extra_redshifts = boolify(pipe_options['find_extra_redshifts'])
-        mtlz_path = os.path.join(io_config['PATHS']['catalog_loc'],io_config['DIRS']['mtl'])
-        mtlz_name = io_config['SPECIALFILES']['mtlz']
-        outfile = os.path.join(mtlz_path,mtlz_name)
-        from create_merged_target_list import make_mtlz
-        make_mtlz(data.mtl, hdus, find_extra_redshifts,outfile=outfile,\
-                  vizier_catalogs = ['sdss12'])
+        make_mtlz_wrapper(data, filemanager, io_config, step, do_step_bool, pipe_options, cams)
     else:
         return
 
 
-
-def get_steps(pipe_config):
-    ## Ingest steps and determine where to start
-    steps = OrderedDict(pipe_config['STEPS'])
-    pipe_config.remove_section('STEPS')
-    start = str(list(steps.keys())[-1])
-    for key,val in steps.items():
-        if boolify(val):
-            start = key
-            break
-    return steps, start, pipe_config
-
-def check_confname(confname, conftype, pipe_config_dict, maskname):
-    if confname is None:
-        if conftype in pipe_config_dict.keys():
-            confname = pipe_config_dict[conftype]
-        else:
-            confname = './configs/{}_{}.ini'.format(conftype[:-4],maskname)
-    if '/configs' not in confname and not os.path.exists(confname):
-        confname = './configs/{}'.format(confname)
-    return confname
-
-def read_obs_config(obs_config_name, pipe_config_dict, maskname):
-    obs_config_name = check_confname(obs_config_name, 'obsconf', pipe_config_dict, maskname)
-    if os.path.exists(obs_config_name):
-        obs_config = configparser.ConfigParser()
-        obs_config.read(obs_config_name)
-        return obs_config
-    else:
-        return None
-
-def read_io_config(io_config_name, pipe_dict, maskname):
-    io_config_name = check_confname(io_config_name, 'ioconf', pipe_dict['CONFS'], maskname)
-    if os.path.exists(io_config_name):
-        io_config = configparser.ConfigParser(interpolation=configparser.ExtendedInterpolation())
-        io_config.add_section('GENERAL')
-        io_config['GENERAL']['mask_name'] = maskname
-        if 'path_to_masks' in pipe_dict['GENERAL'].keys() and str(
-                pipe_dict['GENERAL']['path_to_masks']).lower() != 'none':
-            io_config.add_section('PATHS')
-            io_config['PATHS']['path_to_masks'] = pipe_dict['GENERAL']['path_to_masks']
-        if 'raw_data_loc' in pipe_dict['GENERAL'].keys() and str(
-                pipe_dict['GENERAL']['raw_data_loc']).lower() != 'none':
-            if 'PATHS' not in io_config.sections():
-                io_config.add_section('PATHS')
-            io_config['PATHS']['raw_data_loc'] = pipe_dict['GENERAL']['raw_data_loc']
-        io_config.read(io_config_name)
-        return io_config
-    else:
-        return None
-
-def boolify(parameter):
-    return (str(parameter).lower()=='true')
 
 def parse_command_line(argv):
     from optparse import OptionParser

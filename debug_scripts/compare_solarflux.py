@@ -4,9 +4,8 @@ from astropy.io import fits
 import os
 import numpy as np
 import matplotlib.pyplot as plt
-import astropy.units as u
-from calibration_helper_funcs import air_to_vacuum
-from scipy.signal import medfilt, resample
+from pyM2FS.calibration_helper_funcs import air_to_vacuum
+from scipy.signal import medfilt
 from scipy.interpolate import CubicSpline
 
 

@@ -758,7 +758,7 @@ if __name__ == '__main__':
     #cal_lamp = ['Hg', 'Ar', 'Ne','Xe'] ## nist
     #from calibrations import load_calibration_lines_nist_dict as load_calibration
     cal_lamp = ['HgAr', 'NeAr', 'Ar', 'Xe'] ## salt
-    from calibrations import load_calibration_lines_salt_dict as load_calibration
+    from pyM2FS.calibrations import load_calibration_lines_salt_dict as load_calibration
 
 
     linelistdict, cal_states = load_calibration(cal_lamp,wavemincut=4500,wavemaxcut=6600)

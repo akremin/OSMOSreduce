@@ -6,10 +6,10 @@ from astropy.io import fits
 from astropy.table import Table
 from scipy.interpolate import CubicSpline
 
-from calibrations import Calibrations
-from observations import Observations
-from sky_subtraction import subtract_sky_loop_wrapper, replace_nans
-from quickreduce_funcs import generate_wave_grid
+from pyM2FS.calibrations import Calibrations
+from pyM2FS.observations import Observations
+from pyM2FS.sky_subtraction import subtract_sky_loop_wrapper, replace_nans
+from pyM2FS.pyM2FS_funcs import generate_wave_grid,boolify
 
 class FieldData:
     def __init__(self, filenumbers, filemanager, instrument,
@@ -21,15 +21,15 @@ class FieldData:
         self.skysub_strategy = pipeline_options['skysub_strategy']
         self.initial_calib_priors = pipeline_options['initial_calib_priors']
 
-        self.convert_adu_to_e = (str(pipeline_options['convert_adu_to_e']).lower()=='true')
-        self.skip_coarse_calib = (str(pipeline_options['try_skip_coarse_calib']).lower()=='true')
-        self.skip_fine_calib = (str(pipeline_options['debug_skip_fine_calib']).lower() == 'true')
-        self.single_core = (str(pipeline_options['single_core']).lower()=='true')
-        self.save_plots = (str(pipeline_options['save_plots']).lower()=='true')
-        self.show_plots = (str(pipeline_options['show_plots']).lower()=='true')
-        self.only_peaks_in_coarse_cal = (str(pipeline_options['only_peaks_in_coarse_cal']).lower()=='true')
-        self.use_selected_calib_lines = (str(pipeline_options['use_selected_calib_lines']).lower()=='true')
-        self.use_history_calibs = (str(pipeline_options['use_history_calibs']).lower()=='true')
+        self.convert_adu_to_e = boolify(pipeline_options['convert_adu_to_e'])
+        self.skip_coarse_calib = boolify(pipeline_options['try_skip_coarse_calib'])
+        self.skip_fine_calib = boolify(pipeline_options['debug_skip_fine_calib'])
+        self.single_core = boolify(pipeline_options['single_core'])
+        self.save_plots = boolify(pipeline_options['save_plots'])
+        self.show_plots = boolify(pipeline_options['show_plots'])
+        self.only_peaks_in_coarse_cal = boolify(pipeline_options['only_peaks_in_coarse_cal'])
+        self.use_selected_calib_lines = boolify(pipeline_options['use_selected_calib_lines'])
+        self.use_history_calibs = boolify(pipeline_options['use_history_calibs'])
 
         self.check_parameter_flags()
 
@@ -282,12 +282,12 @@ class FieldData:
             print("Step \"{}\" doesn't have an action assosciated with it".format(self.step))
 
         if self.step == 'bias':
-            from bias_subtract import bias_subtract
+            from pyM2FS.bias_subtract import bias_subtract
             self.all_hdus = bias_subtract(self.all_hdus, self.filemanager.date_timestamp, strategy=self.debias_strategy, \
                                           convert_adu_to_e=self.convert_adu_to_e,save_plots=True,show_plots=False,\
                                           savetemplate=self.filemanager.get_saveplot_template)
         elif self.step == 'stitch':
-            from stitch import stitch_all_images
+            from pyM2FS.stitch import stitch_all_images
             self.all_hdus = stitch_all_images(self.all_hdus,self.filemanager.date_timestamp)
             self.instrument.opamps = [None]
             self.data_stitched = True
@@ -345,7 +345,7 @@ class FieldData:
         elif self.step == 'apcut':
             for camera in self.instrument.cameras:
                 self.combine_fibermaps(camera, return_table=False)
-            from aperture_detector import cutout_all_apertures
+            from pyM2FS.aperture_detector import cutout_all_apertures
             outhdus = cutout_all_apertures(self.all_hdus,self.instrument.cameras,\
                                                    deadfibers=self.instrument.deadfibers,summation_preference=self.twod_to_oned,\
                                                    show_plots=self.show_plots,save_plots=self.save_plots,\
@@ -456,7 +456,6 @@ class FieldData:
             return flat_table_one
 
     def flatten_sciences(self,cam):
-        from flatten import flatten_data
         fiber_fluxes = self.combine_flats(camera = cam, return_table=True)
         if len(self.comparcs) == 0:
             self.populate_calibrations(try_loading_finals=True)
@@ -902,7 +901,6 @@ class FieldData:
             flux_arr[masked_arr] = np.nan
             ngood_obs_perpix = float(nobs)-np.sum(masked_arr,axis=0)
             masked = ((ngood_obs_perpix < int(np.ceil(float(nobs) / 2.))))
-            from collections import Counter
             # print(col,len(masked),np.sum(masked),np.sum(np.bitwise_not(masked)),len(observation_keys),Counter(ngood_obs_perpix))
 
             ## Transform the array back to a realistic estimate of counts
@@ -1099,9 +1097,8 @@ class FieldData:
 
 
     def fit_redshfits(self,cam):
-        from scipy.ndimage import gaussian_filter
 
-        from fit_redshifts import fit_redshifts_wrapper
+        from pyM2FS.fit_redshifts import fit_redshifts_wrapper
         fluxes = Table(self.all_hdus[(cam, 'combined', 'science', None)].data)
         masks = Table(self.all_hdus[(cam, 'combined', 'masks', None)].data)
         # if (cam, 'combined_mask', 'science', None) in self.all_hdus.keys():

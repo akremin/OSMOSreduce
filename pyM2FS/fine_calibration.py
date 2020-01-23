@@ -6,9 +6,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 from astropy.table import Table
 
-from calibration_helper_funcs import pix_to_wave, \
+from pyM2FS.calibration_helper_funcs import pix_to_wave, \
     get_fiber_number, update_coeficients_deviations, vacuum_to_air
-from linebrowser import LineBrowser
+from pyM2FS.linebrowser import LineBrowser
 
 
 def auto_wavelength_fitting_by_lines_wrapper(input_dict):
@@ -276,7 +276,7 @@ def wavelength_fitting_by_line_selection(comp, coarse_coef_fits, fulllinelist, s
                     deleted_wm = deleted_wm_srt[mask_wm_nearedge]
                     deleted_fm = deleted_fm_srt[mask_wm_nearedge]
                 bool_mask = np.ones(shape=len(wm),dtype=bool)
-                from calibration_helper_funcs import vacuum_to_air
+                from pyM2FS.calibration_helper_funcs import vacuum_to_air
                 print(vacuum_to_air(deleted_wm))
                 for w,f in zip(deleted_wm,deleted_fm):
                     loc = wm.searchsorted(w)

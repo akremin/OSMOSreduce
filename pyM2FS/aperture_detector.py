@@ -400,11 +400,11 @@ if __name__ == '__main__':
         for imnum in filenums:
             if imnum == 573:
                 image = fits.open(os.path.abspath(
-                    os.path.join('..', '..', 'OneDrive - umich.edu', 'Research', 'M2FSReductions', 'A02', 'data_products',
+                    os.path.join('../..', '..', 'OneDrive - umich.edu', 'Research', 'M2FSReductions', 'A02', 'data_products',
                                  '{}_fibmap_{}_A02_stitched_bc.fits'.format(camera, imnum))))[0].data.astype(np.float64)
             else:
                 image += fits.open(os.path.abspath(
-                    os.path.join('..', '..', 'OneDrive - umich.edu', 'Research', 'M2FSReductions', 'A02', 'data_products',
+                    os.path.join('../..', '..', 'OneDrive - umich.edu', 'Research', 'M2FSReductions', 'A02', 'data_products',
                                  '{}_fibmap_{}_A02_stitched_bc.fits'.format(camera, imnum))))[0].data.astype(np.float64)
 
         # image = np.flipud(image)

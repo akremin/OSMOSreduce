@@ -1,15 +1,4 @@
 from collections import OrderedDict
-import numpy as np
-from astropy.table import Table
-
-from scipy.signal import find_peaks
-from scipy.optimize import curve_fit
-from scipy.ndimage import gaussian_filter
-
-from calibration_helper_funcs import get_psf, \
-    create_simple_line_spectra, \
-    pix_to_wave_explicit_coefs2
-from collections import OrderedDict
 
 import numpy as np
 from astropy.table import Table
@@ -17,7 +6,7 @@ from scipy.ndimage import gaussian_filter
 from scipy.optimize import curve_fit
 from scipy.signal import find_peaks
 
-from calibration_helper_funcs import get_psf, \
+from pyM2FS.calibration_helper_funcs import get_psf, \
     create_simple_line_spectra, \
     pix_to_wave_explicit_coefs2
 
